@@ -31,3 +31,13 @@ _backup_*/
 .bashrc
 .bash_logout
 .profile
+
+# deploy key（GitHub 接続用）。**絶対に入れない**
+# 2026-09-21、鍵を作った直後は .gitignore が追いついておらず、
+# 次の `git add .` で秘密鍵ごと commit に入る状態だった（push 前に発見）
+.ssh/
+
+# Claude Code の端末側の設定。**アプリの一部ではない。**
+# 2026-09-20、keiei で本番作業したときに 982行（userID・machineID・機能フラグの
+# キャッシュ）が commit に紛れ込み、GitHub へ出るところだった
+.claude.json
