@@ -17,6 +17,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import idea as idea_m
 from . import store
 
 BASE = Path(__file__).resolve().parent.parent
@@ -402,6 +403,12 @@ def run() -> dict:
     """
     store.migrate()
     seed_masters()
+    # 第1段のマスタ（§4-2）。**テーマ・rubric の版・設定。**
+    # rubric は v1（移行したそのままの点）と v2（新しい軸）を併存させる（F-1-10）
+    idea_m.seed_themes()
+    idea_m.seed_rubrics()
+    idea_m.seed_settings()
+    store.conn().commit()
     missing = None
     try:
         n = seed_templates()
@@ -416,6 +423,11 @@ def run() -> dict:
         "hold_reason": store.val("SELECT COUNT(*) FROM hold_reason"),
         "abort_reason": store.val("SELECT COUNT(*) FROM abort_reason"),
         "task_template": n,
+        "theme": store.val("SELECT COUNT(*) FROM theme"),
+        "rubric": store.val("SELECT COUNT(*) FROM rubric"),
+        "setting": store.val("SELECT COUNT(*) FROM setting"),
+        # **アイデアは種データではない。**移行は tools/import_ideas.py で明示的に流す
+        "idea": store.val("SELECT COUNT(*) FROM idea"),
     }
 
 

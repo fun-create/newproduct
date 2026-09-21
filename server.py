@@ -7,9 +7,10 @@ NEW PRODUCT（FUN-CREATE 新商品開発管理）。
 業務の数字の作り方は app/ 配下に閉じる（全体設計書 §9）。
 ここが太ると、どこで数字が変わったのか追えなくなる。
 
-**第2段まで実装済み**（案件・タスク・ゲート）。
-アイデア（第1段）・原価/調達（第3段）・発売後評価（第4段）は未実装で、
-画面に「未実装（第N段）」と出す。**空欄を黙って0にしない。**
+**第2段（案件・タスク・ゲート）と、第1段のうちアイデア台帳・採点v2まで実装済み。**
+第1段の残り（機会カレンダー・年間プランの枠）・原価/調達（第3段）・
+発売後評価（第4段）は未実装で、画面に「未実装（第N段）」と出す。
+**空欄を黙って0にしない。**
 
 外部からは Caddy 経由の 127.0.0.1:8794。
 サービス間API（/api/svc/*）は `svc_ok()` の3条件
@@ -41,7 +42,9 @@ sys.path.insert(0, str(BASE))
 
 import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 参照）
 
+from app import ai_score as ai_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
+from app import idea as idea_m   # noqa: E402
 from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
 from app import store            # noqa: E402
@@ -392,6 +395,20 @@ class H(BaseHTTPRequestHandler):
                 "reasons": gate_m.reasons(),
                 "sections": project_m.SECTIONS,
                 "task_status": task_m.STATUSES,
+                # 第1段（アイデア台帳）。**語彙はサーバの1か所に置く**（§4-9 label）
+                "idea": {
+                    "origins": [{"code": c, "label": lab}
+                                for c, lab in idea_m.ORIGINS],
+                    "stages": idea_m.STAGES,
+                    "demand_cycles": idea_m.DEMAND_CYCLES,
+                    "ranks": idea_m.RANKS,
+                    "themes": store.rows(store.q(
+                        "SELECT id,label,note FROM theme WHERE kind='評価テーマ' "
+                        "ORDER BY sort")),
+                    "v2_version": idea_m.V2_VERSION,
+                    "margin_bands_note": idea_m.MARGIN_BANDS_NOTE,
+                },
+                "ai_scoring": ai_m.status(),
             })
 
         if parts == ["dashboard"]:
@@ -439,6 +456,53 @@ class H(BaseHTTPRequestHandler):
                               d.get("ai_used"))
             store.audit(uid, "task.status", f"{parts[1]}:{parts[2]}", d, ip)
             return self.sendj(200, {"ok": True})
+
+        # ── /api/ideas（第1段・F-1）─────────────────────
+        # **起票は4項目＋起票経路だけ**（F-1-3）。ここを重くしない
+        if parts == ["ideas"] and method == "GET":
+            return self.sendj(200, idea_m.listing(qs))
+        if parts == ["ideas"] and method == "POST":
+            d = self.body()
+            r = idea_m.create(uid, **d)
+            store.audit(uid, "idea.create", r["id"],
+                        {"title": d.get("title"), "origin": d.get("origin")}, ip)
+            return self.sendj(200, r)
+        # 起票の前に似た案を出す（F-1-12）。**外部APIを使わない**
+        if parts == ["ideas", "similar"] and method == "POST":
+            d = self.body()
+            return self.sendj(200, {"rows": idea_m.similar_to_title(
+                d.get("title", ""), exclude_id=d.get("exclude") or None)})
+        if parts == ["rubrics"] and method == "GET":
+            return self.sendj(200, {"rows": idea_m.rubrics()})
+        if parts == ["settings"] and method == "GET":
+            return self.sendj(200, {"rows": idea_m.settings(),
+                                    "concept_stock": idea_m.concept_stock(),
+                                    "ai_scoring": ai_m.status()})
+        if len(parts) == 2 and parts[0] == "ideas" and method == "GET":
+            d = idea_m.detail(parts[1])
+            if d is None:
+                return self.sendj(404, {"error": "アイデアがありません"})
+            return self.sendj(200, d)
+        if len(parts) == 3 and parts[0] == "ideas" and method == "POST":
+            iid, what = parts[1], parts[2]
+            d = self.body()
+            if what == "fields":
+                r = idea_m.update_fields(iid, uid, **d)
+                store.audit(uid, "idea.fields", iid, d, ip)
+                return self.sendj(200, r)
+            if what == "score":
+                # **v2 の採点。v1 は触らない**（F-1-10。既存データは再採点しない）
+                r = idea_m.score_v2(iid, d, uid)
+                store.audit(uid, "idea.score", iid,
+                            {"rubric_version": idea_m.V2_VERSION}, ip)
+                return self.sendj(200, r)
+            if what == "ai-score":
+                # F-1-11。**既定 off。**予算枠が未取得のあいだは呼ばない
+                r = ai_m.run_batch([iid], uid)
+                store.audit(uid, "idea.ai_score", iid,
+                            {"enabled": r.get("enabled")}, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
 
         # /api/gates
         if parts == ["gates"] and method == "GET":
@@ -555,7 +619,11 @@ def db_health() -> dict:
         "SELECT COUNT(*) FROM flow_type WHERE effort_point IS NULL", (), 0)
     n["flow_type_without_template"] = store.val(
         "SELECT COUNT(*) FROM flow_type WHERE has_template=0", (), 0)
-    n["stages_implemented"] = "第2段（案件・タスク・ゲート）"
+    try:
+        n["idea"] = idea_m.counts()
+    except Exception as e:                  # 第1段の移行前など
+        n["idea"] = {"error": str(e)}
+    n["stages_implemented"] = "第2段（案件・タスク・ゲート）＋ 第1段のアイデア台帳・採点v2"
     return n
 
 

@@ -193,7 +193,13 @@
           c.appendChild(el("p", { "class": "np-sub", text: m.why }));
         } else {
           c.appendChild(el("span", { "class": "np-big", text: String(m.value) }));
+          // **色に意味を持たせない**（N-11）。状態は語として添える
+          if (m.state) c.appendChild(el("p", { "class": "np-sub", text: "状態: " + m.state }));
+          if (m.why) c.appendChild(el("p", { "class": "np-sub", text: m.why }));
         }
+        if (m.definition) c.appendChild(el("p", { "class": "np-sub", text: "定義: " + m.definition }));
+        if (m.stock_n !== undefined && m.stock_n !== null)
+          c.appendChild(el("p", { "class": "np-sub", text: "G3通過・未発売 " + m.stock_n + " 件" }));
         g2.appendChild(c);
       });
       b.appendChild(g2);
@@ -784,11 +790,439 @@
   }
 
   // ══════════════════════════════════════════════════════
+  // アイデア台帳（第1段・F-1）
+  //
+  // **採点の版を混ぜない。**v1（シートのままの点）と v2（新しい軸）は
+  // 同じ画面に並べるが、足し算はしない（F-1-10・第8章 ⑦）。
+  // **ランクは絶対点ではなく百分位**（F-1-9）。
+  // **色に意味を持たせない。**ランクも状態も語として列に出す（N-11）。
+  // ══════════════════════════════════════════════════════
+  var IDEA_FILTER_KEYS = ["stage", "rank", "rubric", "origin", "theme", "q"];
+
+  function yen(v) { return (v === null || v === undefined || v === "") ? "未入力" : "¥" + Number(v).toLocaleString("ja-JP"); }
+  function pctText(p) {
+    if (p === null || p === undefined) return "—";
+    return "上位 " + (Math.round(p * 1000) / 10) + "%";
+  }
+
+  function viewIdeas() {
+    loading();
+    var q = hashQuery();
+    var qs = [];
+    IDEA_FILTER_KEYS.forEach(function (k) {
+      if (q.get(k)) qs.push(k + "=" + encodeURIComponent(q.get(k)));
+    });
+    Promise.all([api("/api/ideas" + (qs.length ? "?" + qs.join("&") : "")),
+                 api("/api/meta")]).then(function (r) {
+      var d = r[0], meta = r[1];
+      var b = clear();
+      setTitle("アイデア", d.rubric ? "（" + d.rubric + "）" : "");
+
+      // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
+      var f = el("form", { "class": "np-filters", id: "np-ifilter" });
+      function sel(name, label, opts, cur) {
+        var s = el("select", { name: name, "aria-label": label });
+        s.appendChild(el("option", { value: "", text: label + "（すべて）" }));
+        opts.forEach(function (o) {
+          var v = typeof o === "string" ? o : (o.code || o.version);
+          var t = typeof o === "string" ? o : o.label;
+          var op = el("option", { value: v, text: t });
+          if (cur === v) op.setAttribute("selected", "selected");
+          s.appendChild(op);
+        });
+        return s;
+      }
+      f.appendChild(sel("stage", "ステージ", d.filters.stage, q.get("stage")));
+      f.appendChild(sel("rubric", "採点の版", d.filters.rubric, q.get("rubric")));
+      f.appendChild(sel("rank", "ランク", d.filters.rank, q.get("rank")));
+      f.appendChild(sel("origin", "起票経路", d.filters.origin, q.get("origin")));
+      f.appendChild(sel("theme", "テーマ", d.filters.theme, q.get("theme")));
+      var qi = el("input", { name: "q", placeholder: "商品案名で探す", "aria-label": "商品案名で探す" });
+      if (q.get("q")) qi.setAttribute("value", q.get("q"));
+      f.appendChild(qi);
+      f.appendChild(el("button", { type: "submit", text: "絞り込む" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var p = [];
+        Array.prototype.forEach.call(f.elements, function (x) {
+          if (x.name && x.value) p.push(x.name + "=" + encodeURIComponent(x.value));
+        });
+        location.hash = "#/ideas" + (p.length ? "?" + p.join("&") : "");
+      });
+      b.appendChild(f);
+
+      b.appendChild(el("p", { "class": "np-note",
+        text: "該当 " + d.total + " 件。うち " + d.shown + " 件を表示しています（上限 " + d.limit + " 件）。" }));
+
+      if (!d.rows.length) {
+        b.appendChild(el("p", { "class": "np-note",
+          text: "アイデアがありません。移行は tools/import_ideas.py で流します。" }));
+      } else if (d.rubric) {
+        // 版を選んだとき。**その版の点とランクだけ**を出す
+        b.appendChild(table(
+          ["商品案（社内の企画名）", "ステージ", "テーマ", "起票経路", "需要発生",
+           "生産方法", "想定粗利額", "共通点", "テーマ適合", "減点係数", "総合点",
+           "百分位", "ランク"],
+          d.rows.map(function (x) {
+            var s = x.score || {};
+            return el("tr", null, [
+              el("td", null, [el("a", { href: "#/ideas/" + x.id, text: x.title })]),
+              el("td", { text: x.stage }),
+              el("td", { text: x.theme_label }),
+              el("td", { text: x.origin_label }),
+              el("td", { text: dash(x.demand_cycle) }),
+              el("td", { "class": "np-num", text: x.production_feasibility === null ? "未入力" : String(x.production_feasibility) }),
+              el("td", { "class": "np-num", text: yen(x.expected_margin_yen) }),
+              el("td", { "class": "np-num", text: s.common_score === null || s.common_score === undefined ? "—" : String(s.common_score) }),
+              el("td", { "class": "np-num", text: s.theme_fit === null || s.theme_fit === undefined ? "—" : String(s.theme_fit) }),
+              el("td", { "class": "np-num", text: s.feasibility_factor === null || s.feasibility_factor === undefined ? "—" : String(s.feasibility_factor) }),
+              el("td", { "class": "np-num", text: s.total === null || s.total === undefined ? "—" : String(s.total) }),
+              el("td", { "class": "np-num", text: pctText(s.percentile) }),
+              el("td", { text: dash(s.rank) })
+            ]);
+          })));
+      } else {
+        b.appendChild(table(
+          ["商品案（社内の企画名）", "ステージ", "テーマ", "起票経路", "需要発生",
+           "生産方法", "想定粗利額", "採点の版"],
+          d.rows.map(function (x) {
+            return el("tr", null, [
+              el("td", null, [el("a", { href: "#/ideas/" + x.id, text: x.title })]),
+              el("td", { text: x.stage }),
+              el("td", { text: x.theme_label }),
+              el("td", { text: x.origin_label }),
+              el("td", { text: dash(x.demand_cycle) }),
+              el("td", { "class": "np-num", text: x.production_feasibility === null ? "未入力" : String(x.production_feasibility) }),
+              el("td", { "class": "np-num", text: yen(x.expected_margin_yen) }),
+              el("td", { text: x.score_versions.length ? x.score_versions.join("／") : "未採点" })
+            ]);
+          })));
+      }
+      d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
+      b.appendChild(newIdeaForm(meta));
+    }).catch(fail);
+  }
+
+  /** 起票フォーム。**4項目＋起票経路だけ**（F-1-3）。ここを重くしない。 */
+  function newIdeaForm(meta) {
+    var box = el("details", { "class": "np-card", open: "open" });
+    box.appendChild(el("summary", { text: "アイデアを起票する（4項目＋起票経路だけ）" }));
+    box.appendChild(el("p", { "class": "np-note",
+      text: "起票に要るのは 商品案名・概要・想定ターゲット・起票経路 の4つだけです。デザイン自由度・生産方法・参考URL・エリアは採点のときに足します（F-1-3）。" }));
+    var f = el("form", { "class": "np-form" });
+    var title = el("input", { name: "title", placeholder: "商品案名（社内の企画名）", "aria-label": "商品案名" });
+    var summary = el("textarea", { name: "summary", rows: "3", placeholder: "概要・仕様", "aria-label": "概要・仕様" });
+    var target = el("textarea", { name: "target_scene", rows: "2", placeholder: "想定ターゲットと使用シーン", "aria-label": "想定ターゲットと使用シーン" });
+    var origin = el("select", { name: "origin", "aria-label": "起票経路" });
+    origin.appendChild(el("option", { value: "", text: "起票経路を選ぶ（必須）" }));
+    meta.idea.origins.forEach(function (o) {
+      origin.appendChild(el("option", { value: o.code, text: o.label }));
+    });
+    var theme = el("select", { name: "theme_id", "aria-label": "テーマ" });
+    theme.appendChild(el("option", { value: "", text: "テーマ（あとで選べます）" }));
+    meta.idea.themes.forEach(function (t) {
+      theme.appendChild(el("option", { value: t.id, text: t.label }));
+    });
+    f.appendChild(title); f.appendChild(summary); f.appendChild(target);
+    f.appendChild(origin); f.appendChild(theme);
+    f.appendChild(el("button", { type: "submit", text: "起票する" }));
+
+    // F-1-12。**起票時に似た案を出す。**完全な名寄せはしない
+    var simBox = el("div", { "class": "np-sim" });
+    var msg = el("p", { "class": "np-note" });
+    var timer = null;
+    function lookSimilar() {
+      var t = title.value.trim();
+      simBox.innerHTML = "";
+      if (t.length < 2) return;
+      post("/api/ideas/similar", { title: t }).then(function (r) {
+        simBox.innerHTML = "";
+        if (!r.rows.length) {
+          simBox.appendChild(el("p", { "class": "np-note", text: "似た案は見つかりませんでした。" }));
+          return;
+        }
+        simBox.appendChild(el("p", { "class": "np-warn",
+          text: "似た案が " + r.rows.length + " 件あります。重複かどうかは人が見てください（自動では名寄せしません）。" }));
+        var ul = el("ul", { "class": "np-miss" });
+        r.rows.forEach(function (x) {
+          ul.appendChild(el("li", null, [
+            el("a", { href: "#/ideas/" + x.id, text: x.title }),
+            " — 近さ " + x.score + "／" + x.stage
+          ]));
+        });
+        simBox.appendChild(ul);
+      }).catch(function () { /* 似た案が出せなくても起票は止めない */ });
+    }
+    title.addEventListener("input", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(lookSimilar, 350);
+    });
+
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      Array.prototype.forEach.call(f.elements, function (x) { if (x.name) o[x.name] = x.value; });
+      post("/api/ideas", o).then(function (r) {
+        location.hash = "#/ideas/" + r.id;
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(simBox); box.appendChild(msg);
+    return box;
+  }
+
+  // ── アイデア1件（採点画面を含む）────────────────────────
+  function viewIdea(id) {
+    loading();
+    Promise.all([api("/api/ideas/" + encodeURIComponent(id)), api("/api/meta"),
+                 api("/api/rubrics")]).then(function (r) {
+      var d = r[0], meta = r[1], rubrics = r[2].rows;
+      var b = clear();
+      setTitle("アイデア", d.title);
+
+      b.appendChild(el("h2", { text: d.title }));
+      b.appendChild(table(["項目", "値"], [
+        ["ステージ", d.stage],
+        ["テーマ", dash(d.theme_label)],
+        ["起票経路", d.origin_label],
+        ["需要発生（通年／季節／単発）", d.demand_cycle === null ? "未入力" : d.demand_cycle],
+        ["デザイン自由度(1-5)", d.design_freedom === null ? "未入力" : String(d.design_freedom)],
+        ["生産方法(1-5)", d.production_feasibility === null ? "未入力" : String(d.production_feasibility)],
+        ["想定粗利額（1個あたり）", yen(d.expected_margin_yen)],
+        ["エリア候補", dash(d.area1) + "／" + dash(d.area2)],
+        ["参考商品1", dash(d.ref_url1)],
+        ["参考商品2", dash(d.ref_url2)],
+        ["移行元", d.source_sheet ? (d.source_sheet + " の " + d.source_row + " 行目") : "このアプリで起票"]
+      ].map(function (x) {
+        return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]);
+      })));
+      if (d.summary) {
+        b.appendChild(el("h3", { text: "概要・仕様" }));
+        b.appendChild(el("p", { "class": "np-body", text: d.summary }));
+      }
+      if (d.target_scene) {
+        b.appendChild(el("h3", { text: "想定ターゲットと使用シーン" }));
+        b.appendChild(el("p", { "class": "np-body", text: d.target_scene }));
+      }
+      if (!d.origin) {
+        b.appendChild(el("p", { "class": "np-warn",
+          text: "起票経路が不明です（移行分）。元のシートに起票経路の列がありません。推測では埋めていません。分かる人が下のフォームで入れてください。" }));
+      }
+
+      // ── 似た案（F-1-12）──
+      b.appendChild(el("h2", { text: "似た案" }));
+      if (!d.similar.length) {
+        b.appendChild(el("p", { "class": "np-note", text: "似た案は見つかりませんでした（文字の近さで機械的に出しています。名寄せ済みという意味ではありません）。" }));
+      } else {
+        var ul = el("ul", { "class": "np-miss" });
+        d.similar.forEach(function (x) {
+          ul.appendChild(el("li", null, [
+            el("a", { href: "#/ideas/" + x.id, text: x.title }),
+            " — 近さ " + x.score + "／" + x.stage
+          ]));
+        });
+        b.appendChild(ul);
+      }
+
+      // ══ 採点。**v1 と v2 を並べる。合算しない** ══
+      b.appendChild(el("h2", { text: "採点" }));
+      b.appendChild(el("p", { "class": "np-warn",
+        text: "版の違う点数を合算していません。v1 は移行したシートの点そのもの（再採点していません）、v2 は新しい軸です。並べて見比べるためのものです（F-1-10）。" }));
+
+      var gen1 = d.scores.filter(function (s) { return s.generation === 1; });
+      var gen2 = d.scores.filter(function (s) { return s.generation === 2; });
+
+      var grid = el("div", { "class": "np-grid np-grid-2" });
+      grid.appendChild(scorePanel("v1（移行したそのまま・再採点しない）", gen1, rubrics, d, false));
+      grid.appendChild(scorePanel("v2（2層採点・百分位）", gen2, rubrics, d, true));
+      b.appendChild(grid);
+
+      // v2 の採点フォーム
+      b.appendChild(scoreV2Form(d, meta));
+
+      // AI採点（F-1-11）。**既定 off**
+      b.appendChild(aiPanel(d, meta));
+
+      // 項目の追記
+      b.appendChild(ideaFieldsForm(d, meta));
+
+      if (d.projects.length) {
+        b.appendChild(el("h2", { text: "この案から起こした案件" }));
+        b.appendChild(table(["案件", "ステージ", "発売予定日"], d.projects.map(function (p) {
+          return el("tr", null, [
+            el("td", null, [el("a", { href: "#/projects/" + p.id, text: p.id })]),
+            el("td", { text: p.stage }), el("td", { text: dash(p.launch_date) })]);
+        })));
+      }
+    }).catch(fail);
+  }
+
+  function scorePanel(title, scores, rubrics, d, isV2) {
+    var c = el("div", { "class": "np-card" });
+    c.appendChild(el("h3", { text: title }));
+    if (!scores.length) {
+      c.appendChild(el("p", { "class": "np-note",
+        text: isV2 ? "v2 ではまだ採点していません。" : "この案に v1 の点はありません（このアプリで起票した案です）。" }));
+      return c;
+    }
+    scores.forEach(function (s) {
+      var rb = null;
+      rubrics.forEach(function (x) { if (x.version === s.rubric_version) rb = x; });
+      c.appendChild(el("h4", { text: s.rubric_label + "（" + s.rubric_version + "）" }));
+      var rows = [];
+      if (rb) {
+        rb.axes.forEach(function (ax) {
+          if (ax.layer === "attribute") return;
+          var raw = s.axes[ax.code];
+          rows.push(el("tr", null, [
+            el("th", { scope: "row", text: ax.label }),
+            el("td", { "class": "np-num", text: raw === undefined || raw === null ? "—" : String(raw) }),
+            el("td", { "class": "np-num", text: ax.weight === null ? "未実測" : "×" + ax.weight })
+          ]));
+        });
+      }
+      c.appendChild(table(["評価項目", "素点", "ウェイト"], rows));
+      var sum = [
+        ["総合点", s.total === null ? "—" : String(s.total) + (s.total_max ? "／" + s.total_max : "")],
+        ["ランク", dash(s.rank)],
+        ["ランクの決め方", s.rank_basis === "percentile" ? "テーマ内の百分位（F-1-9）" : "シートに書かれていた絶対点の閾値"],
+        ["採点者", s.scored_by === "import" ? "移行（シートの値）" : s.scored_by],
+        ["モデル名", dash(s.model)],
+        ["採点日時", dash(s.scored_at)]
+      ];
+      if (isV2) {
+        sum.splice(0, 0,
+          ["①共通点（0〜70）", s.common_score === null ? "—" : String(s.common_score)],
+          ["②テーマ適合点（0〜30）", s.theme_fit === null ? "—" : String(s.theme_fit)],
+          ["減点係数（生産方法）", s.feasibility_factor === null ? "—" : String(s.feasibility_factor)],
+          ["係数を掛ける前", s.raw_total === null ? "—" : String(s.raw_total)]);
+        sum.push(["テーマ内の百分位", pctText(s.percentile) + "（母数 " + d.v2_population + " 件）"]);
+        sum.push(["共通点だけの横並び（テーマをまたぐ）", pctText(s.common_percentile)]);
+      }
+      c.appendChild(table(["", ""], sum.map(function (x) {
+        return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]);
+      })));
+      if (s.source_note) c.appendChild(el("p", { "class": "np-note", text: s.source_note }));
+    });
+    return c;
+  }
+
+  function scoreV2Form(d, meta) {
+    var box = el("details", { "class": "np-card" });
+    box.appendChild(el("summary", { text: "v2 で採点する" }));
+    box.appendChild(el("p", { "class": "np-note",
+      text: "総合点 =（①共通点 0〜70 ＋ ②テーマ適合点 0〜30）× 生産方法の減点係数。ランクはテーマ内の百分位で決まります（F-1-5・F-1-6・F-1-9）。" }));
+    if (!d.v2_ready) {
+      box.appendChild(el("p", { "class": "np-warn", text: "まだ採点できません。足りないものがあります:" }));
+      var ul = el("ul", { "class": "np-miss" });
+      d.v2_blockers.forEach(function (x) { ul.appendChild(el("li", { text: x })); });
+      box.appendChild(ul);
+      box.appendChild(el("p", { "class": "np-note",
+        text: "足りない値を 1.0 や 0 で代用しません。作れない案が上位に来るのを防ぐのが v2 の目的です（N-10）。" }));
+      return box;
+    }
+    var f = el("form", { "class": "np-form" });
+    [["demand", "購買意欲・ニーズ（1〜10）"], ["market_size", "ターゲット規模（1〜10）"],
+     ["advantage", "競合優位性（1〜10）"], ["theme_fit", "テーマ適合（1〜10）"]].forEach(function (x) {
+      f.appendChild(el("label", { "class": "np-label" }, [
+        el("span", { text: x[1] }),
+        el("input", { type: "number", name: x[0], min: "1", max: "10", step: "1", required: "required" })
+      ]));
+    });
+    f.appendChild(el("p", { "class": "np-note",
+      text: "想定粗利額は " + yen(d.expected_margin_yen) + " → " + d.margin_points + " 点として入ります。生産方法 " + d.production_feasibility + " → 減点係数 " + d.feasibility_factor + " を総合点に掛けます。" }));
+    f.appendChild(el("p", { "class": "np-note", text: meta.idea.margin_bands_note }));
+    f.appendChild(el("button", { type: "submit", text: "v2 で採点する" }));
+    var msg = el("p", { "class": "np-note" });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      Array.prototype.forEach.call(f.elements, function (x) { if (x.name) o[x.name] = x.value; });
+      post("/api/ideas/" + encodeURIComponent(d.id) + "/score", o).then(function () {
+        go();
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  function aiPanel(d, meta) {
+    var a = meta.ai_scoring;
+    var c = el("div", { "class": "np-card" });
+    c.appendChild(el("h3", { text: "AI採点（F-1-11）" }));
+    c.appendChild(el("p", { "class": a.enabled ? "np-note" : "np-warn",
+      text: a.enabled ? "有効です。" : a.reason }));
+    c.appendChild(el("p", { "class": "np-note",
+      text: "採点結果には rubric版・実行日時・モデル名を残します（" + a.records.kept.join("／") + "）。" }));
+    c.appendChild(el("p", { "class": "np-note",
+      text: "AI が付けた点は現在 " + a.ai_scored + " 件です。" }));
+    var btn = el("button", { type: "button", text: "AI採点を実行する" });
+    if (!a.enabled) btn.setAttribute("disabled", "disabled");
+    var msg = el("p", { "class": "np-note" });
+    btn.addEventListener("click", function () {
+      post("/api/ideas/" + encodeURIComponent(d.id) + "/ai-score", {}).then(function (r) {
+        msg.textContent = r.enabled ? ("採点 " + r.scored + " 件／見送り " + r.skipped + " 件") : r.reason;
+        if (r.enabled) go();
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    c.appendChild(btn); c.appendChild(msg);
+    return c;
+  }
+
+  function ideaFieldsForm(d, meta) {
+    var box = el("details", { "class": "np-card" });
+    box.appendChild(el("summary", { text: "項目を足す・直す" }));
+    var f = el("form", { "class": "np-form" });
+    function sel(name, label, opts, cur, blank) {
+      var s = el("select", { name: name, "aria-label": label });
+      s.appendChild(el("option", { value: "", text: blank }));
+      opts.forEach(function (o) {
+        var v = typeof o === "string" ? o : (o.code || o.id);
+        var t = typeof o === "string" ? o : o.label;
+        var op = el("option", { value: v, text: t });
+        if (cur === v) op.setAttribute("selected", "selected");
+        s.appendChild(op);
+      });
+      return s;
+    }
+    function num(name, label, cur, min, max) {
+      var i = el("input", { type: "number", name: name, min: String(min), max: String(max), "aria-label": label, placeholder: label });
+      if (cur !== null && cur !== undefined) i.setAttribute("value", String(cur));
+      return el("label", { "class": "np-label" }, [el("span", { text: label }), i]);
+    }
+    f.appendChild(el("label", { "class": "np-label" }, [el("span", { text: "テーマ" }),
+      sel("theme_id", "テーマ", meta.idea.themes, d.theme_id, "未選択")]));
+    f.appendChild(el("label", { "class": "np-label" }, [el("span", { text: "起票経路" }),
+      sel("origin", "起票経路", meta.idea.origins, d.origin, "不明のまま")]));
+    f.appendChild(el("label", { "class": "np-label" }, [el("span", { text: "ステージ" }),
+      sel("stage", "ステージ", meta.idea.stages, d.stage, "変えない")]));
+    f.appendChild(el("label", { "class": "np-label" }, [el("span", { text: "需要発生（通年／季節／単発）" }),
+      sel("demand_cycle", "需要発生", meta.idea.demand_cycles, d.demand_cycle, "未入力のまま")]));
+    f.appendChild(num("design_freedom", "デザイン自由度(1-5)", d.design_freedom, 1, 5));
+    f.appendChild(num("production_feasibility", "生産方法(1-5)", d.production_feasibility, 1, 5));
+    f.appendChild(num("expected_margin_yen", "想定粗利額（円・1個あたり）", d.expected_margin_yen, 0, 10000000));
+    f.appendChild(el("button", { type: "submit", text: "保存する" }));
+    var msg = el("p", { "class": "np-note" });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      Array.prototype.forEach.call(f.elements, function (x) {
+        if (!x.name) return;
+        if (x.name === "stage" && !x.value) return;      // 「変えない」
+        o[x.name] = x.value;
+      });
+      post("/api/ideas/" + encodeURIComponent(d.id) + "/fields", o).then(function () {
+        go();
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  // ══════════════════════════════════════════════════════
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/ideas": ["アイデア台帳", "第1段", "アイデア・採点（rubric v2）・機会カレンダー・年間プランの枠。"],
-    "#/plan": ["プラン", "第1段", "年間プランの枠とコンセプト在庫月数。販売計画シミュレーション（F-14）は keiei の plan が0行のため、入力の無い状態から立ち上がる設計にします。"],
+    "#/plan": ["プラン", "第1段の残り", "機会カレンダーと年間プランの枠。アイデア台帳と採点（rubric v2）は実装済みで #/ideas にあります。コンセプト在庫月数はダッシュボードの2段目に出しています。販売計画シミュレーション（F-14）は keiei の plan が0行のため、入力の無い状態から立ち上がる設計にします。"],
     "#/cost": ["原価・調達", "第3段", "調達先・資材・為替・試算原価と、seisan への商品マスタ登録ファイル。"],
     "#/settings": ["設定", "—", "マスタ・利用者・データの出どころ・監査ログ。第2段では監査の記録だけ取っています。"]
   };
@@ -810,8 +1244,11 @@
     setTitle(entry.label);
 
     var m = /^#\/projects\/([A-Za-z0-9_-]+)$/.exec(path);
+    var mi = /^#\/ideas\/([A-Za-z0-9_-]+)$/.exec(path);
     if (path === "#/") return viewHome();
     if (m) return viewProject(m[1]);
+    if (mi) return viewIdea(mi[1]);
+    if (path === "#/ideas") return viewIdeas();
     if (path === "#/projects") return viewProjects();
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }

@@ -376,6 +376,101 @@ def check_stage2_screens():
          "色の値をアプリ側で作ると明暗のどちらかだけ直る事故になる")
 
 
+# ───────────────── 第1段（アイデア台帳・採点v2）─────────────────
+def check_stage1_db(cl: Client):
+    """**入っている件数を実測する。**「入っているはず」で通さない。"""
+    st, _, body = cl.get("/api/health")
+    if st != 200:
+        return note(NG, "第1段: /api/health", f"status={st}")
+    d = json.loads(body).get("db", {})
+    idea = d.get("idea")
+    if not isinstance(idea, dict) or "error" in idea:
+        return note(NG, "第1段: アイデアの件数が /api/health に出る", str(idea))
+
+    # 採点の版。v1 は4シート分＋v2 で5件。**版を分けて併存させる**（F-1-10）
+    note(OK if idea.get("rubric") == 5 else NG, "第1段: rubric が 5 版",
+         f"実測 {idea.get('rubric')} — v1-original/v1-uchiwa/v1-lovot/"
+         "v1-bukkomi/v2")
+    note(OK if idea.get("theme") == 4 else NG, "第1段: 評価テーマが 4 件",
+         f"実測 {idea.get('theme')}")
+    # **機会カレンダーはまだ取り込んでいない。**0 を「無い」と言い換えない
+    note(OK if idea.get("theme_score") == 0 else NG,
+         "第1段: ライフイベント採点は未取込（0件）",
+         f"実測 {idea.get('theme_score')} — 元表の列位置が行によってずれており、"
+         "機械的に読むと取り違える。F-2（機会カレンダー）で入れる")
+    note(OK if idea.get("theme_signal") == 0 else NG,
+         "第1段: FCTR の時限スコアは未取込（0件）",
+         f"実測 {idea.get('theme_signal')} — AutoGrowth からの取込は未実装（F-9）")
+
+    n_idea = idea.get("idea") or 0
+    by_sheet = idea.get("idea_by_sheet") or {}
+    if n_idea == 0:
+        note(OK, "第1段: アイデアは未移行（0件）",
+             "tools/import_ideas.py を流すと入る。**0 と未実装を区別している**")
+    else:
+        note(OK, "第1段: アイデアの件数", f"{n_idea} 件 / シート別 {by_sheet}")
+        # **移行分の起票経路は不明。**推測で埋めていないこと（N-10）
+        note(OK if idea.get("idea_without_origin", 0) > 0 else NG,
+             "第1段: 移行分の起票経路が「不明」のまま",
+             f"origin が NULL のアイデア {idea.get('idea_without_origin')} 件")
+        vs = idea.get("idea_score_by_version") or {}
+        note(OK if not [k for k in vs if k == "v2"] or vs.get("v2", 0) >= 0 else NG,
+             "第1段: 採点の版ごとの件数", str(vs))
+
+
+def check_stage1_api(cl: Client):
+    """**既定拒否。**未ログインでアイデアの中身を返さない。"""
+    for p in ("/api/ideas", "/api/rubrics", "/api/settings"):
+        st, hd, body = cl.get(p)
+        ct = hd.get("Content-Type", "")
+        if st == 401 and ct.startswith("application/json"):
+            note(OK, f"{p} が未ログインで 401（JSON）", "")
+        else:
+            note(NG, f"{p} が未ログインで 401（JSON）",
+                 f"status={st} type={ct!r} len={len(body)}")
+
+
+def check_stage1_screens():
+    """画面の描画。**誤読を防ぐ文言が消えていないか。**"""
+    js = (UI / "app.js").read_text(encoding="utf-8")
+    for s, why in [
+        ("viewIdeas", "アイデア一覧"),
+        ("viewIdea", "アイデア1件（採点画面）"),
+        ("#/ideas/", "アイデアの URL（貼れる）"),
+        ("newIdeaForm", "起票フォーム"),
+        ("4項目＋起票経路だけ", "起票のハードルを上げない（F-1-3）"),
+        ("/api/ideas/similar", "起票時に似た案を出す（F-1-12）"),
+        ("名寄せ", "名寄せ済みという意味ではない、の断り"),
+        ("合算していません", "v1 と v2 を足さない（F-1-10）"),
+        ("①共通点（0〜70）", "2層採点の①（F-1-5）"),
+        ("②テーマ適合点（0〜30）", "2層採点の②（F-1-5）"),
+        ("減点係数", "生産方法(1-5) の減点係数（F-1-6）"),
+        ("百分位", "ランクは絶対点ではなく百分位（F-1-9）"),
+        ("想定粗利額", "高単価化しやすさを円建てに（F-1-7）"),
+        ("需要発生（通年／季節／単発）", "通年性を3値へ（F-1-8）"),
+        ("AI採点", "AI採点の状態を画面に出す（F-1-11）"),
+        ("起票経路が不明", "移行分の起票経路を「不明」と書く（N-10）"),
+        ("母数", "百分位の母数を出す"),
+        ("G3通過・未発売", "コンセプト在庫月数の分子（F-1-14）"),
+    ]:
+        note(OK if s in js else NG, f"app.js に {why}", "" if s in js else s)
+
+    # **未実装の画面に、実装済みのものを混ぜて書いていないこと**
+    i = js.find("var NOT_YET")
+    j = js.find("};", i) if i >= 0 else -1
+    tail = js[i:j] if (i >= 0 and j > i) else ""
+    note(OK if (tail and '"#/ideas"' not in tail) else NG,
+         "app.js の「未実装」一覧からアイデアが外れている",
+         "実装したのに「未実装」と出続けると、誰も開かない")
+
+    css = (UI / "assets" / "np.css").read_text(encoding="utf-8")
+    note(OK if "np-grid-2" in css else NG, "np.css に採点の2列組",
+         "v1 と v2 を並べて見せる（F-1-10）")
+    note(OK if not re.search(r"\.np-rank-(SS|S|A|B|C)", css) else NG,
+         "np.css がランクを色で表していない",
+         "**色に意味を持たせない**（N-11）。ランクは語として列に出す")
+
+
 def check_index_served(cl: Client):
     """SPA の外枠そのものは、ログインしないと出ない。
 
@@ -446,6 +541,9 @@ def main() -> int:
         check_stage2_db(cl)
         check_stage2_api(cl)
         check_stage2_screens()
+        check_stage1_db(cl)
+        check_stage1_api(cl)
+        check_stage1_screens()
     finally:
         if proc:
             proc.terminate()

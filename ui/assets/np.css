@@ -88,3 +88,24 @@ form.np-inline select, form.np-inline input, form.np-inline button {
   background: var(--fca-card); color: inherit;
 }
 .np-err { border-left: 4px solid var(--fca-gold); padding: .5rem .75rem; margin: .6rem 0; }
+
+/* ── 第1段（アイデア台帳・採点）──────────────────────────
+ * **色に意味を持たせない**（N-11）。ランクも状態も語として列に出しており、
+ * ここにあるのは余白と枠だけ。ランクごとの色分けは作らない。 */
+@media (min-width: 720px) { .np-grid-2 { grid-template-columns: repeat(2, 1fr); } }
+
+form.np-form { display: grid; gap: .5rem; margin: .6rem 0; }
+form.np-form input, form.np-form select, form.np-form textarea,
+form.np-form button {
+  font: inherit; padding: .35rem .45rem;
+  border: 1px solid var(--fca-line); border-radius: 4px;
+  background: var(--fca-card); color: inherit; max-width: 46rem; width: 100%;
+}
+form.np-form button { width: auto; justify-self: start; }
+.np-label { display: grid; gap: .2rem; font-size: .9rem; }
+.np-label > span { font-weight: 600; }
+
+/* 起票のときに出す「似た案」（F-1-12）。**名寄せ済みという意味ではない。**
+ * 人が見て判断するための材料として出すだけ */
+.np-sim { margin: .4rem 0; }
+.np-body { white-space: pre-wrap; max-width: 60rem; }

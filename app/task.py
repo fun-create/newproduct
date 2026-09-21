@@ -269,7 +269,7 @@ def dashboard(user_id: str) -> dict:
     毎朝開く人が最初に要るのは「何をすればいいか」。
     コンセプト在庫月数は捨てずに2段目へ置く（経営の問いとして残す）。
     """
-    from . import gate, project as _p
+    from . import gate, idea as _idea, project as _p
     t = store.today()
     c = counts()
 
@@ -315,12 +315,14 @@ def dashboard(user_id: str) -> dict:
                     tdp + mine, 0) if user_id else None,
                 "link": "#/tasks?when=today"},
         },
-        # ── 2段目: 経営の問い。**第1段・第4段が未実装なので「未計測」と出す** ──
+        # ── 2段目: 経営の問い ──
+        # コンセプト在庫月数は第1段で実装した（F-1-14）。残り2つは第1段の枠と
+        # 第4段が未実装なので **「未計測」と出す**。
         # **未計測と0を区別する**（§5-9 の7）。0 と書くと「積み上がっていない」と読まれる
         "monthly": [
-            {"label": "コンセプト在庫月数", "value": None, "state": "未計測",
-             "why": "アイデア台帳と年間プラン（第1段）が未実装です。"
-                    "月間発売目標本数も設定にありません。"},
+            # F-1-14。**定義＝ G3（コンセプト承認）通過・未発売 ÷ 月間発売目標本数。**
+            # 月間目標本数が未確定なら「未計測」のまま理由を出す（N-10）
+            _idea.concept_stock(),
             {"label": "今月の枠の消化", "value": None, "state": "未計測",
              "why": "年間プランの枠（launch_slot・第1段）が未実装です。"},
             {"label": "発売後チェックの未処理", "value": None, "state": "未計測",

@@ -217,8 +217,71 @@ def main() -> int:
         st, d = cl.get("/api/tasks?tab=request")
         note(st == 200, "他部署への依頼のタブ", str(st))
 
+        # ── 第1段: アイデア台帳と採点v2（F-1）──────────────
+        st, d = cl.get("/api/meta")
+        note(st == 200 and len(d["idea"]["origins"]) == 7
+             and len(d["idea"]["themes"]) == 4,
+             "/api/meta に起票経路7つと評価テーマ4つ", str(st))
+        note(d["ai_scoring"]["enabled"] is False,
+             "AI採点は既定 off（F-1-11・第11章 ⑩）",
+             d["ai_scoring"]["reason"] or "")
+
+        st, d = cl.post("/api/ideas", {
+            "title": "推し色アクリルスタンド", "summary": "検査用の企画名",
+            "target_scene": "推し活", "origin": "internal",
+            "theme_id": "oshikatsu"})
+        note(st == 200, "POST /api/ideas が4項目＋起票経路で通る", f"{st} {d}")
+        iid = d["id"]
+        st, d = cl.post("/api/ideas", {"title": "似ていない案", "origin": ""})
+        note(st == 400, "起票経路が無いと断る（F-1-4）", f"{st} {d}")
+
+        st, d = cl.post("/api/ideas/similar", {"title": "推し色アクリルスタンド"})
+        note(st == 200 and any(r["id"] == iid for r in d["rows"]),
+             "起票時に似た案が出る（F-1-12）", str(d["rows"])[:120])
+
+        st, d = cl.post(f"/api/ideas/{iid}/score",
+                        {"demand": "8", "market_size": "8", "advantage": "8",
+                         "theme_fit": "8"})
+        note(st == 400 and "未入力" in d.get("error", ""),
+             "足りない入力があると v2 で採点させない（F-1-6・F-1-7・N-10）",
+             f"{st} {d}")
+        cl.post(f"/api/ideas/{iid}/fields",
+                {"production_feasibility": "3", "expected_margin_yen": "1200",
+                 "demand_cycle": "通年"})
+        st, d = cl.post(f"/api/ideas/{iid}/score",
+                        {"demand": "8", "market_size": "8", "advantage": "8",
+                         "theme_fit": "8"})
+        note(st == 200 and d["feasibility_factor"] == 0.85
+             and d["common_score"] == 53.0 and d["theme_fit"] == 24.0
+             and d["raw_total"] == 77.0 and d["total"] == 65.45,
+             "v2 が2層＋減点係数で出る（F-1-5・F-1-6）", f"{st} {d}")
+        note(d["rank_basis"] == "percentile" and d["percentile"] is not None,
+             "ランクが百分位で決まる（F-1-9）", str(d["rank"]))
+
+        st, d = cl.get("/api/ideas/" + iid)
+        note(st == 200 and len(d["scores"]) == 1
+             and d["scores"][0]["rubric_version"] == "v2",
+             "アイデア1件に版ごとの点が並ぶ（合算しない・F-1-10）", str(st))
+        st, d = cl.get("/api/ideas?rubric=v2")
+        note(st == 200 and d["rubric"] == "v2"
+             and any(r["id"] == iid for r in d["rows"]),
+             "一覧が版を1つだけ出す", str(st))
+        st, d = cl.get("/api/rubrics")
+        note(st == 200 and len(d["rows"]) == 5,
+             "/api/rubrics が5版（v1×4＋v2）", str(st))
+
+        st, d = cl.post(f"/api/ideas/{iid}/ai-score", {})
+        note(st == 200 and d["enabled"] is False and d["scored"] == 0,
+             "AI採点は呼んでも動かない（予算枠が未取得）", str(d.get("reason"))[:60])
+
+        st, d = cl.get("/api/settings")
+        note(st == 200 and d["concept_stock"]["value"] is None
+             and d["concept_stock"]["state"] == "未計測",
+             "コンセプト在庫月数は月間目標が未設定なら「未計測」（F-1-14）",
+             d["concept_stock"]["why"][:60])
+
         n = store.val("SELECT COUNT(*) FROM audit")
-        note(n >= 6, "全操作が audit に残る", f"{n} 件")
+        note(n >= 14, "全操作が audit に残る", f"{n} 件")
 
         st, body = cl.get("/")
         note(st == 200 and b"fca-nav-data" in body, "ログイン済みで SPA の外枠が出る",
