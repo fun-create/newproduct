@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--
+  NEW PRODUCT — SPA の外枠。
+  帯の形は全体設計書 §5-7 のとおり。**この順番を変えない**
+  （app-shell.css が .fca-bar > .fca-brand / .fca-nav / .fca-spacer / .fca-who を前提にする）。
+  画面の切り替えは app.js の hash routing（§5-1）。**業務画面はまだ無い。**
+-->
+<html class="fca-shell" lang="ja" data-app="new-product">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEW PRODUCT</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/app-shell.css?v={V}">
+<!-- アプリ固有CSS は共通CSS の**後**に読む（app-shell.css の「読み込み順」の約束） -->
+<link rel="stylesheet" href="/assets/np.css?v={V}">
+<link rel="icon" href="/assets/favicon.ico?v={V}" sizes="any">
+<link rel="icon" href="/assets/favicon-auto.svg?v={V}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v={V}">
+<link rel="manifest" href="/assets/site.webmanifest?v={V}">
+</head>
+<body>
+
+<a class="fca-skip" href="#main">本文へ</a>
+
+<header class="fca-bar">
+  <a class="fca-brand" href="/">
+    <!-- 名前は画像の中にある。**alt が唯一の読み上げ経路**なので正式表記を入れる -->
+    <img class="fca-brand-logo" src="/assets/bar-logo.svg?v={V}"
+         alt="FUN-CREATE NEW PRODUCT" height="36">
+  </a>
+  <nav class="fca-nav" aria-label="主要メニュー">
+    <a href="#/"          data-view="home">ダッシュボード</a>
+    <a href="#/ideas"     data-view="ideas">アイデア</a>
+    <a href="#/plan"      data-view="plan">プラン</a>
+    <a href="#/projects"  data-view="projects">案件</a>
+    <a href="#/tasks"     data-view="tasks">タスク</a>
+    <a href="#/cost"      data-view="cost">原価・調達</a>
+    <a href="#/settings"  data-view="settings">設定</a>
+  </nav>
+  <span class="fca-spacer"></span>
+  <div class="fca-who">
+    <span class="fca-user">{USER}</span>
+    <a href="/logout">ログアウト</a>
+  </div>
+</header>
+
+<!--
+  NAV の正本。**app.js と selfcheck.py の両方がここを読む。**
+  片方だけを直すと、帯と実際の画面が静かにずれる。
+-->
+<script type="application/json" id="fca-nav-data">
+[
+ {"view":"home",     "hash":"#/",         "label":"ダッシュボード"},
+ {"view":"ideas",    "hash":"#/ideas",    "label":"アイデア"},
+ {"view":"plan",     "hash":"#/plan",     "label":"プラン"},
+ {"view":"projects", "hash":"#/projects", "label":"案件"},
+ {"view":"tasks",    "hash":"#/tasks",    "label":"タスク"},
+ {"view":"cost",     "hash":"#/cost",     "label":"原価・調達"},
+ {"view":"settings", "hash":"#/settings", "label":"設定"}
+]
+</script>
+
+<main id="main" class="fca-main" tabindex="-1">
+  <h1 class="fca-h1" id="view-title">ダッシュボード</h1>
+  <div id="view" class="fca-card">
+    <p class="fca-note">読み込んでいます。</p>
+  </div>
+</main>
+
+<script src="/app.js?v={V}"></script>
+</body>
+</html>

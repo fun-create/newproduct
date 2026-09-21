@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  ログイン画面。
+  **横長タイトルロゴは帯に置かない。**白いカードの上に置く（app-shell.css §6）。
+  初回登録（最初の1人が管理者）の口は置かない。利用者の登録は Calendar の画面から。
+-->
+<html class="fca-shell" lang="ja" data-app="new-product">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ログイン ／ NEW PRODUCT</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/app-shell.css?v={V}">
+<link rel="icon" href="/assets/favicon.ico?v={V}" sizes="any">
+<link rel="icon" href="/assets/favicon-auto.svg?v={V}" type="image/svg+xml">
+<style>
+  .lg-wrap{ max-width: 380px; margin: 3rem auto; padding: 0 1.2rem; }
+  .lg-card{ background: var(--fca-card); border: 1px solid var(--fca-line);
+            border-radius: 8px; padding: 1.6rem; }
+  .lg-card label{ display: block; margin: .9rem 0 .25rem; font-weight: 700; }
+  .lg-card input{ width: 100%; padding: .6rem; font-size: 1rem;
+                  border: 1px solid var(--fca-line); border-radius: 4px;
+                  background: var(--fca-bg); color: var(--fca-ink); }
+  .lg-card button{ width: 100%; margin-top: 1.2rem; padding: .7rem;
+                   font-size: 1rem; font-weight: 700; cursor: pointer;
+                   background: var(--fca-bar); color: var(--fca-bar-ink);
+                   border: 0; border-radius: 4px; }
+  .lg-err{ margin: .9rem 0 0; color: var(--fca-ink);
+           border-left: 3px solid var(--fca-gold); padding-left: .6rem; }
+</style>
+</head>
+<body>
+<div class="lg-wrap">
+  <div class="lg-card">
+    <span class="fca-logo fca-logo-lg">
+      <img src="/assets/title-logo.svg?v={V}" alt="FUN-CREATE NEW PRODUCT">
+    </span>
+    <form method="post" action="/login">
+      <label for="user_id">ログインID</label>
+      <input id="user_id" name="user_id" autocomplete="username"
+             autocapitalize="off" autocorrect="off" required>
+      <label for="password">パスワード</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required>
+      <button type="submit">ログイン</button>
+    </form>
+    <p class="lg-err">{ERROR}</p>
+  </div>
+  <p class="fca-note">FUN-CREATE 新商品開発管理（社内）</p>
+</div>
+</body>
+</html>

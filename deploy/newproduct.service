@@ -1,0 +1,54 @@
+# NEW PRODUCT（FUN-CREATE 新商品開発管理）— systemd ユニット
+#
+# **まだ enable しない。**十文字さんの検証後に、以下を手で行う:
+#   sudo cp /opt/newproduct/deploy/newproduct.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now newproduct
+#   journalctl -u newproduct -f
+#
+# **deploy/ は正本ではない。正本は /etc/systemd/system/。**
+# 配る前に必ず `diff -u` で突き合わせる（2026-09-16、AutoGrowth の deploy/ は
+# 現役26本のうち9本しか無く、しかも古かった）。
+
+[Unit]
+Description=NEW PRODUCT (FUN-CREATE 新商品開発管理)
+After=network.target
+
+[Service]
+Type=simple
+User=newproduct
+Group=newproduct
+WorkingDirectory=/opt/newproduct
+
+# **127.0.0.1 のまま。**http.server を直接外へ晒さない（TLS は前段の Caddy）
+Environment=NEWPRODUCT_BIND=127.0.0.1
+Environment=NEWPRODUCT_PORT=8794
+Environment=NEWPRODUCT_PUBLIC_URL=https://newproduct.fun-create.co.jp
+Environment=HOME=/opt/newproduct
+
+# 共通ログイン。**2つで一組**（片方だけだと黙ってローカル照合へ戻る）
+Environment=ACCOUNTS_DIR=/opt/accounts
+Environment=AUTH_APP=newproduct
+
+ExecStart=/usr/bin/python3 -u /opt/newproduct/server.py
+Restart=on-failure
+RestartSec=5
+
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+# 書き込みを必要な場所だけに絞る。
+# **書き忘れると静かに失敗する**（起動は成功し、その機能を使うまで気づけない）。
+#
+#   data/    … SQLite・引き渡しファイル
+#   logs/    … アプリの書き出し
+#   config/  … **auth.py が .sessions.json を書く**。svc_token / csrf_salt もここ。
+#              外すと、再起動のたびに全員ログアウトし、
+#              サーバ間APIのトークンが毎回作り直される（**エラーは出ない**）
+#   /opt/accounts/state … ログイン失敗回数を6アプリで数え合わせる。
+#              外すと 20回/30秒 がアプリごと独立になる（**エラーは出ない**）
+ReadWritePaths=/opt/newproduct/data /opt/newproduct/logs /opt/newproduct/config /opt/accounts/state
+
+[Install]
+WantedBy=multi-user.target

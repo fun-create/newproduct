@@ -1,0 +1,460 @@
+/* ============================================================================
+   FUN-CREATE 社内アプリ 共通シェル  app-shell.css
+   版: 2026-09-20   土台: identity/FUN-CREATE-App-Identity/palette.json (version 2)
+   依存: なし（外部CDN・Webフォント・ビルド手順を一切使わない）
+
+   ■ 接頭辞の約束
+     このファイルが定義する変数・クラスは **すべて `--fca-` / `.fca-`**。
+     （FUN-CREATE App = fca）
+     既存アプリが使っている `--bg --card --text --ink --muted --line --navy
+     --navy2 --accent --brand --gold --off --bar --ok --warn --danger --bad
+     --chip --shadow --logo --hol-*` には **一切触れない**。
+     衝突確認済み: /opt/keiei/ui/layout.py と /opt/calfc/ui/style.css に
+     `--fc` で始まる変数は 0 件（2026-09-20 実機 grep）。
+     /opt/lpscope /opt/autogrowth は読み取り権限が無く **未確認**。
+     導入前に各担当が `grep -o -- "--fc[a-zA-Z-]*" <対象>` を実行すること。
+
+   ■ 読み込み順（重要）
+     1) app-shell.css   ← 先
+     2) アプリ固有CSS    ← 後
+     全体に効く指定は `:where()` で包んで詳細度0にしてある。
+     後から来るアプリ固有CSSが必ず勝つ。上書き事故は起きない。
+   ========================================================================== */
+
+
+/* ---------------------------------------------------------------------------
+   1. トークン（ライト＝既定）
+
+   コーポレート色とアプリ色の役割分担:
+     帯（ヘッダ）とその上の文字 = コーポレート（Navy / Gold / 白）
+     アプリアクセント           = 識別だけ（マークの縦線・帯の3px下線・現在地）
+   根拠の数値は 2026-09-20_社内アプリ共通ヘッダー設計.md の「色の役割」章。
+   --------------------------------------------------------------------------- */
+:root{
+  color-scheme: light;
+
+  /* 面 */
+  --fca-bg:      #F5F6FA;   /* 本文背景。CLAUDE.md の Off-white を正とする      */
+  --fca-card:    #FFFFFF;   /* カード。素材ライトロゴの白プレートと同値 → 溶ける */
+  --fca-line:    #D7DFE8;   /* 罫線                                           */
+
+  /* 文字 */
+  --fca-ink:     #172330;   /* 本文  15.91:1 / card                            */
+  --fca-muted:   #526173;   /* 補助   6.33:1 / card                            */
+
+  /* コーポレート */
+  --fca-navy:    #1B2A5C;   /* 文字・強調として 13.70:1 / card                  */
+  --fca-gold:    #C8952A;   /* ライト本文では 2.70:1 → **文字に使わない**。罫線のみ */
+
+  /* 帯 */
+  --fca-bar:     #1B2A5C;
+  --fca-bar-ink: #FFFFFF;   /* 13.70:1 / bar                                   */
+  --fca-bar-dim: #DFE5F7;   /* 10.89:1 / bar。ナビの既定色                      */
+  --fca-bar-h:   48px;
+  --fca-mark:    28px;      /* 帯に置くアイコンの一辺                           */
+  --fca-brandlogo: 36px;    /* 帯に置く横組みロゴの高さ                         */
+
+  /* 帯の上の Gold は明暗で値を変えない。ライト帯 5.08:1 / ダーク帯 4.83:1。
+     2か所に書くと片方だけ直る事故が起きるので 1 か所に固定する。 */
+  --fca-gold-bar:#C8952A;
+
+  /* フォーカス */
+  --fca-focus:   #172330;   /* 14.74:1 / bg。アクセント色は使わない（後述）      */
+
+  /* ロゴ */
+  --fca-logo-h:  32px;      /* title-logo.svg の**見える高さ**の上限。旧40pxの0.8倍 */
+
+  /* アクセントの保険。data-app が無いときに色が消えないようにする */
+  --fca-accent:  #C8952A;
+
+  /* 帯の中身を本文と同じ位置から始める（2026-09-20 追加）。
+     **帯は全幅、本文は中央寄せ**という組み合わせだと、ロゴだけが画面の端に張り付き、
+     本文の左端と揃わない。AutoGrowth（本文1080px・余白24px）で実測188pxずれた。
+     アプリ側はこの2つを自分の本文に合わせて上書きする。 */
+  --fca-w:       1200px;   /* 本文の最大幅 */
+  --fca-gutter:  1.2rem;   /* 本文の左右の余白 */
+}
+
+/* ---------------------------------------------------------------------------
+   2. テーマは3状態
+
+   （a）既定 = ライト
+   （b）data-theme が無いときだけ端末の設定に従う
+   （c）利用者が選んだ data-theme="dark" は必ず優先
+
+   **下の2ブロックは同じ値でなければならない。** 片方だけ直すと、
+   「端末がダークの人だけ色が違う」という、直した本人には見えない事故になる。
+   検査方法は 2026-09-20_アプリ制作エージェント共通ルール.md のチェックリスト C-3。
+   属性は <html> にサーバーが入れる。JS は使わない。
+   --------------------------------------------------------------------------- */
+
+/* ---- DARK BLOCK A ---- ここから */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --fca-bg:      #111820;   /* palette dark.bg。ダークロゴのプレートと同値 → 溶ける */
+    --fca-card:    #19232E;
+    --fca-line:    #344454;
+    --fca-ink:     #F8FAFC;   /* 17.08:1 / bg                                   */
+    --fca-muted:   #A8B4C2;   /*  8.48:1 / bg                                   */
+    --fca-navy:    #8FA6E0;   /* 濃紺は暗い地で 1.30:1。**文字色側へ回す** 7.40:1 */
+    --fca-gold:    #E0B45C;   /*  9.23:1 / bg                                   */
+    --fca-bar:     #223052;   /* 白文字 13.02:1。--fca-navy とは別に持つ          */
+    --fca-bar-ink: #FFFFFF;
+    --fca-bar-dim: #DFE5F7;   /* 10.35:1 / bar                                  */
+    --fca-focus:   #F8FAFC;   /* 17.08:1 / bg                                   */
+  }
+}
+/* ---- DARK BLOCK A ---- ここまで */
+
+/* ---- DARK BLOCK B ---- ここから（A と同じ値） */
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --fca-bg:      #111820;
+  --fca-card:    #19232E;
+  --fca-line:    #344454;
+  --fca-ink:     #F8FAFC;
+  --fca-muted:   #A8B4C2;
+  --fca-navy:    #8FA6E0;
+  --fca-gold:    #E0B45C;
+  --fca-bar:     #223052;
+  --fca-bar-ink: #FFFFFF;
+  --fca-bar-dim: #DFE5F7;
+  --fca-focus:   #F8FAFC;
+}
+/* ---- DARK BLOCK B ---- ここまで */
+
+
+/* ---------------------------------------------------------------------------
+   3. アプリ識別色（palette.json version 2 が正）
+
+   **この8色の値を、明暗で変えてはいけない。**（素材側の規定）
+   使ってよい場所は3つだけ:
+     - 帯の下端 3px の線
+     - 帯のナビの「現在地」下線 2px
+     - 素材SVGの中の縦ライン（＝こちらでは触らない）
+   ライト背景（#FFFFFF）でのコントラストは cip 3.20 を除き全色が 3:1 未満。
+   つまり **白い面の上では意味を運べない**。本文・罫線・状態表示に使わない。
+   --------------------------------------------------------------------------- */
+:root{
+  --fca-c-lpscope:          #FF7A32;
+  --fca-c-auto-growth:      #34D399;
+  --fca-c-cip:              #4D8DFF;
+  --fca-c-new-product:      #FACC15;
+  --fca-c-ai-assistant:     #B58AFF;
+  --fca-c-calendar:         #22D3EE;
+  --fca-c-business-analysis:#FF6268;
+  --fca-c-web-marketing:    #F472D0;
+  /* 予備6色（未割当）。新規アプリはここから選び palette.json に登録してから使う */
+  --fca-r-lime:   #A3E635;
+  --fca-r-teal:   #2DD4BF;
+  --fca-r-indigo: #818CF8;
+  --fca-r-peach:  #FDBA74;
+  --fca-r-silver: #CBD5E1;
+  --fca-r-ivory:  #F5E6BC;
+}
+
+/* data-app は <html> に付ける（ページ全体で参照できるように）。
+
+   **--fca-logo-w は 2026-09-21 に廃止した。**「canvas は全アプリ 1200x240 の
+   5:1 で、右側は空白」という前提で絵を切り詰める値だったが、実物は canvas 幅が
+   479〜1436 とアプリごとに違い、紺の下地が全面を覆っていて空白が無い。
+   切り詰めた結果、見えていたのは lpscope 45% / cip 7% など（8アプリ全滅）。
+   **効かない調整つまみを残さない**ため、宣言ごと消してある。 */
+:root[data-app="lpscope"]          { --fca-accent: var(--fca-c-lpscope); }
+:root[data-app="auto-growth"]      { --fca-accent: var(--fca-c-auto-growth); }
+:root[data-app="cip"]              { --fca-accent: var(--fca-c-cip); }
+:root[data-app="new-product"]      { --fca-accent: var(--fca-c-new-product); }
+:root[data-app="ai-assistant"]     { --fca-accent: var(--fca-c-ai-assistant); }
+:root[data-app="calendar"]         { --fca-accent: var(--fca-c-calendar); }
+:root[data-app="business-analysis"]{ --fca-accent: var(--fca-c-business-analysis); }
+:root[data-app="web-marketing"]    { --fca-accent: var(--fca-c-web-marketing); }
+
+
+/* ---------------------------------------------------------------------------
+   4. 最小の土台
+   すべて :where() で詳細度0。アプリ固有CSSが後から必ず勝つ。
+   --------------------------------------------------------------------------- */
+/* **ここから下の全体指定は opt-in。**`<html class="fca-shell">` を付けたページにだけ効く。
+   2026-09-20、これを無条件に当てていたため、既存の組版を持つ CALENDAR の
+   body の line-height が normal → 1.6 に変わり、週表示の見え方が変わった。
+   **共通CSSは、読み込んだだけで既存の見た目を変えてはいけない。**
+   既存アプリは色と `.fca-*` の部品だけを受け取り、全体の組版は自分のものを使う。 */
+.fca-shell :where(*, *::before, *::after){ box-sizing: border-box; }
+
+.fca-shell:where(body), .fca-shell :where(body){
+  margin: 0;
+  background: var(--fca-bg);
+  color: var(--fca-ink);
+  font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+        "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 数字は桁を揃える。表の縦の並びが揃わないと読み比べができない */
+.fca-shell :where(table, .fca-num, td, th){ font-variant-numeric: tabular-nums; }
+
+.fca-shell :where(img, svg){ max-width: 100%; height: auto; }
+
+
+/* ---------------------------------------------------------------------------
+   5. 帯（ヘッダ）
+
+   構造（この順番を変えない）:
+     <header class="fca-bar">
+       <a class="fca-brand">[アイコン][FUN-CREATE][アプリ名]</a>
+       <nav class="fca-nav">…</nav>
+       <span class="fca-spacer"></span>
+       <div class="fca-who">…</div>
+     </header>
+   --------------------------------------------------------------------------- */
+.fca-bar{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .15rem .9rem;
+  min-height: var(--fca-bar-h);
+  /* 狭いときも広いときも、本文の左端に合わせる。
+     下限を 1rem に固定すると、本文の余白が 1rem より広いアプリで
+     狭い画面のときだけずれる（AutoGrowth は 24px なので 8px ずれた）。 */
+  padding-block: .25rem;
+  padding-inline: max(var(--fca-gutter),
+                      calc((100% - var(--fca-w)) / 2 + var(--fca-gutter)));
+  background: var(--fca-bar);
+  color: var(--fca-bar-ink);
+  /* アプリ識別色はここに 3px。帯の上なら全8色 + 予備6色が 3:1 を満たす
+     （最小 cip 4.29:1 / 予備最小 indigo 4.59:1）。
+     border ではなく inset shadow にするのは、帯の高さ計算を変えないため */
+  box-shadow: inset 0 -3px 0 var(--fca-accent);
+}
+
+.fca-brand{
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: inherit;
+  text-decoration: none;
+  padding: .35rem .4rem;
+  margin-left: -.4rem;
+  border-radius: 4px;
+  min-height: 44px;           /* スマホの指の的 */
+}
+.fca-brand:hover{ background: rgba(255,255,255,.10); }
+
+/* アイコン。素材 icon.svg は 512x512、自前で明るい/暗いタイルを持っている。
+   **CSS で border-radius を足さない。** SVG 側に rx=24 がある。
+   CSS で重ねると透明な余白まで切ってずれる（calfc の既存検査と同じ理由）。 */
+.fca-mark{
+  display: block;
+  flex: none;
+  width: var(--fca-mark);
+  height: var(--fca-mark);
+}
+
+/* 帯に置く横組みロゴ（bar-logo.svg）。2026-09-20 追加。
+   **既存の .fca-mark / .fca-brand-text の見え方は変えない。**
+   新しいクラスにだけ効かせる。使う側はこれ1つを置く:
+
+     <a class="fca-brand" href="/">
+       <img class="fca-brand-logo" src="/assets/bar-logo.svg"
+            alt="FUN-CREATE ○○" height="36">
+     </a>
+
+   狭い幅では**縮めて出す**（--fca-brandlogo を下げる）。
+   アイコンへの差し替えはしない（2026-09-20 十文字さん指示）。
+
+   bar-logo.svg は Navy 帯専用。**title-logo.svg を帯に置かないこと。**
+   title-logo は 240 高で組んであり、帯の高さに縮めると字が潰れる。 */
+.fca-brand-logo{
+  display: block;
+  flex: none;
+  height: var(--fca-brandlogo);
+  width: auto;                /* 中身の比率で伸ばす。潰すと字が歪む */
+}
+
+.fca-brand-text{
+  display: inline-flex;
+  align-items: baseline;
+  gap: .4em;
+  white-space: nowrap;
+  letter-spacing: .02em;
+}
+.fca-co{  font-weight: 600; color: var(--fca-bar-dim); }    /* 10.89:1 / bar */
+.fca-app{ font-weight: 700; color: var(--fca-gold-bar); }   /*  5.08:1 / bar */
+
+.fca-nav{ display: flex; flex-wrap: wrap; align-items: center; gap: .1rem; }
+.fca-nav a{
+  display: inline-block;
+  color: var(--fca-bar-dim);
+  text-decoration: none;
+  padding: .55rem .55rem;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+.fca-nav a:hover{ background: rgba(255,255,255,.12); color: var(--fca-bar-ink); }
+/* 現在地は「色だけ」で示さない。太字＋下線＋aria-current の3つで示す */
+.fca-nav a[aria-current="page"]{
+  color: var(--fca-bar-ink);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--fca-accent);
+}
+
+.fca-spacer{ flex: 1 1 auto; }
+
+.fca-who{ display: flex; align-items: center; gap: .6rem; font-size: 12px; }
+.fca-who .fca-user{ color: var(--fca-bar-dim); }
+.fca-who a{ color: var(--fca-bar-dim); text-decoration: none;
+            padding: .5rem .5rem; border-radius: 4px; }
+.fca-who a:hover{ background: rgba(255,255,255,.12); color: var(--fca-bar-ink); }
+
+
+/* ---------------------------------------------------------------------------
+   6. 横長タイトルロゴ
+
+   **帯の上に置かない。**
+   ライト版の文字色は #172330。Navy の帯（#1B2A5C）に載せると 1.16:1 で消える。
+   置いてよいのは「ページ背景 / カードの上」だけ = ログイン画面・アプリ一覧・印刷。
+
+   **切り取らない。**canvas の比はアプリごとに違う（479x240〜1436x240）。
+   下地の紺が全面を覆っていて余白が無いので、切ればそのぶん絵が落ちる。
+   帯の .fca-brand-logo と同じ構えにする —— **高さの上限だけ決めて、幅は比に任せる。**
+   ・見える高さ = --fca-logo-h（枠が狭いときは max-width: 100% で縮む）
+   --------------------------------------------------------------------------- */
+.fca-logo{
+  display: inline-block;
+  line-height: 0;
+  max-width: 100%;               /* 狭い枠では縮む。**切り取らない** */
+}
+.fca-logo img{
+  display: block;
+  /* **width/height を固定しない。**固定すると比の違う素材が歪むか、
+     枠から溢れたぶんが切られる（2026-09-21 まで8アプリ全部で切れていた）。
+     max-width は必ず要る —— アプリ側の img{width:100%} に潰されるため */
+  height: auto;
+  width:  auto;
+  max-height: var(--fca-logo-h);
+  max-width:  100%;
+}
+/* ログイン画面などで大きく出すとき。白いカードの上に置くこと。
+   素材のプレート #FFFFFF はカード(#FFFFFF)と同値なので完全に溶ける。
+   背景(#F5F6FA)の上だと 1.08:1 の白い四角がうっすら出る。 */
+.fca-logo-lg{ --fca-logo-h: 72px; }              /* 旧: 描画90px＝見える72px */
+
+
+/* ---------------------------------------------------------------------------
+   7. フォーカス
+
+   アクセント色は使わない。ライト背景で 8色中 7色が 3:1 未満（最大 3.20:1）。
+   「アプリによってフォーカスが見えたり見えなかったり」になる。
+   --------------------------------------------------------------------------- */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible{
+  outline: 2px solid var(--fca-focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* 帯の上は白。Navy に対して 13.70:1 / ダーク帯に対して 13.02:1 */
+.fca-bar :where(a, button, summary, [tabindex]):focus-visible{
+  outline-color: #FFFFFF;
+}
+
+/* 本文へ飛ぶリンク。Tab の1回目で出る */
+.fca-skip{
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--fca-card); color: var(--fca-ink);
+  padding: .6rem 1rem; border: 2px solid var(--fca-focus); border-radius: 0 0 4px 0;
+}
+.fca-skip:focus{ left: 0; }
+
+/* 画面には出さないが読み上げには残す */
+.fca-sr{
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+
+/* ---------------------------------------------------------------------------
+   8. 見出し・カード（最小限）
+   --------------------------------------------------------------------------- */
+.fca-main{ max-width: 1200px; margin: 0 auto; padding: 1.2rem; }
+
+.fca-h1{
+  font-size: 1.25rem;
+  margin: .2rem 0 1rem;
+  padding-left: .6rem;
+  /* Gold は罫線。ライトで 2.50:1 なので **文字には使わない** */
+  border-left: 4px solid var(--fca-gold);
+}
+.fca-card{
+  background: var(--fca-card);
+  border: 1px solid var(--fca-line);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.fca-note{ color: var(--fca-muted); font-size: 12px; }
+
+
+/* ---------------------------------------------------------------------------
+   9. スマホでの縮退
+
+   720px 以下: 「FUN-CREATE」を落とす。アプリ名は残す
+   420px 以下: アプリ名も画面から外す（読み上げには残る）
+               **このとき .fca-mark の alt に正式表記を入れること。**
+               CSS では強制できない。共通ルール文書のチェックリスト B-4 で検査する。
+   --------------------------------------------------------------------------- */
+/* ロゴの縮小は **820px** から。帯の高さ（720px）とは別の境界にする。
+   2026-09-21 実測: 721〜768px だけ 36px のまま残り、iPad の縦幅 768px で
+   帯が折り返していた（Auto GROWTH は中身 764px / 枠 768px であと4px、
+   BUSINESS ANALYSIS は 822px で溢れ）。30px にすると帯が 92px → 74px。
+   **境界を揃えたくなるが、揃えると一番よく使う幅に一番広いロゴが当たる。** */
+@media (max-width: 820px){
+  :root{ --fca-brandlogo: 30px; }
+}
+@media (max-width: 720px){
+  /* 横組みロゴは**縮めて出す**（2026-09-20 十文字さん指示）。
+     アイコンへの差し替えはしない。縮むぶん、スクエアロゴの
+     「CREATE」は 30px で 5.9px・24px で 4.7px になる。
+     読む字ではなく形として見えればよい、という判断 */
+  :root{ --fca-bar-h: 44px; --fca-mark: 26px; }
+  .fca-co{ display: none; }
+  .fca-main{ padding: .8rem; }
+}
+@media (max-width: 480px){
+  :root{ --fca-brandlogo: 24px; }
+}
+@media (max-width: 420px){
+  .fca-app{
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .fca-nav a{ padding: .55rem .45rem; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   10. 印刷
+
+   紺の帯をそのまま刷るとトナーを食い、白文字が飛ぶ。
+   紙では「どのアプリのどの画面か」が分かれば足りる。
+   --------------------------------------------------------------------------- */
+@media print{
+  :root{ --fca-bg:#FFFFFF; --fca-card:#FFFFFF; --fca-ink:#000000; --fca-muted:#444444; }
+  .fca-bar{
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: none;
+    border-bottom: 1px solid #000000;
+  }
+  .fca-co, .fca-app, .fca-nav a, .fca-who{ color: #000000 !important; }
+  .fca-nav, .fca-who{ display: none; }
+  .fca-app{ position: static; width: auto; height: auto; clip-path: none; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   11. 動きを減らす設定への追従
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce){
+  :where(*){ animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

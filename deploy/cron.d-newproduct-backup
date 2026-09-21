@@ -1,0 +1,11 @@
+# NEW PRODUCT — 日次バックアップ。
+#
+# **まだ設置しない。**十文字さんの確認を経て:
+#   sudo cp /opt/newproduct/deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup
+#   sudo chmod 644 /etc/cron.d/newproduct-backup
+#   sudo chmod 755 /opt/newproduct/deploy/backup.sh   # 落ちていると毎晩静かに失敗する
+#
+# 04:15。lpscope 3:15 / calfc 3:30 / autogrowth・seisan 3:45 / keiei 4:00 の次。
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+15 4 * * * root /opt/newproduct/deploy/backup.sh >> /var/log/newproduct-backup.log 2>&1

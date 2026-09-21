@@ -1,0 +1,30 @@
+# NEW PRODUCT — /etc/caddy/Caddyfile へ足す断片。
+#
+# **まだ追記しない。**8794 が listen してから、十文字さんの確認を経て:
+#   sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%Y%m%d-%H%M%S)
+#   sudo sh -c 'cat /opt/newproduct/deploy/Caddyfile.fragment >> /etc/caddy/Caddyfile'
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# 前提: newproduct.fun-create.co.jp の A レコードが 162.43.43.186
+#       （GMO 共用サーバーSD コントロールパネル）。**人の作業。**
+# 既存ブロックは触らない。
+
+newproduct.fun-create.co.jp {
+    @svc path /api/*
+    respond @svc 404                      # サーバ間APIは外から落とす。
+                                          # **アプリ側の3点判定と二重で塞ぐ**
+
+    reverse_proxy 127.0.0.1:8794 {
+        header_up X-Forwarded-Proto {scheme}   # 無いと Cookie に Secure が付かない
+        header_up X-Real-IP {remote_host}      # この2つの「不在」が3点判定の2番目
+    }
+    request_body {
+        max_size 10MB
+    }
+    encode gzip
+    header {
+        X-Content-Type-Options nosniff
+        -Server
+    }
+}

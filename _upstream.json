@@ -1,0 +1,17 @@
+{
+  "_note": "上流からコピーしたファイルの指紋。上流が変わったら tests/test_upstream.py が知らせる。newproduct 側で直接編集しないこと。local_edits は tests/test_upstream.py の ALLOWED_EDITS と1対1。片方だけ増やすと検査が落ちる。",
+  "taken_at": "2026-09-21",
+  "upstream": "/opt/keiei/app/",
+  "upstream_origin": "lpscope /opt/lpscope/reports/ （keiei が 2026-09-16 に取得したもの）",
+  "files": {
+    "auth.py": "7bcee1414e4e4ab4865e0e70413ad3b5a766f474f5e8616cdf8b9d3b1b67391b"
+  },
+  "local_edits": {
+    "auth.py": [
+      "先頭コメント: 出どころの記述を keiei 経由に書き換え（2026-09-21 追記。挙動には影響しないが差分としては出る）",
+      "CONFIG: parent.parent -> parent（keiei は app/auth.py・本アプリは直下 auth.py）",
+      "SESSION_COOKIE: keiei_sid -> newproduct_sid",
+      "CSRF_HEADER: X-KEIEI-CSRF -> X-NEWPRODUCT-CSRF"
+    ]
+  }
+}
