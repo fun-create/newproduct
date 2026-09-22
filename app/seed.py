@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from . import idea as idea_m
+from . import plan as plan_m
 from . import store
 
 BASE = Path(__file__).resolve().parent.parent
@@ -408,6 +409,8 @@ def run() -> dict:
     idea_m.seed_themes()
     idea_m.seed_rubrics()
     idea_m.seed_settings()
+    # 第1段の残り（§4-3）。**商品タイプと挿入ルールの設定**（F-3）
+    plan_m.seed()
     store.conn().commit()
     missing = None
     try:
@@ -426,6 +429,7 @@ def run() -> dict:
         "theme": store.val("SELECT COUNT(*) FROM theme"),
         "rubric": store.val("SELECT COUNT(*) FROM rubric"),
         "setting": store.val("SELECT COUNT(*) FROM setting"),
+        "product_kind": store.val("SELECT COUNT(*) FROM product_kind"),
         # **アイデアは種データではない。**移行は tools/import_ideas.py で明示的に流す
         "idea": store.val("SELECT COUNT(*) FROM idea"),
     }

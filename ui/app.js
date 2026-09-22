@@ -1219,10 +1219,278 @@
   }
 
   // ══════════════════════════════════════════════════════
+  // 年間プラン（F-3 ／ FR-82〜FR-86）
+  //
+  // **警告は出すが、保存は止めない**（F-3-3）。止めると表計算に戻る。
+  // **判定は色ではなく語で出す**（N-11）。「適合 / 警告 / 未計測」。
+  // **未計測を「適合」に混ぜない。**数えられないものを OK と書くと、
+  // 検査したことになってしまう。
+  // ══════════════════════════════════════════════════════
+  var RULE_LABEL = { ratio: "比率 3:1", effort: "月間工数ポイント",
+                     count: "月あたりの本数", holiday: "長期連休の月" };
+  var LEVEL_WORD = { ok: "適合", warn: "警告", unavailable: "未計測" };
+
+  function viewPlan() {
+    loading();
+    var q = hashQuery();
+    var fy = q.get("fy") || "";
+    Promise.all([api("/api/plan" + (fy ? "?fy=" + encodeURIComponent(fy) : "")),
+                 api("/api/meta")]).then(function (r) {
+      var d = r[0], meta = r[1];
+      var b = clear();
+      b.appendChild(planVersionBar(d));
+      if (!d.current) {
+        b.appendChild(el("p", { "class": "np-note", text: d.empty_note ||
+          "この年度の版がまだありません。" }));
+        return;
+      }
+      setTitle("プラン", d.current.version.label);
+      b.appendChild(planRules(d.current));
+      b.appendChild(planMonths(d.current, meta));
+      if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
+    }).catch(fail);
+  }
+
+  function planVersionBar(d) {
+    var box = el("div", { "class": "np-card" });
+    var cur = d.current && d.current.version;
+    box.appendChild(el("h2", { text: "年間プランの版" }));
+    if (d.versions.length) {
+      var rows = d.versions.map(function (v) {
+        return el("tr", null, [
+          el("td", null, [el("a", { href: "#/plan?v=" + v.id, text: v.label })]),
+          el("td", { text: String(v.fiscal_year) }),
+          // **状態は語で出す。**色だけにしない（N-11）
+          el("td", { text: v.state }),
+          el("td", { text: String(v.slot_n) + " 枠" }),
+          el("td", { text: dash(v.approved_at) })
+        ]);
+      });
+      box.appendChild(table(["版", "年度", "状態", "枠", "承認"], rows));
+      box.appendChild(el("p", { "class": "np-note",
+        text: "**承認済みは年度に1つだけ**です（F-3-4）。承認済みの版は編集できません。"
+              + "期中に直すときは「改訂版を作る」で写してから直します。" }));
+    }
+    var msg = el("p", { "class": "np-note" });
+    var f = el("form", { "class": "np-form" });
+    f.appendChild(el("label", { text: "年度" }));
+    f.appendChild(el("input", { name: "fiscal_year", inputmode: "numeric",
+                                placeholder: "2026", required: "required" }));
+    f.appendChild(el("label", { text: "呼び名（任意）" }));
+    f.appendChild(el("input", { name: "label", placeholder: "2026年度 年間プラン" }));
+    f.appendChild(el("button", { type: "submit", text: "版を作る" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/plan/versions", { fiscal_year: f.elements.fiscal_year.value,
+                                   label: f.elements.label.value })
+        .then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f);
+    if (cur) {
+      var acts = el("p", { "class": "np-actions" });
+      if (cur.state === "策定中") {
+        var ap = el("button", { type: "button", text: "この版を承認する" });
+        ap.addEventListener("click", function () {
+          post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/approve", {})
+            .then(function () { go(); })
+            .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        acts.appendChild(ap);
+      } else {
+        var rv = el("button", { type: "button", text: "改訂版を作る（枠ごと写す）" });
+        rv.addEventListener("click", function () {
+          post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/revise", {})
+            .then(function () { go(); })
+            .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        acts.appendChild(rv);
+      }
+      box.appendChild(acts);
+    }
+    box.appendChild(msg);
+    return box;
+  }
+
+  function planRules(cur) {
+    var box = el("div", { "class": "np-card" });
+    var c = cur.rules.counts;
+    box.appendChild(el("h2", { text: "挿入ルールの検査" }));
+    box.appendChild(el("p", { "class": "np-sub",
+      text: "適合 " + (c.ok || 0) + " ／ 警告 " + (c.warn || 0)
+            + "（うち理由未記入 " + cur.rules.warn_unacked + "） ／ 未計測 "
+            + (c.unavailable || 0) }));
+    box.appendChild(el("p", { "class": "np-note", text: cur.rules.note }));
+    box.appendChild(el("p", { "class": "np-note", text: cur.rules.effort_unit_note }));
+    var rows = cur.rules.results.map(function (r) {
+      var last = el("td");
+      if (r.acked) {
+        last.appendChild(el("span", { text: "承知: " + r.acked.reason }));
+        last.appendChild(el("span", { "class": "np-sub",
+          text: "（" + dash(r.acked.by) + " " + dash(r.acked.at) + "）" }));
+      } else if (r.level === "warn" && cur.editable) {
+        last.appendChild(ackForm(cur.version.id, r));
+      } else {
+        last.appendChild(txt("—"));
+      }
+      return el("tr", { "data-level": r.level }, [
+        el("td", { text: RULE_LABEL[r.rule] || r.rule }),
+        el("td", { text: r.scope === "FY" ? "年度" : r.scope }),
+        // **語で出す**（N-11）
+        el("td", { text: LEVEL_WORD[r.level] || r.level }),
+        el("td", { text: r.message }),
+        last
+      ]);
+    });
+    box.appendChild(table(["ルール", "対象", "判定", "内容", "例外の理由"], rows));
+    return box;
+  }
+
+  function ackForm(vid, r) {
+    var f = el("form", { "class": "np-form np-form-inline" });
+    var msg = el("span", { "class": "np-sub" });
+    f.appendChild(el("input", { name: "reason", required: "required",
+                                placeholder: "なぜこの月はこうするのか" }));
+    f.appendChild(el("button", { type: "submit", text: "理由をつけて承知" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/plan/versions/" + encodeURIComponent(vid) + "/ack",
+           { rule: r.rule, scope: r.scope, reason: f.elements.reason.value })
+        .then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    f.appendChild(msg);
+    return f;
+  }
+
+  function planMonths(cur, meta) {
+    var box = el("div");
+    box.appendChild(el("h2", { text: "月ごとの枠（" + cur.slot_n + " 枠）" }));
+    if (!cur.months.length) {
+      box.appendChild(el("p", { "class": "np-note",
+        text: "枠がまだ1つもありません。下の「枠を足す」から始めます。" }));
+      return box;
+    }
+    cur.months.forEach(function (m) {
+      var s = el("section", { "class": "np-card" });
+      s.appendChild(el("h3", { text: m.month }));
+      s.appendChild(el("p", { "class": "np-sub",
+        text: "発売に数える " + m.launch_n + " 本 ／ 工数ポイント " + m.effort
+              + " 点" + (m.effort_unknown
+                ? "（未確定 " + m.effort_unknown + " 本を含みません）" : "")
+              + " ／ 案件化済 " + m.converted_n + " 件" }));
+      var rows = m.slots.map(function (x) { return planSlotRow(cur, x); });
+      s.appendChild(table(["発売日", "商品タイプ", "開発タイプ", "作成エリア",
+                           "工数", "担当", "アイデア", "機会", "案件"], rows));
+      box.appendChild(s);
+    });
+    return box;
+  }
+
+  function planSlotRow(cur, x) {
+    var last = el("td");
+    if (x.project_id) {
+      last.appendChild(el("a", { href: "#/projects/" + x.project_id,
+                                 text: "案件 " + x.project_id }));
+      last.appendChild(el("span", { "class": "np-sub",
+        text: "（" + dash(x.project_stage) + "）" }));
+    } else if (cur.editable) {
+      last.appendChild(convertButton(x));
+    } else {
+      last.appendChild(txt("—"));
+    }
+    return el("tr", null, [
+      // 日が未定なら「月まで」と書く。**仮の日付を置かない**
+      el("td", { text: x.launch_date || (x.launch_month + "（日は未定）") }),
+      el("td", { text: dash(x.kind_label) }),
+      el("td", { text: dash(x.flow_label) }),
+      el("td", { text: dash(x.area) }),
+      // **未確定と 0 を区別する**（N-10）
+      el("td", { text: x.effort_point === null || x.effort_point === undefined
+                       ? "未確定" : String(x.effort_point) }),
+      el("td", { text: dash(x.owner) }),
+      el("td", null, [x.idea_id
+        ? el("a", { href: "#/ideas/" + x.idea_id, text: dash(x.idea_title) })
+        : txt("—")]),
+      el("td", { text: dash(x.occasion) }),
+      last
+    ]);
+  }
+
+  function convertButton(x) {
+    var w = el("span");
+    var msg = el("span", { "class": "np-sub" });
+    var btn = el("button", { type: "button", text: "案件にする" });
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/convert", {})
+        .then(function (r) {
+          // **期限をその場で出す**（FR-86）。一覧を描き直すと見落とす
+          msg.textContent = r.message;
+          setTimeout(go, 4000);
+        })
+        .catch(function (e) {
+          btn.disabled = false;
+          msg.textContent = "できませんでした: " + e.message;
+        });
+    });
+    w.appendChild(btn); w.appendChild(msg);
+    return w;
+  }
+
+  function planAddSlot(cur, meta) {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-note" });
+    box.appendChild(el("h2", { text: "枠を足す" }));
+    box.appendChild(el("p", { "class": "np-note",
+      text: "**発売月だけで作れます。**日は決まってから入れます。"
+            + "仮の日付を置くと、そこから逆算した期限が動き出します。" }));
+    var f = el("form", { "class": "np-form" });
+    f.appendChild(el("label", { text: "発売月（YYYY-MM）" }));
+    f.appendChild(el("input", { name: "launch_month", required: "required",
+                                placeholder: "2026-05" }));
+    f.appendChild(el("label", { text: "発売日（決まっていれば）" }));
+    f.appendChild(el("input", { name: "launch_date", type: "date" }));
+    f.appendChild(el("label", { text: "商品タイプ" }));
+    var k = el("select", { name: "product_kind" });
+    k.appendChild(el("option", { value: "", text: "（未設定）" }));
+    (meta.plan.kinds || []).forEach(function (x) {
+      k.appendChild(el("option", { value: x.code, text: x.label }));
+    });
+    f.appendChild(k);
+    f.appendChild(el("label", { text: "開発タイプ（工数ポイントの出どころ）" }));
+    var ft = el("select", { name: "flow_type" });
+    ft.appendChild(el("option", { value: "", text: "（未設定）" }));
+    (meta.flow_types || []).forEach(function (x) {
+      ft.appendChild(el("option", { value: x.code,
+        text: x.label + (x.effort_point === null ? "（係数 未実測）"
+                                                 : "（" + x.effort_point + " 点）") }));
+    });
+    f.appendChild(ft);
+    f.appendChild(el("label", { text: "作成エリア" }));
+    f.appendChild(el("input", { name: "area" }));
+    f.appendChild(el("label", { text: "担当" }));
+    f.appendChild(el("input", { name: "owner" }));
+    f.appendChild(el("label", { text: "機会（なぜその月か）" }));
+    f.appendChild(el("input", { name: "occasion", placeholder: "母の日 / 卒団 など" }));
+    f.appendChild(el("button", { type: "submit", text: "枠を足す" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = { version_id: cur.version.id };
+      Array.prototype.forEach.call(f.elements, function (x) {
+        if (x.name && x.value) o[x.name] = x.value;
+      });
+      post("/api/plan/slots", o).then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  // ══════════════════════════════════════════════════════
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/plan": ["プラン", "第1段の残り", "機会カレンダーと年間プランの枠。アイデア台帳と採点（rubric v2）は実装済みで #/ideas にあります。コンセプト在庫月数はダッシュボードの2段目に出しています。販売計画シミュレーション（F-14）は keiei の plan が0行のため、入力の無い状態から立ち上がる設計にします。"],
     "#/cost": ["原価・調達", "第3段", "調達先・資材・為替・試算原価と、seisan への商品マスタ登録ファイル。"],
     "#/settings": ["設定", "—", "マスタ・利用者・データの出どころ・監査ログ。第2段では監査の記録だけ取っています。"]
   };
@@ -1248,6 +1516,7 @@
     if (path === "#/") return viewHome();
     if (m) return viewProject(m[1]);
     if (mi) return viewIdea(mi[1]);
+    if (path === "#/plan") return viewPlan();
     if (path === "#/ideas") return viewIdeas();
     if (path === "#/projects") return viewProjects();
     if (path === "#/tasks") return viewTasks();

@@ -280,8 +280,72 @@ def main() -> int:
              "コンセプト在庫月数は月間目標が未設定なら「未計測」（F-1-14）",
              d["concept_stock"]["why"][:60])
 
+        # ── 年間プランの枠（F-3 ／ FR-82〜FR-86）──────────
+        # **HTTP を通して「警告が保存を止めない」ことを見る。**
+        # 単体テストだけだと、画面から来た経路で弾いていても気づけない。
+        st, d = cl.post("/api/plan/versions", {"fiscal_year": "2026"})
+        vid = d.get("id")
+        note(st == 200 and bool(vid), "年間プランの版を作れる（FR-85）", str(st))
+
+        made = []
+        for i in range(4):
+            st, r = cl.post("/api/plan/slots", {
+                "version_id": vid, "launch_month": "2026-05",
+                "product_kind": "original", "flow_type": "meire"})
+            made.append(st)
+        note(all(x == 200 for x in made),
+             "ルールを外れる枠でも保存できる（F-3-3・FR-84）", str(made))
+
+        st, d = cl.get("/api/plan/versions/" + vid)
+        rules = {(r["rule"], r["scope"]): r for r in d["rules"]["results"]}
+        note(rules[("count", "2026-05")]["level"] == "warn",
+             "月あたりの本数が警告になる（FR-83）",
+             rules[("count", "2026-05")]["message"])
+        note(rules[("effort", "2026-05")]["level"] == "warn",
+             "月間工数ポイントが警告になる（FR-83）",
+             rules[("effort", "2026-05")]["message"])
+        note(rules[("holiday", "FY")]["level"] == "unavailable",
+             "数えられない連休ルールは「未計測」（N-10）",
+             rules[("holiday", "FY")]["message"][:40])
+
+        st, d = cl.post("/api/plan/versions/" + vid + "/ack",
+                         {"rule": "count", "scope": "2026-05", "reason": ""})
+        note(st == 400, "理由が空の例外は断る（F-3-3）", str(st))
+        cl.post("/api/plan/versions/" + vid + "/ack",
+                 {"rule": "count", "scope": "2026-05", "reason": "式典向けの集中投入"})
+        st, d = cl.get("/api/plan/versions/" + vid)
+        r = {(x["rule"], x["scope"]): x for x in d["rules"]["results"]}[("count", "2026-05")]
+        note(r["level"] == "warn" and r["acked"]["reason"] == "式典向けの集中投入",
+             "承知しても警告は消えない（消せると理由が書かれなくなる）", r["level"])
+
+        sid = d["months"][0]["slots"][0]["id"]
+        st, r = cl.post("/api/plan/slots/" + sid + "/convert", {})
+        note(st == 200 and r["task_setup_due"]["due"] == "2026-03-01",
+             "枠→案件が1操作で、タスク設定期限を割り戻す（FR-86）",
+             str(r.get("task_setup_due", {}).get("due")))
+        st, r2 = cl.post("/api/plan/slots/" + sid + "/convert", {})
+        note(st == 400, "同じ枠を二度変換できない", str(st))
+
+        cl.post("/api/plan/versions/" + vid + "/approve", {})
+        st, r = cl.post("/api/plan/slots", {
+            "version_id": vid, "launch_month": "2026-06", "product_kind": "uchiwa"})
+        note(st == 400, "承認済みの版は編集できない（F-3-4）", str(st))
+
+        st, d = cl.get("/api/meta")
+        kinds = {k["code"]: k for k in d["plan"]["kinds"]}
+        note(kinds["pagerenew"]["counts_as_launch"] == 0,
+             "ページリニューアルは発売本数に数えない（F-10-11）",
+             kinds["pagerenew"]["label"])
+
         n = store.val("SELECT COUNT(*) FROM audit")
-        note(n >= 14, "全操作が audit に残る", f"{n} 件")
+        note(n >= 23, "全操作が audit に残る", f"{n} 件")
+        # **断られた操作は残らない。**残るのは成功した操作だけ、が現在の設計
+        acts = {r[0] for r in store.q(
+            "SELECT DISTINCT action FROM audit WHERE action LIKE 'plan.%'")}
+        want = {"plan.version.create", "plan.slot.create", "plan.ack",
+                "plan.slot.convert", "plan.version.approve"}
+        note(want <= acts, "年間プランの操作が audit に残る",
+             ",".join(sorted(acts)))
 
         st, body = cl.get("/")
         note(st == 200 and b"fca-nav-data" in body, "ログイン済みで SPA の外枠が出る",

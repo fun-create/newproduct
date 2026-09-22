@@ -109,3 +109,25 @@ form.np-form button { width: auto; justify-self: start; }
  * 人が見て判断するための材料として出すだけ */
 .np-sim { margin: .4rem 0; }
 .np-body { white-space: pre-wrap; max-width: 60rem; }
+
+/* ── 年間プラン（F-3）──────────────────────────────────
+   **色に意味を載せない**（N-11）。判定は「適合 / 警告 / 未計測」という
+   語として列に出してあり、ここの罫線は**語の補助**でしかない。
+   色を消しても表が読めること。 */
+form.np-form-inline {
+  grid-auto-flow: column;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: center;
+  margin: 0;
+}
+p.np-actions { margin: .6rem 0 0; }
+p.np-actions button {
+  padding: .35rem .8rem;
+  border: 1px solid var(--fca-line);
+  border-radius: 4px;
+  background: var(--fca-card);
+  color: inherit;
+  cursor: pointer;
+}
+table.np tr[data-level="warn"] > td:first-child { border-left: 3px solid var(--fca-gold); }
+table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted var(--fca-muted); }

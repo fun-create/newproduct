@@ -462,6 +462,20 @@ def check_stage1_screens():
     note(OK if (tail and '"#/ideas"' not in tail) else NG,
          "app.js の「未実装」一覧からアイデアが外れている",
          "実装したのに「未実装」と出続けると、誰も開かない")
+    note(OK if (tail and '"#/plan"' not in tail) else NG,
+         "app.js の「未実装」一覧からプランが外れている",
+         "実装したのに「未実装」と出続けると、誰も開かない")
+
+    # 年間プラン（F-3）。**判定を語で出しているか**（N-11）
+    for s2, why in [
+        ("LEVEL_WORD", "判定を語で出す表（適合／警告／未計測）"),
+        ("未計測", "数えられないルールを「適合」に混ぜない（N-10）"),
+        ("理由をつけて承知", "例外は理由を書いてから（F-3-3）"),
+        ("案件にする", "枠→案件を1操作で（FR-86）"),
+        ("日は未定", "日が決まっていない枠に仮の日付を出さない"),
+        ("未確定", "工数ポイントの未確定と 0 を区別する（N-10）"),
+    ]:
+        note(OK if s2 in js else NG, f"app.js に {why}", "" if s2 in js else s2)
 
     css = (UI / "assets" / "np.css").read_text(encoding="utf-8")
     note(OK if "np-grid-2" in css else NG, "np.css に採点の2列組",

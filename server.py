@@ -45,6 +45,7 @@ import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 
 from app import ai_score as ai_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
 from app import idea as idea_m   # noqa: E402
+from app import plan as plan_m    # noqa: E402
 from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
 from app import store            # noqa: E402
@@ -409,6 +410,12 @@ class H(BaseHTTPRequestHandler):
                     "margin_bands_note": idea_m.MARGIN_BANDS_NOTE,
                 },
                 "ai_scoring": ai_m.status(),
+                # 年間プラン（第1段の残り・F-3）
+                "plan": {
+                    "kinds": plan_m.kinds(),
+                    "states": plan_m.STATES,
+                    "rules": plan_m.RULES,
+                },
             })
 
         if parts == ["dashboard"]:
@@ -501,6 +508,67 @@ class H(BaseHTTPRequestHandler):
                 r = ai_m.run_batch([iid], uid)
                 store.audit(uid, "idea.ai_score", iid,
                             {"enabled": r.get("enabled")}, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
+
+        # ── /api/plan（第1段の残り・F-3 ／ FR-82〜FR-86）──
+        #
+        # **警告は保存を止めない**（FR-84）。検査は GET 側で返すだけで、
+        # POST 側は一度も検査結果を見ない。ここで弾くと現場は表計算に戻る。
+        if parts == ["plan"] and method == "GET":
+            return self.sendj(200, plan_m.overview(qs.get("fy") or None))
+        if parts == ["plan", "versions"] and method == "POST":
+            d = self.body()
+            r = plan_m.create_version(uid, d.get("fiscal_year"),
+                                      d.get("label", ""), d.get("note", ""))
+            store.audit(uid, "plan.version.create", r["id"], d, ip)
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[:2] == ["plan", "versions"] and method == "GET":
+            d = plan_m.detail(parts[2])
+            if d is None:
+                return self.sendj(404, {"error": "その版がありません"})
+            return self.sendj(200, d)
+        if len(parts) == 4 and parts[:2] == ["plan", "versions"] and method == "POST":
+            vid, what = parts[2], parts[3]
+            d = self.body()
+            if what == "approve":
+                r = plan_m.approve(vid, uid)
+                store.audit(uid, "plan.version.approve", vid, r, ip)
+                return self.sendj(200, r)
+            if what == "revise":
+                r = plan_m.revise(vid, uid, d.get("label", ""))
+                store.audit(uid, "plan.version.revise", r["id"],
+                            {"based_on": vid, "slots": r.get("slots_copied")}, ip)
+                return self.sendj(200, r)
+            if what == "ack":
+                # 例外の承知（FR-84）。**理由は必須。**警告自体は消えない
+                r = plan_m.ack(vid, d.get("rule", ""), d.get("scope", ""),
+                               d.get("reason", ""), uid)
+                store.audit(uid, "plan.ack", vid, d, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
+        if parts == ["plan", "slots"] and method == "POST":
+            d = self.body()
+            r = plan_m.create_slot(uid, **d)
+            store.audit(uid, "plan.slot.create", r["id"], d, ip)
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[:2] == ["plan", "slots"] and method == "POST":
+            sid, what = parts[2], parts[3]
+            d = self.body()
+            if what == "update":
+                r = plan_m.update_slot(sid, uid, **d)
+                store.audit(uid, "plan.slot.update", sid, d, ip)
+                return self.sendj(200, r)
+            if what == "delete":
+                r = plan_m.delete_slot(sid)
+                store.audit(uid, "plan.slot.delete", sid, {}, ip)
+                return self.sendj(200, r)
+            if what == "convert":
+                # **1操作で案件へ**（FR-86）。タスク設定期限を割り戻して返す
+                r = plan_m.convert(sid, uid, **d)
+                store.audit(uid, "plan.slot.convert", sid,
+                            {"project_id": r["project_id"],
+                             "task_setup_due": r["task_setup_due"].get("due")}, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
 
