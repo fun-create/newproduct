@@ -42,6 +42,23 @@ ssh masateru@162.43.43.186 sudo newproduct-update
 
 `selfcheck.py` が**実際に HTTP で取得して型を検査**する。状態コードだけを見ない。
 
+## 画面を足したら、**本番のURLで1回叩く**
+
+`selfcheck.py` も `tests/e2e_http.py` も **127.0.0.1 しか見ない。**
+Caddy の段で落ちているものは、どちらにも出ない。
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/api/<新しい経路>
+#   401 = 正常（未ログインなので断られた＝経路は通っている）
+#   404 = Caddy が落としている（`@svc` の matcher を見る）
+```
+
+2026-09-22、`@svc path /api/*` になっていたため **ログイン後の画面が全部
+「表示できませんでした」**になっていた。ループバックは 200 を返すので、
+selfcheck 118件も e2e も全部通っていた。`deploy/Caddyfile.fragment` の
+matcher は selfcheck が見るようにしたが、**/etc の正本は見られない**
+（読めないユーザーで動いているため）。**外から叩く1回が要る。**
+
 ## 設置し直す（更地から）
 
 1. `useradd --system --home-dir /opt/newproduct --shell /usr/sbin/nologin --user-group newproduct`

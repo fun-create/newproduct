@@ -515,3 +515,40 @@ SQL の LEFT JOIN で NULL になるだけの行を「数えない」に倒す�
 **影響**: FR-82・FR-86
 **根拠**: `app/plan.py` `task_setup_due()` ／ `tests/test_plan.py`
 `test_a_month_only_slot_counts_back_from_the_first_of_the_month`
+
+---
+
+## ADR-026 — Caddy が `/api/*` を全部落としていた（2026-09-22・障害）
+
+**何が起きていたか**: `/etc/caddy/Caddyfile` の newproduct ブロックが
+`@svc path /api/*` → `respond 404`。このアプリは画面が SPA で、
+ダッシュボード・案件・タスク・アイデア・プランの**すべてが `/api/...` を叩く。**
+つまり **ログインしたあとの画面が全部「表示できませんでした」**だった。
+ログイン画面だけはサーバー側生成なので、正常に見えていた。
+
+**なぜ気づかなかったか**: `selfcheck.py`（118件）も `tests/e2e_http.py` も
+**127.0.0.1 しか見ない。**Caddy の段は通らない。ループバックでは全部 200。
+**「HTTP は全部通っているのに画面が壊れている」**という、
+共通ルール `rules/eod.md` が挙げているのと同じ形（2026-09-20 AI-Assistant）。
+
+**原因**: keiei（business-analysis）の断片を写したこと。
+**あちらは画面がサーバー側生成で、`/api/*` は本当にサーバ間専用**なので
+`path /api/*` で正しい。こちらは SPA。**同じに見える断片の、前提が違った。**
+
+**直したこと**:
+- matcher を `/api/svc/* /api/health` に変更（`/etc` と `deploy/` の両方）
+- `/api/health` は外に出さない。件数（アイデア881件・利用者数・ポート）を返すため。
+  死活は `/healthz`（"ok" の1語）
+- `selfcheck.py` に断片の matcher を検査する2件を追加（**わざと壊して落ちることを確認済み**）
+- 手順書に「画面を足したら本番のURLで1回叩く」を追加
+
+**残る穴**: selfcheck が見られるのは `deploy/` の複製だけで、**`/etc` の正本は読めない**
+（`newproduct` ユーザーで動いているため）。**外から1回叩く手順**で埋めている。
+
+**他アプリへの確認**: keiei は画面がサーバー側生成のため現状のままで正しい
+（`server.py` の `/api/*` は kpi と ingest のみ）。lpscope 401・autogrowth 403 で
+別方式。**このブロックの取り違えは newproduct だけ。**
+
+**影響**: FR-01〜FR-86 の画面すべて（要件IDとしては横断）
+**根拠**: `curl https://newproduct.fun-create.co.jp/api/plan` が 404 → 401 になったこと ／
+`deploy/Caddyfile.fragment` ／ `selfcheck.py` の Caddy 断片2件

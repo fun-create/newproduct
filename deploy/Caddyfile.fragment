@@ -1,6 +1,9 @@
 # NEW PRODUCT — /etc/caddy/Caddyfile へ足す断片。
 #
-# **まだ追記しない。**8794 が listen してから、十文字さんの確認を経て:
+# 2026-09-22 に /etc/caddy/Caddyfile へ反映済み。**正本は /etc のほう。**
+# 直したら両方を揃えること（更新コマンドがズレを検知して知らせる）。
+#
+# 追記の手順:
 #   sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%Y%m%d-%H%M%S)
 #   sudo sh -c 'cat /opt/newproduct/deploy/Caddyfile.fragment >> /etc/caddy/Caddyfile'
 #   sudo caddy validate --config /etc/caddy/Caddyfile
@@ -11,7 +14,18 @@
 # 既存ブロックは触らない。
 
 newproduct.fun-create.co.jp {
-    @svc path /api/*
+    # **/api/svc/* だけを落とす。`/api/*` にしないこと。**
+    # このアプリは画面が SPA で、ダッシュボード・案件・タスク・アイデア・プランは
+    # すべて /api/... を叩く。2026-09-22 まで `path /api/*` になっており
+    # （keiei の断片を写した際の取り違え。**あちらは画面がサーバー側生成**なので
+    # /api はサーバ間専用で正しい）、**ログイン後の画面が全部
+    # 「表示できませんでした」になっていた。**
+    # ループバックでは 200 が返るので selfcheck にも e2e にも出ない。
+    # 画面を足したら、**本番のURLで1回は叩いて確かめること。**
+    #
+    # /api/health は件数（アイデア881件・利用者数・ポート）を返すので外へ出さない。
+    # 死活監視は /healthz（"ok" の1語）を使う。
+    @svc path /api/svc/* /api/health
     respond @svc 404                      # サーバ間APIは外から落とす。
                                           # **アプリ側の3点判定と二重で塞ぐ**
 

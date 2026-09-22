@@ -367,6 +367,17 @@ def check_stage2_screens():
          "app.js が商品名の組み立てをしていない",
          "分類とサイズはサーバ側（project.product_label）で作る（N-6-2）")
 
+    # **Caddy の断片が画面のAPIを塞いでいないこと。**
+    # ここはループバックからは絶対に見えない層（selfcheck も e2e も 127.0.0.1）。
+    # 2026-09-22、`path /api/*` になっていてログイン後の画面が全部
+    # 「表示できませんでした」になっていた。**外から1回叩かないと分からない。**
+    frag = (BASE / "deploy" / "Caddyfile.fragment").read_text(encoding="utf-8")
+    note(OK if re.search(r"^\s*@svc path /api/svc/\*", frag, re.M) else NG,
+         "Caddy 断片が /api/svc/* だけを落としている",
+         "`/api/*` にすると SPA の全画面が 404 になる（ループバックでは気づけない）")
+    note(OK if not re.search(r"^\s*@svc path /api/\*\s*$", frag, re.M) else NG,
+         "Caddy 断片が画面のAPIを塞いでいない", "")
+
     css = (UI / "assets" / "np.css").read_text(encoding="utf-8")
     note(OK if not re.search(r"font-family\s*:", css) else NG,
          "np.css が表示用書体を指定していない",
