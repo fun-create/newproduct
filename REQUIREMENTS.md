@@ -25,8 +25,8 @@
 | FR-06 | 入口の関門は1か所。`/api/*` は既定拒否で、利用者が無ければ通さない | 実装済 | N-2 ／ `server.route()` |
 | FR-07 | CSRF は Origin と Content-Type の2つで塞ぐ | 実装済 | N-3 ／ `server.csrf_ok()` |
 | FR-08 | `127.0.0.1` にバインドし、TLS と公開は Caddy に任せる | 実装済 | N-4 ／ `deploy/Caddyfile.fragment` |
-| FR-09 | **ログイン画面が表示される**（共通意匠の帯・カード・入力欄） | 検証済 | 2026-09-21 ブラウザで実物を開いて目視 |
-| FR-10 | **ログイン画面のロゴが切れずに出る**（`.fca-logo-lg` / `--fca-logo-h: 72px`） | 検証済 | 2026-09-21 ブラウザで実物を開いて目視。DECISIONS ADR-007 |
+| FR-09 | **ログイン画面が表示される**（共通意匠の帯・カード・入力欄） | 検証済 | 2026-09-22 3条件確認（テスト通過／本番で実物を見た 2026-09-21／手順書 deploy/README.md 2026-09-22）。旧: 2026-09-21 ブラウザで実物を開いて目視 |
+| FR-10 | **ログイン画面のロゴが切れずに出る**（`.fca-logo-lg` / `--fca-logo-h: 72px`） | 検証済 | 2026-09-22 3条件確認（テスト通過／本番で実物を見た 2026-09-21／手順書 deploy/README.md 2026-09-22）。旧: 2026-09-21 ブラウザで実物を開いて目視。DECISIONS ADR-007 |
 | FR-11 | 常駐ユニット `newproduct.service` を持つ | 実装済 | N-15 ／ 2026-09-21 `systemctl` で active(running)・enabled を確認（画面ではない） |
 | FR-12 | バックアップ一式（`deploy/backup.sh` ／ `/etc/cron.d/newproduct-backup` 04:15 ／ `/var/backups/newproduct` 0600） | 実装済 | N-16 ／ 2026-09-21 世代2本の生成を確認 |
 | FR-13 | 全操作を監査ログに記録する | 実装済 | N-7 ／ `audit` 表・`store.audit()` |
