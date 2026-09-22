@@ -1,0 +1,73 @@
+#!/bin/bash
+# 新商品開発管理（NEW PRODUCT）を最新版に更新する。
+#
+#   sudo newproduct-update            … 更新して再起動
+#   sudo newproduct-update --check    … 何が変わるか見るだけ
+#
+# **サーバー上で直接ファイルを編集しない**。次の更新で黙って消える。
+# 2026-09-21 まで git 管理が無く、VPS 上で直接編集していた（共通ルール §3 の
+# 例外として registry/apps.json の gap に記録）。同じところへ戻らないこと。
+set -e
+cd /opt/newproduct
+[ "$(id -u)" -eq 0 ] || { echo "sudo を付けてください" >&2; exit 1; }
+git() { sudo -u newproduct /usr/bin/git "$@"; }
+
+git fetch -q origin main
+LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse origin/main)
+[ "$LOCAL" = "$REMOTE" ] && { echo "すでに最新です（$(git log --oneline -1)）"; exit 0; }
+
+echo "── 取り込む変更 ──"; git log --oneline --no-decorate "$LOCAL..$REMOTE" | sed 's/^/  /'
+echo ""; echo "── 変わるファイル ──"; git diff --stat "$LOCAL..$REMOTE" | tail -20 | sed 's/^/  /'
+
+DIRTY=$(git status --porcelain | grep -v '^??' || true)
+if [ -n "$DIRTY" ]; then
+  echo ""; echo "⚠ サーバー上で直接編集されたファイルがあります。更新すると**元に戻ります**:"
+  echo "$DIRTY" | sed 's/^/  /'
+  printf "  続けますか？ [y/N] "; read -r a
+  [ "$a" = "y" ] || { echo "中断しました"; exit 1; }
+fi
+
+[ "$1" = "--check" ] 2>/dev/null && { echo ""; echo "（--check のため更新していません）"; exit 0; }
+
+# **実データを消さない**。config/ の台帳は追跡していないが、
+# 追跡から外した直後の1回は reset --hard が作業ツリーから消す。
+# 台帳は過去に全消失事故がある（backup.sh の注記）。退避してから戻す。
+KEEP="config/users.json config/.sessions.json config/csrf_salt config/svc_token"
+SAVE=$(mktemp -d); for f in $KEEP; do [ -f "$f" ] && cp -p "$f" "$SAVE/$(basename "$f")"; done
+
+git reset -q --hard origin/main
+
+for f in $KEEP; do
+  b="$SAVE/$(basename "$f")"
+  if [ -f "$b" ] && [ ! -f "$f" ]; then
+    cp -p "$b" "$f"; chown newproduct:newproduct "$f"; chmod 600 "$f"
+    echo "  ↩ $f を戻しました（更新で消えるところでした）"
+  fi
+done
+rm -rf "$SAVE"
+echo "更新しました: $(git log --oneline -1)"
+
+# deploy/ は複製にすぎず、正本は /etc。ズレたら教える（勝手には入れ替えない）
+for u in newproduct.service newproduct-ingest-seisan.service newproduct-ingest-seisan.timer; do
+  [ -f "/opt/newproduct/deploy/$u" ] && [ -f "/etc/systemd/system/$u" ] || continue
+  cmp -s "/opt/newproduct/deploy/$u" "/etc/systemd/system/$u" || \
+    echo "⚠ $u が /etc の正本とズレています: diff -u /opt/newproduct/deploy/$u /etc/systemd/system/$u"
+done
+
+systemctl restart newproduct; sleep 3
+echo "NEW PRODUCT: $(systemctl is-active newproduct)"
+
+if [ -x /opt/newproduct/selfcheck.py ] || [ -f /opt/newproduct/selfcheck.py ]; then
+  echo "── selfcheck ──"
+  sudo -u newproduct /usr/bin/python3 /opt/newproduct/selfcheck.py 2>&1 | tail -15 | sed 's/^/  /' || \
+    echo "  （selfcheck が非0で終了。上の出力を確認してください）"
+fi
+
+# 自分自身の入れ替えは**更新の最後**（実行中に書き換えるとシェルが壊れる）
+# **このスクリプト自身の正本は deploy/newproduct-update**（2026-09-22 に git へ入れた）。
+# それまで /usr/local/bin にしか無く、ここで毎回 `install: stat できません` が出ていた。
+if [ -f /opt/newproduct/deploy/newproduct-update ] && \
+   ! cmp -s /opt/newproduct/deploy/newproduct-update /usr/local/bin/newproduct-update; then
+  install -m 755 /opt/newproduct/deploy/newproduct-update /usr/local/bin/newproduct-update
+  echo "更新コマンド自体も新しくなりました（次回から反映）"
+fi

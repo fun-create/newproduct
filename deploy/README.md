@@ -12,6 +12,15 @@ ssh masateru@162.43.43.186 sudo newproduct-update
 `--check` を付けると、取り込む変更と変わるファイルを見るだけで止まる。
 **サーバー上で直接編集しない。**次の更新で黙って消える。
 
+更新コマンド自体の正本は **`deploy/newproduct-update`**。更新の最後に
+`/usr/local/bin/newproduct-update` へ入れ替わる（実行中に自分を書き換えないため最後）。
+**2026-09-22 まで正本が `/usr/local/bin` にしか無く**、毎回
+`install: ... を stat できません` が出ていた（更新自体は成功していた）。
+
+マイグレーションは **`server.py` の起動時に `seed.run()` が流す**ので、更新手順に
+別の操作は要らない。`migrations/*.sql` を名前順に流し、どこまで進んだかを
+`schema_migration` に残す。**前に進む方向しか無い**（戻したいときはバックアップ）。
+
 ## 画面の資産（共通意匠）
 
 `ui/assets/` に `app-shell.css` と素材21点。**正本は Auto GROWTH セッション**
