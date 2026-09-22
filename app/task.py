@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime as _dt
 
 from . import store
+from . import plan as _plan
 
 STATUSES = ["未着手", "着手", "完了", "保留", "対象外"]
 OPEN = ("未着手", "着手", "保留")        # 完了・対象外は「詰まっているもの」ではない
@@ -323,8 +324,9 @@ def dashboard(user_id: str) -> dict:
             # F-1-14。**定義＝ G3（コンセプト承認）通過・未発売 ÷ 月間発売目標本数。**
             # 月間目標本数が未確定なら「未計測」のまま理由を出す（N-10）
             _idea.concept_stock(),
-            {"label": "今月の枠の消化", "value": None, "state": "未計測",
-             "why": "年間プランの枠（launch_slot・第1段）が未実装です。"},
+            # FR-63。**承認済み版の今月の枠のうち、案件化した数**（F-3）。
+            # 策定中の版は数えない（下書きを分母にすると枠を足すほど達成率が下がる）
+            _plan.slot_consumption(),
             {"label": "発売後チェックの未処理", "value": None, "state": "未計測",
              "why": "発売後評価（post_launch_review・第4段）が未実装です。"
                     "seisan の商品コード×月×販路のエクスポートが前提で、未依頼です。"},

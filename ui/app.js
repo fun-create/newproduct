@@ -198,6 +198,10 @@
           if (m.why) c.appendChild(el("p", { "class": "np-sub", text: m.why }));
         }
         if (m.definition) c.appendChild(el("p", { "class": "np-sub", text: "定義: " + m.definition }));
+        // **数えた対象を書く。**「どの版の何月を見たのか」が無いと確かめようがない
+        if (m.version) c.appendChild(el("p", { "class": "np-sub",
+          text: "対象: " + m.version + " の " + m.month }));
+        if (m.link) c.appendChild(el("p", null, [el("a", { href: m.link, text: "開く" })]));
         if (m.stock_n !== undefined && m.stock_n !== null)
           c.appendChild(el("p", { "class": "np-sub", text: "G3通過・未発売 " + m.stock_n + " 件" }));
         g2.appendChild(c);

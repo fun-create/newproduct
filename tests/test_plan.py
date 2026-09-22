@@ -345,5 +345,56 @@ class TestOverview(Base):
             self.m.create_slot("tester", version_id=self.vid, launch_month="2026/05")
 
 
+# ══════════════════════════════════════════════════════════
+class TestSlotConsumption(Base):
+    """今月の枠の消化（FR-63）。**0件と未計測を混ぜない。**"""
+
+    def test_unmeasured_while_no_version_is_approved(self):
+        r = self.m.slot_consumption()
+        self.assertEqual(r["state"], "未計測")
+        self.assertIsNone(r["value"])
+        self.assertIn("策定中の版が 1 件", r["why"])
+
+    def test_zero_slots_is_a_fact_not_a_missing_measurement(self):
+        """**「今月は枠を置いていない」は欠測ではない。**未計測と混ぜると催促が止まらない。"""
+        self.slot(month="2026-10")          # 今月（2026-09）ではない月
+        self.m.approve(self.vid, "tester")
+        r = self.m.slot_consumption()
+        self.assertEqual(r["state"], "枠なし")
+        self.assertEqual(r["month"], "2026-09")
+        self.assertIn("枠を置いていない", r["why"])
+
+    def test_counts_only_the_approved_version(self):
+        """**策定中を分母にしない。**下書きに枠を足すたび達成率が下がってしまう。"""
+        self.slot(month="2026-09", flow_type="meire")
+        self.slot(month="2026-09", flow_type="meire")
+        self.m.approve(self.vid, "tester")
+        draft = self.m.create_version("tester", 2027)["id"]
+        self.m.create_slot("tester", version_id=draft, launch_month="2026-09",
+                           product_kind="original")
+        r = self.m.slot_consumption()
+        self.assertEqual(r["slots"], 2, "策定中の版の枠を数えていないこと")
+        self.assertEqual(r["state"], "未消化あり")
+        self.assertEqual(r["value"], "0 / 2 本")
+
+    def test_becomes_consumed_after_converting_every_slot(self):
+        a = self.slot(month="2026-09", flow_type="meire")
+        self.m.approve(self.vid, "tester")
+        self.assertEqual(self.m.slot_consumption()["state"], "未消化あり")
+        # 承認済みでも**変換はできる**（編集ではない）
+        self.m.convert(a, "tester")
+        r = self.m.slot_consumption()
+        self.assertEqual((r["state"], r["value"], r["converted"]),
+                         ("消化済", "1 / 1 本", 1))
+        self.assertIsNone(r["why"])
+
+    def test_the_dashboard_row_is_no_longer_a_placeholder(self):
+        from app import task as task_m
+        rows = {x["label"]: x for x in task_m.dashboard("tester")["monthly"]}
+        r = rows["今月の枠の消化"]
+        self.assertIn("definition", r, "据え置きの文言ではなく実測になっていること")
+        self.assertNotIn("未実装です", r.get("why") or "")
+
+
 if __name__ == "__main__":
     unittest.main()

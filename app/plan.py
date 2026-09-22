@@ -610,6 +610,49 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
             "task_setup_due": due, "message": msg}
 
 
+def slot_consumption() -> dict:
+    """今月の枠の消化（FR-63）。**承認済み版の、今月の枠のうち案件化した数。**
+
+    **策定中の版では数えない。**期首に約束したもの（＝承認済み）に対する消化が
+    問いであって、下書きを分母にすると、枠を足すたびに達成率が下がる。
+
+    **「枠が0本」と「版が無い」を区別する**（N-10）。
+    版が無いのは未計測、0本は「今月は枠を置いていない」という事実。
+    """
+    base = {"label": "今月の枠の消化", "link": "#/plan",
+            "definition": "承認済み版の今月の枠のうち、開発案件に変換した数"}
+    month = store.today().isoformat()[:7]
+    v = store.one("SELECT id, label, fiscal_year FROM plan_version "
+                  "WHERE state='承認済' ORDER BY fiscal_year DESC LIMIT 1")
+    if v is None:
+        n_draft = store.val("SELECT COUNT(*) FROM plan_version "
+                            "WHERE state='策定中'", (), 0)
+        return {**base, "value": None, "state": "未計測", "month": month,
+                "why": "**承認済みの年間プランがまだありません。**"
+                       + (f"策定中の版が {n_draft} 件あります。承認すると数え始めます。"
+                          if n_draft else "プラン画面で版を作り、承認すると数え始めます。")}
+    rows = store.q("SELECT s.project_id, k.counts_as_launch FROM plan_slot s "
+                   "LEFT JOIN product_kind k ON k.code=s.product_kind "
+                   "WHERE s.version_id=? AND s.launch_month=?", (v["id"], month))
+    n = len(rows)
+    done = sum(1 for r in rows if r["project_id"])
+    if n == 0:
+        return {**base, "value": None, "state": "枠なし", "month": month,
+                "version": v["label"],
+                # **0件と未計測を混ぜない。**「置いていない」は事実であって欠測ではない
+                "why": f"{v['label']} に {month} の枠が1本もありません。"
+                       "未計測ではなく、**この月に枠を置いていない**という意味です。"}
+    return {**base, "value": f"{done} / {n} 本", "month": month,
+            "version": v["label"], "slots": n, "converted": done,
+            "launch_slots": sum(1 for r in rows if _counts_as_launch(dict(r))),
+            # **色に意味を持たせない**（N-11）。状態は語で出す
+            "state": "消化済" if done >= n else "未消化あり",
+            "why": (None if done >= n else
+                    f"{n - done} 本がまだ開発案件になっていません。"
+                    "プラン画面の「案件にする」で変換すると、"
+                    "タスクを組み終える期限（発売の2か月前）が出ます。")}
+
+
 # ══════════════════════════════════════════════════════════
 # 画面が使う形
 # ══════════════════════════════════════════════════════════
