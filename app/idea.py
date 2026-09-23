@@ -856,6 +856,11 @@ def counts() -> dict:
         (r["source_sheet"] or "アプリで起票"): r["n"] for r in store.q(
             "SELECT source_sheet, COUNT(*) AS n FROM idea "
             "GROUP BY source_sheet ORDER BY source_sheet")}
+    # **`theme` は3つの kind を兼ねている**（評価テーマ／年間イベント／ライフイベント）。
+    # 合計だけ出すと、機会カレンダーを入れた日に「評価テーマが増えた」と読める
+    out["theme_by_kind"] = {
+        r["kind"]: r["n"] for r in store.q(
+            "SELECT kind, COUNT(*) AS n FROM theme GROUP BY kind ORDER BY kind")}
     out["idea_without_origin"] = store.val(
         "SELECT COUNT(*) FROM idea WHERE origin IS NULL", (), 0)
     out["idea_score_by_version"] = {

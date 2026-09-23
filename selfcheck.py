@@ -412,13 +412,19 @@ def check_stage1_db(cl: Client):
     note(OK if idea.get("rubric") == 5 else NG, "第1段: rubric が 5 版",
          f"実測 {idea.get('rubric')} — v1-original/v1-uchiwa/v1-lovot/"
          "v1-bukkomi/v2")
-    note(OK if idea.get("theme") == 4 else NG, "第1段: 評価テーマが 4 件",
-         f"実測 {idea.get('theme')}")
-    # **機会カレンダーはまだ取り込んでいない。**0 を「無い」と言い換えない
-    note(OK if idea.get("theme_score") == 0 else NG,
-         "第1段: ライフイベント採点は未取込（0件）",
-         f"実測 {idea.get('theme_score')} — 元表の列位置が行によってずれており、"
-         "機械的に読むと取り違える。F-2（機会カレンダー）で入れる")
+    # **`theme` は3つの kind を兼ねる。**合計で数えると、機会カレンダーを
+    # 入れた日に「評価テーマが増えた」と読める（2026-09-23 に実際そうなった）
+    bk = idea.get("theme_by_kind") or {}
+    note(OK if bk.get("評価テーマ") == 4 else NG, "第1段: 評価テーマが 4 件",
+         f"実測 {bk.get('評価テーマ')} — 内訳 {bk}")
+    # 機会カレンダー（F-2）。**2026-09-23 に取り込んだ**（ADR-032）
+    note(OK if bk.get("年間イベント") == 53 else NG,
+         "F-2: 年間イベントが 53 件", f"実測 {bk.get('年間イベント')}")
+    note(OK if idea.get("theme_score") == 19 else NG,
+         "F-2: ライフイベント採点が 19 件",
+         f"実測 {idea.get('theme_score')} — 名前は元表の8列目12件・10列目7件に"
+         "分かれていた。総合＝購買意欲×2＋写真親和性＋発生頻度×2 で検算し、"
+         "19件すべて誤差0（ADR-032）")
     note(OK if idea.get("theme_signal") == 0 else NG,
          "第1段: FCTR の時限スコアは未取込（0件）",
          f"実測 {idea.get('theme_signal')} — AutoGrowth からの取込は未実装（F-9）")
