@@ -115,7 +115,7 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
 | keiei `keiei-ingest-newproduct` | keiei セッション | **未依頼** | FR-124（第4段） |
 | `ai_budget.json` への `newproduct-*: 5.0` | AutoGrowth | **未依頼** | FR-146（第5段） |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。減衰は**こちら側**でかける（FR-137） |
-| **旧ダッシュボード `fun-create.co.jp/fctr/` の扱い** | 十文字さん | **2026-09-24 から** | FR-81。生成元は停止済みだが配信は継続。**Basic認証で 401**（実測）だが、パスワードは ChatWork 2部屋へ配られている。撤去はコーポレートサイトの変更なので承認が要る |
+| **旧ダッシュボード `fun-create.co.jp/fctr/` の撤去** | 十文字さん | **2026-09-24 から** | FR-81。**乱数由来の「月商見込」（最大 ¥1.6億）が、担当者名つきの実行計画の体裁で載ったまま**配信されている。実測 401（Basic認証）だが、パスワードは ChatWork 2部屋へ配布済。消す実体は `index.html` と `dashboard.html` の2本。**承認が出れば Auto GROWTH が差し替える** |
 | `/opt/accounts/roles/newproduct.json`（利用者の登録） | 十文字さん（Calendar 画面から） | 2026-09-20 から | いま使えるのは `masateru` 1名だけ |
 
 ---
