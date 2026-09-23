@@ -182,9 +182,29 @@ class TestRules(Base):
         self.assertEqual((r["original"], r["uchiwa"], r["target_uchiwa"]),
                          (11, 1, 3.0))
 
-    def test_ratio_is_unavailable_not_ok_when_no_kind_is_set(self):
+    def test_slots_without_a_kind_count_as_not_uchiwa(self):
+        """**2026-09-23 の決定A「うちわ以外を3、うちわを1」。**
+
+        商品タイプを付け忘れた枠も「うちわ以外」として数える。
+        比率から外すと、付け忘れが静かに消える（ADR-024 と同じ考え）。
+        """
         self.slot(kind=None)
         self.slot(kind=None)
+        r = self.rule("ratio", "FY")
+        self.assertEqual((r["original"], r["uchiwa"]), (2, 0))
+        self.assertEqual(r["excluded"], 0)
+        self.assertIn("うちわ以外 2 本", r["message"])
+
+    def test_other_kinds_are_on_the_non_uchiwa_side(self):
+        """LOVOT・ぶっこみ（その他）も「うちわ以外」。**比率から外さない。**"""
+        for _ in range(3):
+            self.slot(kind="other")
+        self.slot(kind="uchiwa")
+        self.assertEqual(self.rule("ratio", "FY")["level"], "ok")
+
+    def test_pagerenew_is_out_of_the_ratio_because_it_is_not_a_launch(self):
+        self.slot(kind="pagerenew")
+        self.slot(kind="pagerenew")
         r = self.rule("ratio", "FY")
         self.assertEqual(r["level"], "unavailable")
         self.assertEqual(r["excluded"], 2)

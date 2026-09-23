@@ -153,11 +153,11 @@ def expand_tasks(project_id: str, user_id: str) -> int:
         for t in tpl:
             c.execute(
                 "INSERT INTO task (project_id,template_id,seq,title,role,hours,"
-                "status,ai_category,ai_reduction_rate,created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "status,ai_category,ai_reduction_rate,created_at,kind) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (project_id, t["id"], t["seq"], t["title"], t["role"],
                  t["standard_hours"], "未着手", t["ai_category"],
-                 t["ai_reduction_rate"], store.now_s()))
+                 t["ai_reduction_rate"], store.now_s(), t["kind"]))
     return len(tpl)
 
 

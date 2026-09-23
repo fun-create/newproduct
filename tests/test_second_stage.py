@@ -81,16 +81,25 @@ class TestMigration(Base):
 
 class TestSeedCounts(Base):
     def test_task_template_is_178(self):
-        """**178行が正。**196行の古いテンプレートは採用しない。"""
+        """**実作業は178行が正。**196行の古いテンプレートは採用しない。
+
+        2026-09-23 に予備時間の行が別種別（`kind='予備'`）で12行入った。
+        **実作業の数はここで固定する。**混ざっていたら気づけるように分けて数える。
+        """
         from app import store
         self.assertEqual(self.counts["task_template"], 178)
         self.assertEqual(store.val(
-            "SELECT COUNT(*) FROM task_template WHERE template_version=1"), 178)
+            "SELECT COUNT(*) FROM task_template WHERE template_version=1 "
+            "AND kind='実作業'"), 178)
+        self.assertEqual(store.val(
+            "SELECT COUNT(*) FROM task_template WHERE kind='予備'"), 12,
+            "6フロー × 管理者/メンバー")
 
     def test_task_template_per_flow(self):
         from app import store
         got = {r["flow_type"]: r["n"] for r in store.q(
-            "SELECT flow_type, COUNT(*) AS n FROM task_template GROUP BY flow_type")}
+            "SELECT flow_type, COUNT(*) AS n FROM task_template "
+            "WHERE kind='実作業' GROUP BY flow_type")}
         self.assertEqual(got, {"meire": 32, "freecut": 32, "webdeco": 39,
                                "newmodel": 14, "material": 39, "readymade": 22})
 
@@ -101,6 +110,22 @@ class TestSeedCounts(Base):
         self.assertEqual(self.counts["hold_reason"], 5)
         self.assertEqual(self.counts["abort_reason"], 4)
         self.assertIsNone(self.counts["missing"])
+
+    def test_migrate_runs_each_file_once(self):
+        """**2回呼んでも落ちないこと。**`server.py` は起動のたびに呼ぶ。
+
+        2026-09-23、010 で `ALTER TABLE ADD COLUMN` を入れた。SQLite には
+        `ADD COLUMN IF NOT EXISTS` が無いので、毎回全部流し直す作りのままだと
+        **2回目の起動が `duplicate column name` で落ちる**（＝本番が上がらない）。
+        `migrate()` が `schema_migration` を見て、未適用のものだけ流す。
+        """
+        from app import store
+        again = store.migrate()
+        self.assertEqual(again, [], "2回目は1本も流さないこと")
+        n = store.val("SELECT COUNT(*) FROM schema_migration")
+        files = len(list((store.BASE / "migrations").glob("*.sql")))
+        self.assertEqual(n, files, f"{files} 本すべてが記録されていること")
+        store.migrate()          # 3回目も落ちない
 
     def test_material_effort_point_is_null_not_zero(self):
         """**推測で埋めない。**⑤資材リニューアルは係数が実測できていない。
@@ -127,26 +152,44 @@ class TestSeedCounts(Base):
         from app import task
         tt = task.template_totals()
         by = {r["role"]: r for r in tt["by_role"]}
-        self.assertAlmostEqual(by["admin"]["hours"], 43.25, places=2)
+        # **予備時間を混ぜない。**43.25／44.50 は実作業の値（種データと一致）
+        self.assertAlmostEqual(by["admin"]["work_hours"], 43.25, places=2)
         self.assertAlmostEqual(by["admin"]["ai_hours"], 27.28, places=2)
-        self.assertAlmostEqual(by["member"]["hours"], 44.50, places=2)
+        self.assertAlmostEqual(by["member"]["work_hours"], 44.50, places=2)
         self.assertAlmostEqual(by["member"]["ai_hours"], 18.36, places=2)
+        # **管理者がボトルネック**という関係を、予備の置き方で壊していないこと
+        self.assertLess(by["admin"]["work_hours"], by["member"]["work_hours"])
+        self.assertAlmostEqual(by["admin"]["reserve_hours"],
+                               by["member"]["reserve_hours"], places=3)
         self.assertIn("6フロー合算", tt["caption"])
         self.assertIn("1本あたりではない", tt["caption"])
 
-    def test_reserve_hours_are_missing_from_the_adopted_source(self):
-        """**F-5-7 の「予備時間」は、採用した178行には1行も無い。**
+    def test_reserve_hours_are_half_of_the_old_table(self):
+        """**予備時間は旧表の半分・1人分**（2026-09-23 十文字さんの決定）。
 
-        古い表にだけあり、フローごとに 管理者/メンバー 各 6.75〜19.75h。
-        **推測で足さない。**差分として記録し、採否は商品開発部の確認に委ねる。
+        旧表は1フローにつき 管理者・メンバーへ同額（名入れなら各16.0h・計32.0h）。
+        採用したのは **その半分＝合計8.0h** で、担当は旧表の比のまま等分（4.0＋4.0）。
+        **端数は丸めない**（19.75 ÷ 2 = 9.875）。
         """
         from app import seed, store
-        self.assertEqual(store.val(
-            "SELECT COUNT(*) FROM task_template WHERE title LIKE '%予備時間%'"), 0)
         rh = seed.diff_report()["reserve_hours_only_in_old"]
-        self.assertEqual(len(rh["meire"]["rows"]), 2)
-        self.assertEqual(rh["meire"]["total_hours"], 32.0)
+        self.assertEqual(rh["meire"]["total_hours"], 32.0, "旧表の値は変えていない")
         self.assertEqual(rh["newmodel"]["total_hours"], 13.5)
+
+        got = {r["flow_type"]: r["h"] for r in store.q(
+            "SELECT flow_type, ROUND(SUM(standard_hours),3) AS h FROM task_template "
+            "WHERE kind='予備' GROUP BY flow_type")}
+        self.assertEqual(got, {"meire": 8.0, "freecut": 9.875, "webdeco": 9.375,
+                               "newmodel": 3.375, "material": 8.75,
+                               "readymade": 5.625})
+        # **AI削減の試算には入れない**（元の試算が予備を除外して作られている）
+        self.assertEqual(store.val(
+            "SELECT COUNT(*) FROM task_template WHERE kind='予備' "
+            "AND (ai_reduction_rate IS NOT NULL OR ai_reduction_hours IS NOT NULL)"), 0)
+        # ⑦ページリニューアルは旧表に行が無い。**発明しない**
+        self.assertEqual(store.val(
+            "SELECT COUNT(*) FROM task_template WHERE kind='予備' "
+            "AND flow_type='pagerenew'"), 0)
 
     def test_old_template_diff_is_recorded_not_adopted(self):
         from app import seed
@@ -168,9 +211,14 @@ class TestProjectAndGates(Base):
 
     def test_tasks_expanded_from_template(self):
         from app import store
-        self.assertEqual(self.p["tasks_created"], 32)
+        # 実作業32行 ＋ 予備2行（管理者・メンバー）
+        self.assertEqual(self.p["tasks_created"], 34)
         self.assertEqual(store.val(
-            "SELECT COUNT(*) FROM task WHERE project_id=?", (self.p["id"],)), 32)
+            "SELECT COUNT(*) FROM task WHERE project_id=? AND kind='実作業'",
+            (self.p["id"],)), 32)
+        self.assertEqual(store.val(
+            "SELECT ROUND(SUM(hours),3) FROM task WHERE project_id=? AND kind='予備'",
+            (self.p["id"],)), 8.0)
 
     def test_product_label_hides_product_name(self):
         """**商品名を表示しない**（N-6-2）。分類とサイズで表す。"""

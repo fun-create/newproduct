@@ -40,23 +40,23 @@ RULES = ["ratio", "effort", "count", "holiday"]
 # code, label, seq, ratio_group, counts_as_launch, default_flow, note
 PRODUCT_KINDS = [
     ("original", "オリジナルグッズ", 1, "original", 1, None,
-     "3:1 の分子側として種を入れてある。**括りは商品開発部が決める。**"
-     "出典（2026年度 年間プラン）の表記は「オリジナル（推し活）：うちわ」で、"
-     "このアプリの評価テーマ「ライフイベント（オリジナルグッズ）／推し活（うちわ）」"
-     "とは括弧の中が逆。`ratio_group` を付け替えれば比率の分母・分子が変わる"),
+     "3:1 の「3」の側。**2026-09-23 十文字さんの決定で「うちわか、そうでないか」で"
+     "数えることに決着した**ので、この行に当たらない枠（その他・未設定）も"
+     "「うちわ以外」として同じ側に入る"),
     ("uchiwa", "うちわ", 2, "uchiwa", 1, None,
-     "3:1 の分母側。上の但し書きを参照"),
+     "3:1 の「1」の側。**`ratio_group='uchiwa'` だけがこちら側**"),
     ("pagerenew", "ページリニューアル", 3, None, 0, "pagerenew",
      "**発売本数に数えない**（F-10-11）。売上計上も既定で含めない（F-4-9）。"
      "計画の38%を占めるため、これを本数に混ぜると「月3商品」が達成に見える"),
     ("other", "その他", 9, None, 1, None,
-     "比率の対象外。LOVOT・ぶっこみなど、3:1 のどちらにも入れない枠"),
+     "LOVOT・ぶっこみなど。**比率では「うちわ以外」として3の側に数える**"
+     "（2026-09-23 の決定）。発売本数にも数える"),
 ]
 
 SETTINGS = [
-    ("plan.ratio_original_to_uchiwa", "挿入ルール: オリジナル：うちわ", "text", None,
-     "出典は2026年度 年間プランの挿入ルール（3:1）。**括りの定義は `product_kind."
-     "ratio_group` が正本。**ここは比の数だけを持つ"),
+    ("plan.ratio_original_to_uchiwa", "挿入ルール: うちわ以外：うちわ", "text", None,
+     "出典は2026年度 年間プランの挿入ルール（3:1）。**2026-09-23 十文字さんの決定で"
+     "「うちわか、そうでないか」で数える**ことに決着。ここは比の数だけを持つ"),
     ("plan.ratio_tolerance_slots", "比率の許容差", "number", "枠",
      "**枠1本ぶんまでは警告しない。**年間26枠で 3:1 は割り切れず、"
      "端数のたびに警告が出ると誰も読まなくなる"),
@@ -361,6 +361,16 @@ def _r(rule, scope, level, message, **extra) -> dict:
 
 
 def _rule_ratio(rows: list[dict]) -> list[dict]:
+    """比率 3:1（F-3-2 ①）。**「うちわ」と「うちわ以外」で数える。**
+
+    2026-09-23 十文字さんの決定（選択肢A「うちわ以外を3、うちわを1として数える」）。
+    出典の表記「オリジナル（推し活）：うちわ」と、評価テーマ
+    「ライフイベント（オリジナルグッズ）／推し活（うちわ）」で括弧の中が逆だった件は、
+    **「うちわか、そうでないか」で数える**ことで決着した。
+
+    したがって `ratio_group` の付け忘れがあっても**うちわ以外として数える**。
+    外すのは発売本数に数えないもの（ページリニューアル）だけ。
+    """
     spec = str(_setting("plan.ratio_original_to_uchiwa") or "")
     tol = _num("plan.ratio_tolerance_slots")
     parts = spec.split(":")
@@ -370,15 +380,16 @@ def _rule_ratio(rows: list[dict]) -> list[dict]:
     a, b = float(parts[0]), float(parts[1])
     if a + b == 0:
         return [_r("ratio", "FY", "unavailable", "比率の設定が 0:0 です")]
-    n_o = sum(1 for r in rows if r.get("ratio_group") == "original")
-    n_u = sum(1 for r in rows if r.get("ratio_group") == "uchiwa")
-    n_x = sum(1 for r in rows if not r.get("ratio_group"))
-    tot = n_o + n_u
+    counted = [r for r in rows if _counts_as_launch(r)]
+    n_x = len(rows) - len(counted)
+    n_u = sum(1 for r in counted if r.get("ratio_group") == "uchiwa")
+    n_o = len(counted) - n_u
+    tot = len(counted)
     if tot == 0:
         return [_r("ratio", "FY", "unavailable",
-                   "比率の対象になる枠が1本もありません"
-                   f"（対象外 {n_x} 本）。商品タイプを入れると数えられます",
-                   original=0, uchiwa=0, excluded=n_x)]
+                   "発売本数に数える枠が1本もありません"
+                   f"（本数に数えないもの {n_x} 本）", original=0, uchiwa=0,
+                   excluded=n_x)]
     target_u = tot * b / (a + b)
     gap = abs(n_u - target_u)
     if tol is None:
@@ -386,11 +397,12 @@ def _rule_ratio(rows: list[dict]) -> list[dict]:
                    "許容差（plan.ratio_tolerance_slots）が未設定です",
                    original=n_o, uchiwa=n_u, excluded=n_x)]
     lvl = "ok" if gap <= tol else "warn"
-    msg = (f"オリジナル {n_o} 本 : うちわ {n_u} 本"
+    msg = (f"うちわ以外 {n_o} 本 : うちわ {n_u} 本"
            f"（目標 {spec} なら うちわ {target_u:.1f} 本）。"
            f"差 {gap:.1f} 本／許容 {tol:.0f} 本")
     if n_x:
-        msg += f"。比率の対象外が {n_x} 本あります（数に入れていません）"
+        msg += (f"。ページリニューアル等 {n_x} 本は発売本数に数えないため、"
+                "この比にも入れていません")
     return [_r("ratio", "FY", lvl, msg, original=n_o, uchiwa=n_u,
                excluded=n_x, target_uchiwa=round(target_u, 1), gap=round(gap, 1))]
 

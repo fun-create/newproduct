@@ -395,6 +395,62 @@ def diff_report() -> dict:
     }
 
 
+# ── 予備時間（F-5-7 ／ 2026-09-23 十文字さんの決定）────────
+# **量**: 旧テンプレートの役割ごとの値 ÷2 を、フロー全体の合計とする。
+# 十文字さんの言葉「予備時間が多すぎるので、現在の半分の時間にして1人分にしてほしい。
+# 例16時間×2人であれば、8時間だけ」。名入れなら 32.0h → **8.0h**。
+#
+# **担当**: 旧表は 管理者・メンバーへ**同額**を置いていた。その比をそのまま保ち、
+# 合計 8.0h を 4.0h + 4.0h に等分する。
+# **片方へ寄せない。**試しに全部を管理者へ寄せたところ、管理者だけ
+# 43.25h → 88.25h となり、6フロー合算のボトルネック（管理者 43.25h ／
+# メンバー 44.50h）が逆転した。**元の表に無い偏りを、こちらで作らない。**
+# 寄せたくなったら `RESERVE_SPLIT` を変えるだけ。
+RESERVE_SEQ0 = 998          # **必ず最後。**実作業の seq と衝突させない
+RESERVE_SPLIT = ["admin", "member"]
+RESERVE_TITLE = "予備時間"
+
+
+def seed_reserve() -> dict:
+    """旧テンプレートから予備時間を読み、**半分・1人分**を担当で等分して入れる。
+
+    **旧ファイルが無ければ何も入れない（0件と報告する）。**
+    推測で埋めない。⑦ページリニューアルは旧表に行が無いので対象外。
+    """
+    try:
+        old = old_reserve_hours()
+    except FileNotFoundError:
+        return {"rows": 0, "missing": f"{OLD_TEMPLATE_TSV} がありません"}
+    out, n = {}, 0
+    for flow, v in old.items():
+        rows = v["rows"]
+        if not rows:
+            continue
+        per_role = float(rows[0]["hours"])        # 管理者・メンバーとも同額
+        total = per_role / 2                      # **丸めない**（19.75→9.875）
+        each = total / len(RESERVE_SPLIT)
+        for i, role in enumerate(RESERVE_SPLIT):
+            store.ex(
+                "INSERT INTO task_template (flow_type,template_version,seq,title,"
+                "role,standard_hours,ai_category,ai_reduction_rate,"
+                "ai_reduction_hours,ai_howto,source,kind) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(flow_type,template_version,seq) DO UPDATE SET "
+                "title=excluded.title,role=excluded.role,"
+                "standard_hours=excluded.standard_hours,source=excluded.source,"
+                "kind=excluded.kind",
+                (flow, TEMPLATE_VERSION, RESERVE_SEQ0 + i, RESERVE_TITLE, role,
+                 each, None, None, None, None,
+                 f"旧テンプレートの予備時間 {per_role}h（役割ごと）÷2＝{total}h を"
+                 f"{len(RESERVE_SPLIT)}名で等分。2026-09-23 十文字さんの決定", "予備"))
+            n += 1
+        out[flow] = total
+    store.conn().commit()
+    return {"rows": n, "hours_per_flow": out,
+            "split": RESERVE_SPLIT,
+            "note": "合計は旧表の半分（1人分）。担当は旧表の比（同額）のまま等分"}
+
+
 def run() -> dict:
     """**種ファイルが無くても落ちない。ただし黙らない。**
 
@@ -418,7 +474,10 @@ def run() -> dict:
     except FileNotFoundError:
         n = 0
         missing = f"{TEMPLATE_TSV} がありません。標準タスクを1件も持っていません"
+    # **予備時間は実作業のあと。**seq=999 で必ず最後に置く（F-5-7）
+    reserve = seed_reserve()
     return {
+        "reserve": reserve,
         "missing": missing,
         "flow_type": store.val("SELECT COUNT(*) FROM flow_type"),
         "role": store.val("SELECT COUNT(*) FROM role"),

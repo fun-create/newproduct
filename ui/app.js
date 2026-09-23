@@ -690,6 +690,9 @@
             m.own.forEach(function (x) {
               lr.push(el("tr", null, [el("td", { text: m.month }),
                 el("td", { text: x.role_label }),
+                // **実作業と予備を1つの数にしない**（2026-09-23 の決定）
+                el("td", { "class": "np-num", text: x.work_hours + "h" }),
+                el("td", { "class": "np-num", text: x.reserve_hours + "h" }),
                 el("td", { "class": "np-num", text: x.hours + "h" }),
                 el("td", { "class": "np-num", text: String(x.n) }),
                 el("td", { text: d.load.limit_label })]));
@@ -697,12 +700,16 @@
             m.external.forEach(function (x) {
               lr.push(el("tr", null, [el("td", { text: m.month }),
                 el("td", { text: x.role_label + "（他部署・試算対象外）" }),
+                el("td", { "class": "np-num", text: x.work_hours + "h" }),
+                el("td", { "class": "np-num", text: x.reserve_hours + "h" }),
                 el("td", { "class": "np-num", text: x.hours + "h" }),
                 el("td", { "class": "np-num", text: String(x.n) }),
                 el("td", { text: "—" })]));
             });
           });
-          b.appendChild(table(["月（タスク実施月）", "ロール", "工数", "件数", "上限"], lr));
+          b.appendChild(table(["月（タスク実施月）", "ロール", "実作業h", "予備h",
+                               "合計h", "件数", "上限"], lr));
+          b.appendChild(el("p", { "class": "np-note", text: d.load.reserve_caption }));
           b.appendChild(el("p", { "class": "np-note", text: d.load.external_caption }));
           b.appendChild(el("p", { "class": "np-note", text: d.load.no_month_caption }));
         }
@@ -714,19 +721,23 @@
           text: "この表は **" + tt.caption + "** です。"
             + "つまり 1本あたりではない 数字です。" + tt.per_project_caption }));
         b.appendChild(table(["ロール", "タスク数", "実作業h（6フロー合算）",
-          "AI削減可能h（6フロー合算）"],
+          "予備h（6フロー合算）", "AI削減可能h（6フロー合算）"],
           tt.by_role.map(function (r) {
             return el("tr", null, [
               el("td", { text: (r.role_label || "—") + (r.external ? "（他部署・試算対象外）" : "") }),
               el("td", { "class": "np-num", text: String(r.n) }),
-              el("td", { "class": "np-num", text: r.hours + "h" }),
+              el("td", { "class": "np-num", text: r.work_hours + "h" }),
+              el("td", { "class": "np-num", text: r.reserve_hours + "h" }),
               el("td", { "class": "np-num", text: r.ai_hours + "h" })]);
           })));
-        b.appendChild(table(["開発タイプ", "タスク数", "実作業h（1本あたり）"],
+        b.appendChild(el("p", { "class": "np-note", text: tt.reserve_caption }));
+        b.appendChild(table(["開発タイプ", "タスク数", "実作業h（1本あたり）",
+                             "予備h（1本あたり）"],
           tt.by_flow.map(function (r) {
             return el("tr", null, [el("td", { text: r.label }),
               el("td", { "class": "np-num", text: String(r.n) }),
-              el("td", { "class": "np-num", text: r.hours + "h" })]);
+              el("td", { "class": "np-num", text: r.work_hours + "h" }),
+              el("td", { "class": "np-num", text: r.reserve_hours + "h" })]);
           })));
         b.appendChild(el("p", { "class": "np-note",
           text: "⑦ページリニューアルはこの表に出ません。**標準タスクが1行も定義されていない**ためです。" }));

@@ -183,7 +183,9 @@ def load_by_month_role() -> dict:
     rs = store.q(
         "SELECT substr(COALESCE(t.due_on, t.start_on),1,7) AS m, "
         "t.role AS role, r.label AS role_label, r.external AS ext, r.sort AS sort, "
-        "SUM(COALESCE(t.hours,0)) AS h, COUNT(*) AS n "
+        "SUM(COALESCE(t.hours,0)) AS h, COUNT(*) AS n, "
+        # **実作業と予備を1つの数にしない**（F-5-7 ／ 2026-09-23）
+        "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.hours,0) ELSE 0 END) AS rh "
         "FROM task t LEFT JOIN role r ON r.code=t.role "
         "WHERE COALESCE(t.due_on, t.start_on) IS NOT NULL "
         "AND t.status NOT IN ('完了','対象外') "
@@ -191,7 +193,7 @@ def load_by_month_role() -> dict:
     rs2 = store.q(
         "SELECT substr(COALESCE(w.due_on, w.start_on),1,7) AS m, "
         "w.role AS role, r.label AS role_label, r.external AS ext, r.sort AS sort, "
-        "SUM(COALESCE(w.hours,0)) AS h, COUNT(*) AS n "
+        "SUM(COALESCE(w.hours,0)) AS h, COUNT(*) AS n, 0 AS rh "
         "FROM work_item w LEFT JOIN role r ON r.code=w.role "
         "WHERE COALESCE(w.due_on, w.start_on) IS NOT NULL "
         "AND w.status NOT IN ('完了','対象外') "
@@ -203,15 +205,20 @@ def load_by_month_role() -> dict:
         row = next((x for x in m[bucket] if x["role"] == r["role"]), None)
         if row is None:
             row = {"role": r["role"], "role_label": r["role_label"] or "—",
-                   "hours": 0.0, "n": 0, "sort": r["sort"] or 99}
+                   "hours": 0.0, "reserve_hours": 0.0, "n": 0,
+                   "sort": r["sort"] or 99}
             m[bucket].append(row)
         row["hours"] += float(r["h"] or 0)
+        row["reserve_hours"] += float(r["rh"] or 0)
         row["n"] += int(r["n"] or 0)
     for m in months.values():
         for b in ("own", "external"):
             m[b].sort(key=lambda x: x["sort"])
             for x in m[b]:
-                x["hours"] = round(x["hours"], 2)
+                # hours は合計。**実作業は引き算ではなく、両方を並べて出す**
+                x["reserve_hours"] = round(x["reserve_hours"], 3)
+                x["work_hours"] = round(x["hours"] - x["reserve_hours"], 3)
+                x["hours"] = round(x["hours"], 3)
     no_due = (store.val("SELECT COUNT(*) FROM task WHERE due_on IS NULL "
                         "AND start_on IS NULL", (), 0)
               + store.val("SELECT COUNT(*) FROM work_item WHERE due_on IS NULL "
@@ -222,6 +229,10 @@ def load_by_month_role() -> dict:
         "limit": None,          # 月間工数ポイントの上限は第1段（年間プラン）で入る
         "limit_label": "—（未設定）",
         "caption": "工数は**タスク実施月**に積んでいます（発売月ではありません・F-3-6）。",
+        "reserve_caption":
+            "**実作業と予備時間を分けて出しています**（2026-09-23 十文字さんの決定）。"
+            "予備時間は旧テンプレートの半分・1人分（名入れ 8.000h など）で、"
+            "**AI削減の試算には入れません**（元の試算が予備を除外して作られているため）。",
         "external_caption": "他部署（試算対象外）。0h は「実際に0時間」ではなく、"
                             "商品開発部の削減試算から意図的に除外した値です。",
         "no_month_caption": f"期限も開始日も無い行 {no_due} 件は、どの月にも積んでいません。",
@@ -237,28 +248,40 @@ def template_totals() -> dict:
     rs = store.q(
         "SELECT t.role, r.label AS role_label, r.sort, r.external AS ext, "
         "COUNT(*) AS n, SUM(COALESCE(t.standard_hours,0)) AS h, "
-        "SUM(COALESCE(t.ai_reduction_hours,0)) AS ai "
+        "SUM(COALESCE(t.ai_reduction_hours,0)) AS ai, "
+        "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.standard_hours,0) ELSE 0 END) AS rh "
         "FROM task_template t LEFT JOIN role r ON r.code=t.role "
         "WHERE t.template_version=1 GROUP BY t.role ORDER BY r.sort")
     per_flow = store.q(
         "SELECT t.flow_type, f.label, COUNT(*) AS n, "
-        "SUM(COALESCE(t.standard_hours,0)) AS h "
+        "SUM(COALESCE(t.standard_hours,0)) AS h, "
+        "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.standard_hours,0) ELSE 0 END) AS rh "
         "FROM task_template t LEFT JOIN flow_type f ON f.code=t.flow_type "
         "WHERE t.template_version=1 GROUP BY t.flow_type ORDER BY f.seq")
     pf = [{"flow_type": r["flow_type"], "label": r["label"], "n": r["n"],
-           "hours": round(float(r["h"] or 0), 2)} for r in per_flow]
-    hs = [x["hours"] for x in pf] or [0]
+           "hours": round(float(r["h"] or 0), 3),
+           "reserve_hours": round(float(r["rh"] or 0), 3),
+           "work_hours": round(float(r["h"] or 0) - float(r["rh"] or 0), 3)}
+          for r in per_flow]
+    # **1本あたりの幅は実作業で出す。**予備を混ぜると幅が倍近くに見える
+    hs = [x["work_hours"] for x in pf] or [0]
     return {
         "by_role": [{"role": r["role"], "role_label": r["role_label"],
-                     "n": r["n"], "hours": round(float(r["h"] or 0), 2),
+                     "n": r["n"], "hours": round(float(r["h"] or 0), 3),
+                     "reserve_hours": round(float(r["rh"] or 0), 3),
+                     "work_hours": round(float(r["h"] or 0)
+                                         - float(r["rh"] or 0), 3),
                      "ai_hours": round(float(r["ai"] or 0), 2),
                      "external": bool(r["ext"])} for r in rs],
         "by_flow": pf,
         # **ここを間違えると意味が反転する。**見出しに必ず付ける
         "caption": "6フロー合算（1本あたりではない）",
         "per_project_caption":
-            f"1本あたり {min(hs):.2f}〜{max(hs):.2f}h（フローにより幅）。"
-            "単一の代表値は出しません。",
+            f"1本あたり **実作業** {min(hs):.2f}〜{max(hs):.2f}h（フローにより幅）。"
+            "単一の代表値は出しません。**予備時間は別**に数えています。",
+        "reserve_caption":
+            "予備時間は旧テンプレートの半分・1人分（2026-09-23 十文字さんの決定）。"
+            "**AI削減の試算には入れません**（元の試算が予備を除外して作られているため）。",
         "template_version": 1,
     }
 

@@ -75,19 +75,31 @@ def close():
 
 
 def migrate(c: sqlite3.Connection | None = None) -> list[str]:
-    """`migrations/*.sql` を名前順に流す。**何度流しても同じ結果**。
+    """`migrations/*.sql` を名前順に、**まだ流していないものだけ**流す。
 
     どれを流したかを `schema_migration` に残す。残さないと、
     「入っているはずの列が無い」ときに、どこまで進んだのか分からない。
+
+    **2026-09-23 まで毎回すべて流し直していた。**`CREATE TABLE IF NOT EXISTS` は
+    それで平気だが、**`ALTER TABLE ADD COLUMN` には IF NOT EXISTS が無い。**
+    010 を足した瞬間、2回目の起動が `duplicate column name` で落ちるところだった
+    （`server.py` は起動時に `seed.run()` → `migrate()` を呼ぶので、**本番が上がらない**）。
+    テストが先に捕まえた。
+
+    したがって **流した後に中身を書き換えても、もう流れない。**直したいときは
+    新しい番号のファイルを足す（前に進む方向しか用意しない）。
     """
     c = c or conn()
     c.execute("CREATE TABLE IF NOT EXISTS schema_migration ("
               "name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+    done = {r[0] for r in c.execute("SELECT name FROM schema_migration")}
     applied = []
     for p in sorted(MIGRATIONS.glob("*.sql")):
+        if p.name in done:
+            continue
         c.executescript(p.read_text(encoding="utf-8"))
-        c.execute("INSERT OR IGNORE INTO schema_migration (name, applied_at) "
-                  "VALUES (?,?)", (p.name, now_s()))
+        c.execute("INSERT INTO schema_migration (name, applied_at) VALUES (?,?)",
+                  (p.name, now_s()))
         applied.append(p.name)
     c.commit()
     return applied

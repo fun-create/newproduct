@@ -138,8 +138,10 @@ def main() -> int:
             "launch_date": "2026-11-27", "occasion": "七五三(11/15)",
             "area": "推し活", "summary": "検査", "owner": "kanri",
             "cat1": "アクリル製品", "cat2": "アクスタ", "size": "90×120mm"})
-        note(st == 200 and d["tasks_created"] == 32,
-             "POST /api/projects がテンプレート32件を展開", f"{st} {d}")
+        # 実作業32 ＋ 予備2（管理者・メンバー各 4.0h）＝34
+        note(st == 200 and d["tasks_created"] == 34,
+             "POST /api/projects がテンプレート34件を展開（実作業32＋予備2）",
+             f"{st} {d}")
         pid = d["id"]
 
         st, d = cl.get("/api/projects")
@@ -204,8 +206,8 @@ def main() -> int:
         note("6フロー合算" in d["template_totals"]["caption"],
              "標準工数に「6フロー合算」の注記", d["template_totals"]["caption"])
         st, d = cl.get("/api/tasks?when=none")
-        note(st == 200 and len(d["rows"]) == 32,
-             "「期限なし」で32件（展開直後は期限を入れない）", str(len(d["rows"])))
+        note(st == 200 and len(d["rows"]) == 34,
+             "「期限なし」で34件（展開直後は期限を入れない）", str(len(d["rows"])))
         st, d = cl.get("/api/tasks?when=%2B9")
         note(st == 400, "知らない期間フィルタは 400", f"{st} {d}")
 

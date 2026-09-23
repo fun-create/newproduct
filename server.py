@@ -683,6 +683,13 @@ def db_health() -> dict:
               "gate_review", "audit")}
     except Exception as e:                      # まだ migrate していない等
         return {"error": str(e)}
+    # **予備時間を実作業の数に混ぜない**（2026-09-23 の決定）。
+    # `task_template` は実作業の数（178）のまま。予備は別の鍵で出す
+    n["task_template_reserve"] = store.val(
+        "SELECT COUNT(*) FROM task_template WHERE kind='予備'", (), 0)
+    n["task_template"] = n["task_template"] - n["task_template_reserve"]
+    n["task_reserve"] = store.val(
+        "SELECT COUNT(*) FROM task WHERE kind='予備'", (), 0)
     n["flow_type_without_effort_point"] = store.val(
         "SELECT COUNT(*) FROM flow_type WHERE effort_point IS NULL", (), 0)
     n["flow_type_without_template"] = store.val(

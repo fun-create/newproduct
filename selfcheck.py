@@ -299,7 +299,9 @@ def check_stage2_db(cl: Client):
         return note(NG, "第2段: DB の件数が /api/health に出る", str(db))
 
     want = {"flow_type": 7, "role": 7, "gate_def": 7,
-            "hold_reason": 5, "abort_reason": 4, "task_template": 178}
+            "hold_reason": 5, "abort_reason": 4, "task_template": 178,
+            # 6フロー × 管理者/メンバー。**実作業178と混ぜない**（2026-09-23）
+            "task_template_reserve": 12}
     for k, n in want.items():
         got = db.get(k)
         note(OK if got == n else NG, f"第2段: {k} が {n} 件", f"実測 {got}")
@@ -366,6 +368,14 @@ def check_stage2_screens():
     note(OK if "product_label" not in js else NG,
          "app.js が商品名の組み立てをしていない",
          "分類とサイズはサーバ側（project.product_label）で作る（N-6-2）")
+
+    # 予備時間（F-5-7 ／ 2026-09-23 の決定）。**実作業と1つの数にしない**
+    for s3, why in [
+        ("予備h", "実作業と予備を別の列で出す"),
+        ("work_hours", "実作業の数を合計と別に持つ"),
+        ("reserve_caption", "予備はAI削減の試算に入れない、の断り"),
+    ]:
+        note(OK if s3 in js else NG, f"app.js に {why}", "" if s3 in js else s3)
 
     # **Caddy の断片が画面のAPIを塞いでいないこと。**
     # ここはループバックからは絶対に見えない層（selfcheck も e2e も 127.0.0.1）。
