@@ -1,6 +1,6 @@
 # NEW PRODUCT 引き継ぎ
 
-最終更新: **2026-09-21**
+最終更新: **2026-09-23**
 
 着手前に、このファイルの「宿題」と `REQUIREMENTS.md` の `未着手` を読んでください。
 
@@ -8,26 +8,33 @@
 
 ## いま動いている状態
 
-| 項目 | 状態（2026-09-21 実測） |
+| 項目 | 状態（2026-09-23 実測） |
 |---|---|
-| 本番 | <https://newproduct.fun-create.co.jp> ／ `127.0.0.1:8794` |
+| 本番 | <https://newproduct.fun-create.co.jp> ／ `127.0.0.1:8794` ／ `f122f4c` |
 | サービス | `newproduct.service` **active (running) / enabled**（uid 988・`/opt/newproduct` 750） |
-| Caddy | `/etc/caddy/Caddyfile` に断片を追記済み。`/api/*` は外から 404 |
-| DB | `data/newproduct.db`（SQLite・WAL）。migrations 001〜005 適用済み |
-| 種データ | 6フロー **178タスク**（`freecut 32 / material 39 / meire 32 / newmodel 14 / readymade 22 / webdeco 39`） |
-| 実データ | **案件0件・タスク0件。**まだ誰も業務では使っていない |
+| Caddy | **`/api/svc/* /api/health` だけを外から 404。**`/api/*` 全部を塞いでいて画面が全滅していた（ADR-026・09-22 修正） |
+| DB | `data/newproduct.db`（SQLite・WAL）。migrations 001〜011 適用済み |
+| マイグレーション | **未適用のものだけ流す**（ADR-031）。`ALTER TABLE` に `IF NOT EXISTS` が無いため。**流した後にファイルを直しても流れない**。直すなら新しい番号 |
+| 種データ | 6フロー **実作業178タスク ＋ 予備12行**（予備は旧表の半分・1人分／ADR-028） |
+| 実データ | アイデア **881件**・機会 **年間53＋ライフ31件**（採点19）。**案件0件・タスク0件**（業務では未使用） |
 | 利用者 | `masateru`（アプリ権限 `admin`）**1名のみ** |
-| バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に世代2本 |
-| テスト | `selfcheck.py` 80件・失敗0 ／ `tests/test_second_stage.py` 52件 OK ／ `tests/e2e_http.py` 失敗0 ／ `tests/test_upstream.py` 4件 |
+| バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に**4世代** |
+| テスト | `selfcheck.py` **125件**（本番）・`tests/` **142件** ・`tests/e2e_http.py` 失敗0 |
 
 ### 実装が済んでいる範囲
 
-**第2段（案件・タスク・ゲート・ダッシュボード）まで。**
-`REQUIREMENTS.md` で `実装済` 51件・`実装中` 8件・`検証済` 2件。
+**第2段（案件・タスク・ゲート・ダッシュボード）＋第1段（アイデア台帳・採点v2・
+年間プランの枠・機会カレンダー）まで。**
+`REQUIREMENTS.md` で `実装済` 72件・`実装中` 11件・`検証済` 2件・`未着手` 66件・`見送り` 7件。
 
 **`検証済` は2件だけ**（FR-09 ログイン画面の表示 ／ FR-10 そのロゴ表示）。
-2026-09-21 にブラウザで本番のログイン画面を開いて目で見たのは、この2つだけです。
-**第2段は `selfcheck` と `curl` と自動テストが通っただけで、まだ誰も画面を開いていません。**
+
+**ログイン後の画面は、2026-09-22 まで誰も開けませんでした。**Caddy が `/api/*` を
+全部 404 にしており、画面が全滅していたためです（ADR-026）。ログイン画面だけは
+サーバー側生成なので正常に見えていました。**`実装済` 72件は全部、人の目視が未了です。**
+
+**検査は本番のURLも叩くこと。**`selfcheck` も `e2e` も 127.0.0.1 しか見ないので、
+Caddy の段は通りません（401 なら経路は生きている／404 なら Caddy が落としている）。
 
 ### 動かすとき
 
@@ -37,10 +44,15 @@ sudo systemctl status newproduct
 sudo journalctl -u newproduct -f
 
 cd /opt/newproduct
-sudo -u newproduct python3 selfcheck.py                       # 80件
+sudo -u newproduct python3 selfcheck.py                       # 125件
 sudo -u newproduct python3 -m unittest discover -s tests -v   # 上流検知を含む
 sudo -u newproduct python3 tests/e2e_http.py                  # サーバを起こして HTTP で叩く
 sudo -u newproduct python3 -m app.seed --report               # 種データの件数と不採用の差分
+sudo -u newproduct python3 tools/import_events.py --report    # 機会カレンダーの件数
+sudo -u newproduct python3 tools/import_events.py --review    # 元表と突き合わせる一覧
+
+# **Caddy の段は上の検査に出ない。**外から1回叩く
+curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/api/plan  # 401 が正常
 ```
 
 ---
@@ -90,12 +102,15 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
 | 待っているもの | 相手 | いつから | 止まっていること |
 |---|---|---|---|
 | **業務ロール `prod`（生産部）の割り当て** | 十文字さん | **2026-09-21 から** | **G4（生産可否確定）が誰にも通せない** |
-| **予備時間を採用するか** | 商品開発部（十文字さん経由） | 2026-09-21 から | FR-46。工数の内訳が出せない |
+| 〜~~予備時間を採用するか~~ | — | **2026-09-23 決着** | ADR-028。旧表の半分・1人分で採用。実作業と分けて出す |
 | ⑦ページリニューアルの標準タスク定義 | 商品開発部 | 2026-09-20 から | FR-49。計画の38%を占めるフローでタスク一覧が空になる |
 | ⑤資材リニューアルの工数ポイント係数 | 商品開発部 | 2026-09-20 から | FR-87。G2 の「工数ポイント」が自動で埋まらない |
-| **git の置き場と `newproduct-update`** | 十文字さん | 2026-09-21 から | 下記「本番を直接編集している」 |
-| 原材料コードが seisan の `cost_code` と同じ体系か | 外部開発者（十文字さん経由） | 2026-09-20 から | 第3段（FR-99・FR-103）に入れない |
-| 商品コード×月×販路のエクスポート | 外部開発者（十文字さん経由） | **未依頼** | 第4段（FR-107・FR-108） |
+| 〜~~git の置き場と `newproduct-update`~~ | — | **2026-09-21 決着** | `fun-create/newproduct`。更新は `sudo newproduct-update` |
+| 原材料コードが seisan の `cost_code` と同じ体系か | 外部開発者 | **保留**（2026-09-22 決定「いまは依頼しない」） | 第3段（FR-99・FR-103）に入れない。**待たなくてよい** |
+| 商品コード×月×販路のエクスポート | 外部開発者 | **保留**（2026-09-22 決定） | 第4段（FR-107・FR-108）。**待たなくてよい** |
+| **名前の揺れ6件**（「入園入学」と「入学式」など） | 十文字さん | **2026-09-23 から** | FR-78。「販売可能性が高い」の印が6件付かない。`tools/import_events.py --review` |
+| **提案3件**（外形監視／枠外の案件／空のときの導線） | 十文字さん | **2026-09-23 から** | 承認まで要件表にも設計にも入れない |
+| **本番画面の目視** | 十文字さん | **2026-09-22 から** | **`実装済` 72件が `検証済` へ上がらない** |
 | calfc `service_tokens.json` への追加 | calfc セッション | **未依頼** | FR-41（営業日の自動割付）・FR-121 |
 | keiei `keiei-ingest-newproduct` | keiei セッション | **未依頼** | FR-124（第4段） |
 | `ai_budget.json` への `newproduct-*: 5.0` | AutoGrowth | **未依頼** | FR-146（第5段） |
@@ -174,6 +189,7 @@ cron の正本は `/etc/cron.d/`。配る前に必ず `diff -u` で突き合わ�
 
 ## 次にやる3件
 
-1. **第2段を本番の画面で目視する**（`実装済` 51件のうち、見たものを `検証済` へ上げる）
-2. `work_item` / `project_variant` の登録フォームと、ステージ遷移UI
-3. 第1段（アイデア台帳・採点v2・機会カレンダー・年間プランの枠）へ着手
+1. **本番の画面で目視する**（`実装済` 72件のうち、見たものを `検証済` へ上げる）。
+   **09-22 に Caddy を直すまで誰も開けていない**ので、ここが最大の未確認
+2. 名前の揺れ6件の確認後、`tools/import_events.py` に対応表を足して印を付ける
+3. `work_item` / `project_variant` の登録フォームと、ステージ遷移UI
