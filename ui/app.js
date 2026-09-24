@@ -1185,6 +1185,28 @@
       text: "採点結果には rubric版・実行日時・モデル名を残します（" + a.records.kept.join("／") + "）。" }));
     c.appendChild(el("p", { "class": "np-note",
       text: "AI が付けた点は現在 " + a.ai_scored + " 件です。" }));
+    // **予算の状態をそのまま出す。**使えない理由が「設定」なのか「予算」なのかを分ける
+    if (a.budget) {
+      var b = a.budget;
+      var bc = el("div");
+      bc.appendChild(el("h3", { text: "AIの予算（Auto GROWTH が正本）" }));
+      if (b.state === "ok") {
+        bc.appendChild(el("p", { "class": "np-sub",
+          // **「image の使用額」と書かない。**枠の合算なので（Auto GROWTH の申し送り）
+          text: b.spent_label + ": " + b.spent + " / 上限 " + b.cap
+                + "（残り " + b.remaining + "）" }));
+        bc.appendChild(el("p", { "class": "np-sub", text: b.note }));
+      } else {
+        // **未計測と 0 を混ぜない。**状態を語で出す（N-11）
+        bc.appendChild(el("span", { "class": "np-big np-big-unmeasured",
+          text: { unavailable: "確かめられません", over_cap: "使い切りました",
+                  no_cap: "枠がありません", bad_job: "設定の誤り",
+                  refused: "断られました" }[b.state] || b.state }));
+        bc.appendChild(el("p", { "class": "np-sub", text: b.why || "" }));
+      }
+      c.appendChild(bc);
+    }
+    if (a.scorer_note) c.appendChild(el("p", { "class": "np-warn", text: a.scorer_note }));
     var btn = el("button", { type: "button", text: "AI採点を実行する" });
     if (!a.enabled) btn.setAttribute("disabled", "disabled");
     var msg = el("p", { "class": "np-note" });

@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from . import idea as idea_m
+from . import ai_budget
 from . import automation as auto_m
 from . import plan as plan_m
 from . import store
@@ -470,6 +471,8 @@ def run() -> dict:
     plan_m.seed()
     # 自動化依頼の渡し先（F-15-6）。**未設定のまま出荷する**（送り先は人が決める）
     auto_m.seed_settings()
+    # AI予算の確認先（FR-146）。**枠の正本は Auto GROWTH**
+    ai_budget.seed_settings()
     store.conn().commit()
     missing = None
     try:

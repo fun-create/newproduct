@@ -11,18 +11,23 @@ AI採点（F-1-11）。**呼べる形まで。実際には呼ばない。**
 この7ステップを廃止して、**採点結果に rubric版・実行日時・モデル名を残す**のが
 F-1-11 の中身。ここでは**差し替え可能な口**と、その記録の作法だけを実装する。
 
-**外部APIを呼ばない。**このファイルは `urllib` も `http` も `socket` も import
-しない（tests がそれを検査する）。理由は全体設計書 第11章 ⑩ ——
-`newproduct-*` のAI予算枠（AutoGrowth の `ai_budget.json`）がまだ取れていない。
-**枠が無いまま呼べる口を開けると、上限の無い呼び出しになる。**
+**このファイル自体は外部APIを呼ばない。**`urllib` も `http` も `socket` も import
+しない（tests がそれを検査する）。呼ぶのは差し替えた `Scorer` の仕事で、
+**その前に予算を確かめるのがここの役目。**
 
     既定は off。`setting.ai_scoring_enabled = '0'`。
 
-実際に呼ぶ実装を足すときは、`Scorer` と同じ形のものを作って `run_batch()` に
-渡すだけでよい。**server.py からは渡さない。**（渡すのは、予算枠が付いてから）
+**2026-09-25 から、予算の口がある**（`app/ai_budget.py` ／ ADR-036・037）。
+`enabled()` は「設定が on」だけでなく **「枠を確かめられて、残りがある」**ことも見る。
+**確かめられないときは使わない**（`unavailable`）。黙って使うと上限の無い呼び出しになる。
+
+**採点そのものを行う実装（モデルを呼ぶ `Scorer`）は、まだ無い。**
+足すときは `Scorer` と同じ形のものを作って `run_batch()` に渡す。
+**使った額は `ai_budget.record()` で必ず記録する**（記録できなければ成功扱いにしない）。
 """
 from __future__ import annotations
 
+from . import ai_budget
 from . import idea as idea_m
 from . import store
 
@@ -55,21 +60,47 @@ class Disabled(Scorer):
         raise RuntimeError(reason_off())
 
 
-def reason_off() -> str:
-    return ("AI採点は既定で off です。`newproduct-*` のAI予算枠"
-            "（AutoGrowth の ai_budget.json）が未取得のためです"
-            "（全体設計書 第11章 ⑩）。枠が付いてから設定で on にしてください。")
+JOB = "newproduct-text"          # 採点は文章側。**`newproduct-` で始めること**
 
 
-def enabled() -> bool:
+def setting_on() -> bool:
     return str(idea_m.setting("ai_scoring_enabled", "0")).strip() in ("1", "true", "on")
+
+
+def reason_off(budget: dict | None = None) -> str:
+    if not setting_on():
+        return ("AI採点は設定で off です（`ai_scoring_enabled`）。"
+                "予算枠は 2026-09-24 に付きました（`newproduct-*` 5.0）。"
+                "使うなら設定で on にしてください。")
+    b = budget or ai_budget.check(JOB)
+    return f"予算を確かめられないか、残りがありません: {b.get('why') or b.get('state')}"
+
+
+def enabled(budget: dict | None = None) -> bool:
+    """**設定が on で、かつ枠を確かめられて残りがある**ときだけ真。
+
+    **確かめられないときは False。**「0円だった」ではなく「分からない」なので、
+    使わないほうへ倒す（黙って使うと上限の無い呼び出しになる）。
+    """
+    if not setting_on():
+        return False
+    b = budget or ai_budget.check(JOB)
+    return bool(b.get("usable"))
 
 
 def status() -> dict:
     """画面に出す状態。**「使えない」を「使っていない」と混ぜない。**"""
+    b = ai_budget.check(JOB)
+    on = enabled(b)
     return {
-        "enabled": enabled(),
-        "reason": None if enabled() else reason_off(),
+        "enabled": on,
+        "reason": None if on else reason_off(b),
+        # **枠の状態をそのまま見せる。**使えない理由が予算なのか設定なのかを分ける
+        "budget": b,
+        "setting_on": setting_on(),
+        "scorer_implemented": False,
+        "scorer_note": "**モデルを呼ぶ実装はまだありません。**"
+                       "予算の口はできているので、`Scorer` を足せば動きます。",
         "rubric_version": idea_m.V2_VERSION,
         "records": {
             "kept": ["rubric版（idea_score.rubric_version）",
@@ -91,9 +122,12 @@ def run_batch(idea_ids: list[str], user_id: str, scorer: Scorer | None = None,
     `force` は tests から差し替えた採点器を使うためのもので、
     **画面からは渡さない。**
     """
-    if not (force or enabled()):
-        return {"enabled": False, "reason": reason_off(), "scored": 0,
-                "skipped": len(idea_ids), "results": []}
+    if not force:
+        b = ai_budget.check(JOB)
+        if not enabled(b):
+            # **止まった理由を数と言葉で返す**（N-10）
+            return {"enabled": False, "reason": reason_off(b), "budget": b,
+                    "scored": 0, "skipped": len(idea_ids), "results": []}
     sc = scorer or Disabled()
     out, errs = [], []
     for iid in idea_ids:

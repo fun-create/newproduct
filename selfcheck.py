@@ -378,6 +378,24 @@ def check_stage2_screens():
         ("表のほうが現場に追いついていない", "標準タスクに無いことの読み方"),
     ]:
         note(OK if s4 in js else NG, f"app.js に {why}", "" if s4 in js else s4)
+    # AI予算（FR-146 ／ 2026-09-25）。**確かめられないときは使わない**
+    ab = (BASE / "app" / "ai_budget.py").read_text(encoding="utf-8")
+    note(OK if "確かめられないので使いません" in ab else NG,
+         "AI予算: 確かめられないときは使わない",
+         "「使えない」と「使っていない」を混ぜない（N-10）")
+    note(OK if "JOB_PREFIX = \"newproduct-\"" in ab else NG,
+         "AI予算: job 名の前置きを持っている",
+         "`newproduct-` で始まらないと全体の枠を引ける（実測 cap 0.0 / remaining null）")
+    note(OK if "別のものが同じポートに居る" in ab else NG,
+         "AI予算: 相手が本物か形で確かめている",
+         "2026-09-25、手元の 8789 が別プロセスで 401 を返していた")
+    note(OK if "枠（" in ab and "の今月の使用額" in ab else NG,
+         "AI予算: 金額を「枠の合算」と書いている",
+         "image と text が同じ 5.0 を分け合う（ADR-037）")
+    note(OK if "スコアラー" not in js and "scorer_note" in js else NG,
+         "app.js が「モデルを呼ぶ実装はまだ無い」と出している",
+         "予算が付いた＝採点できる、ではない")
+
     # ChatWork へ渡す（F-15-6 ／ 2026-09-24 選択C）。**自動送信しない**
     for s5, why in [
         ("送る文面（このまま出ます）", "押す前に文面をそのまま見せる"),
