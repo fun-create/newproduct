@@ -12,7 +12,17 @@ cd /opt/newproduct
 [ "$(id -u)" -eq 0 ] || { echo "sudo を付けてください" >&2; exit 1; }
 git() { sudo -u newproduct /usr/bin/git "$@"; }
 
-git fetch -q origin main
+# **取得できなかったときに黙らない。**`set -e` で止まると git のエラーだけが出て、
+# 「更新していない」とは書かれない。読み飛ばすと更新できたように見える
+# （2026-09-24、GitHub が一時的に publickey を拒み、実際にここで止まった）。
+if ! git fetch -q origin main; then
+  echo "" >&2
+  echo "⚠ **更新していません。**GitHub から取得できませんでした。" >&2
+  echo "   本番は $(git rev-parse --short HEAD) のままです。" >&2
+  echo "   一時的なことが多いので、まず1回やり直してください。" >&2
+  echo "   続くようなら鍵を見ます: sudo -u newproduct env HOME=/opt/newproduct ssh -T git@github.com" >&2
+  exit 1
+fi
 LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse origin/main)
 [ "$LOCAL" = "$REMOTE" ] && { echo "すでに最新です（$(git log --oneline -1)）"; exit 0; }
 
