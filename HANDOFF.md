@@ -113,7 +113,7 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
 | **本番画面の目視** | 十文字さん | **2026-09-22 から** | **`実装済` 72件が `検証済` へ上がらない** |
 | calfc `service_tokens.json` への追加 | calfc セッション | **未依頼** | FR-41（営業日の自動割付）・FR-121 |
 | keiei `keiei-ingest-newproduct` | keiei セッション | **未依頼** | FR-124（第4段） |
-| **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。**枠（`newproduct-*: 5.0`）は入った。**通し方は ② server-to-server に決定し、口は Auto GROWTH が作る。**できるまで着手しない**（記録が届かないと上限が効かない）。当方から3点照会中: ①超過時は POST 側で断る ②`request_id` で二重計上を防ぐ ③`remaining` を返す |
+| **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。枠 `newproduct-*: 5.0` は入った（**image と text で分け合う**・ADR-037）。契約は確定（超過は断る／`request_id` で冪等／`remaining` を返す）。**Auto GROWTH は十文字さんの返事待ち**（夜間に新しい経路を開けてよいか）。**口ができるまで着手しない。**`newproduct-` で始まらない job 名は枠に入らないので、呼ぶ前に弾くこと |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。減衰は**こちら側**でかける（FR-137） |
 | **旧ダッシュボード `fun-create.co.jp/fctr/` の撤去** | 十文字さん | **2026-09-24 から** | FR-81。**乱数由来の「月商見込」（最大 ¥1.6億）が、担当者名つきの実行計画の体裁で載ったまま**配信されている。実測 401（Basic認証）だが、パスワードは ChatWork 2部屋へ配布済。消す実体は `index.html` と `dashboard.html` の2本。**承認が出れば Auto GROWTH が差し替える** |
 | **ChatWork のトークンと部屋ID** | 十文字さん | **2026-09-24 から** | FR-171。`config/chatwork.env`（`CHATWORK_API_TOKEN=…`・600・所有者 newproduct）と 設定 `automation.chatwork_room_id`。**他アプリのトークンは写さない**（どのアプリが投げたか分からなくなり、片方を止めると両方止まる）。置くまで送信は断り、理由を画面に出す |
