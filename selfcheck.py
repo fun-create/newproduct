@@ -378,6 +378,24 @@ def check_stage2_screens():
         ("表のほうが現場に追いついていない", "標準タスクに無いことの読み方"),
     ]:
         note(OK if s4 in js else NG, f"app.js に {why}", "" if s4 in js else s4)
+    # ChatWork へ渡す（F-15-6 ／ 2026-09-24 選択C）。**自動送信しない**
+    for s5, why in [
+        ("送る文面（このまま出ます）", "押す前に文面をそのまま見せる"),
+        ("送ったあと取り消せません", "押す前の確認"),
+        ("いまは送れません", "送れない理由を言葉で出す"),
+    ]:
+        note(OK if s5 in js else NG, f"app.js に {why}", "" if s5 in js else s5)
+    cw_py = (BASE / "app" / "chatwork.py").read_text(encoding="utf-8")
+    note(OK if "X-ChatWorkToken" in cw_py and "api_token" not in cw_py else NG,
+         "chatwork.py にトークンを直書きしていない",
+         "値はコードに書かない（共通ルール §1）")
+    note(OK if "config/chatwork.env" in (BASE / ".gitignore").read_text(encoding="utf-8")
+         else NG, ".gitignore が chatwork.env を外している",
+         "**トークンを git に入れない**")
+    note(OK if not (BASE / "config" / "chatwork.env").exists()
+         or oct((BASE / "config" / "chatwork.env").stat().st_mode)[-3:] == "600" else NG,
+         "chatwork.env があるなら 600", "他のユーザーから読めないこと")
+
     # **帯は7つまで。**足さずに ALIAS で「タスク」の下へ置いた
     note(OK if '"#/automation": "#/tasks"' in js else NG,
          "自動化依頼が帯の下（タスク）に置かれている",

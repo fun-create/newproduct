@@ -592,6 +592,13 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "その依頼がありません"})
             return self.sendj(200, d)
+        if len(parts) == 3 and parts[0] == "automation" and parts[2] == "chatwork" \
+                and method == "GET":
+            # **押す前に、送る文面をそのまま返す**
+            try:
+                return self.sendj(200, auto_m.chatwork_status(parts[1]))
+            except ValueError as e:
+                return self.sendj(404, {"error": str(e)})
         if len(parts) == 3 and parts[0] == "automation" and method == "GET" \
                 and parts[2] == "requirement":
             try:
@@ -616,6 +623,14 @@ class H(BaseHTTPRequestHandler):
                 r = auto_m.set_stage(rid, d.get("stage", ""), uid,
                                      d.get("handoff_to", ""))
                 store.audit(uid, "automation.stage", rid, d, ip)
+                return self.sendj(200, r)
+            if what == "chatwork":
+                # **人が押したときだけ送る。**自動では送らない
+                r = auto_m.chatwork_send(
+                    rid, uid,
+                    allow_resend=str(d.get("resend") or "") in ("1", "true", "on"))
+                store.audit(uid, "automation.chatwork", rid,
+                            {"room": r["room"], "message_id": r["message_id"]}, ip)
                 return self.sendj(200, r)
             if what == "note":
                 r = auto_m.add_note(rid, d.get("body", ""), uid, d.get("q_key", ""))

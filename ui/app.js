@@ -1248,6 +1248,59 @@
     return box;
   }
 
+
+  // ChatWork へ渡す（F-15-6）。
+  // **自動では送らない。**送る文面をそのまま見せて、押されたときだけ送る。
+  // ChatWork は取り消せない。lpscope も同じ部屋に対して同じ規約にしている。
+  function autoChatwork(id) {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-note" });
+    box.appendChild(el("h3", { text: "ChatWork へ渡す" }));
+    api("/api/automation/" + encodeURIComponent(id) + "/chatwork").then(function (s) {
+      box.appendChild(el("p", { "class": "np-note", text: s.note }));
+      if (s.sent_count) {
+        box.appendChild(el("p", { "class": "np-warn",
+          text: "この依頼は " + s.sent_at + " に既に送っています（"
+            + s.sent_count + " 回・部屋 " + dash(s.sent_room) + "）。" }));
+      }
+      if (!s.ready) {
+        // **送れない理由を言葉で出す。**ボタンだけ出して押させない
+        box.appendChild(el("p", { "class": "np-warn", text: "いまは送れません。" }));
+        (s.blockers || []).forEach(function (x) {
+          if (x) box.appendChild(el("p", { "class": "np-sub", text: "・" + x }));
+        });
+      }
+      box.appendChild(el("p", { "class": "np-sub", text: "送る文面（このまま出ます）" }));
+      box.appendChild(el("div", { "class": "np-raw", text: s.preview }));
+      if (s.ready) {
+        var btn = el("button", { type: "button",
+          text: s.sent_count ? "同じ内容をもう一度送る" : "この内容で送る" });
+        btn.addEventListener("click", function () {
+          // **取り消せないので、押す前にもう一度聞く**
+          if (!window.confirm("ChatWork の部屋 " + s.config.room_id
+              + " へ送ります。**送ったあと取り消せません。**よろしいですか？")) return;
+          btn.disabled = true;
+          post("/api/automation/" + encodeURIComponent(id) + "/chatwork",
+               s.sent_count ? { resend: "1" } : {})
+            .then(function (r) {
+              msg.textContent = "送りました（部屋 " + r.room + " ／ "
+                + r.sent_count + " 回目）。";
+              setTimeout(go, 2500);
+            })
+            .catch(function (e) {
+              btn.disabled = false;
+              msg.textContent = "送れませんでした: " + e.message;
+            });
+        });
+        box.appendChild(el("p", { "class": "np-actions" }, [btn]));
+      }
+      box.appendChild(msg);
+    }).catch(function (e) {
+      box.appendChild(el("p", { "class": "np-sub", text: "状態を取れません: " + e.message }));
+    });
+    return box;
+  }
+
   // ══════════════════════════════════════════════════════
   // 年間プラン（F-3 ／ FR-82〜FR-86）
   //
@@ -1647,6 +1700,7 @@
       b.appendChild(el("h2", { text: "質問（答えが揃うと要件になります）" }));
       d.questions.forEach(function (q) { b.appendChild(autoQ(id, q)); });
       b.appendChild(autoStage(d));
+      b.appendChild(autoChatwork(d.request.id));
     }).catch(fail);
   }
 

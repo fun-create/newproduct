@@ -4,6 +4,9 @@ config/users.json.*
 config/.sessions.json
 config/csrf_salt
 config/svc_token
+# ChatWork のAPIトークン（0600・十文字さんが置く）。**絶対に入れない**
+config/chatwork.env
+config/*.env
 
 # 実データ。案件・タスク・ゲート・監査ログ。**作り直せない**ので
 # git ではなく deploy/backup.sh（日次・30世代・04:15）で守る

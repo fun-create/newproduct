@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import pathlib
 import sys
 import tempfile
 import unittest
@@ -204,6 +205,130 @@ class TestRequirementText(Base):
         self.assertIn("元画像から各サイズ", t)
         self.assertIn("**未計測**", t)
         self.assertIn("178行のどれにも当たりません", t)
+
+
+# ══════════════════════════════════════════════════════════
+class TestChatWorkHandoff(Base):
+    """ChatWork へ渡す（F-15-6 ／ 2026-09-24 十文字さんの選択C）。
+
+    **外へは1バイトも出さない。**送信は差し替えた関数で受ける。
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        self.fake = lambda room, body: (self.sent.append((room, body))
+                                        or {"status": 200, "message_id": "m1"})
+
+    def _ready(self, room="99", token=True):
+        from app import store
+        import tempfile as tf
+        store.ex("UPDATE setting SET value=? WHERE key=?", (room, self.m.ROOM_SETTING))
+        store.conn().commit()
+        if token:
+            fd, p = tf.mkstemp(suffix=".env")
+            os.close(fd)
+            pathlib.Path(p).write_text("CHATWORK_API_TOKEN=dummy\n", encoding="utf-8")
+            os.environ["NEWPRODUCT_CHATWORK_ENV"] = p
+            self.tokenfile = p
+        else:
+            os.environ["NEWPRODUCT_CHATWORK_ENV"] = "/nonexistent/chatwork.env"
+
+    def tearDown(self):
+        os.environ.pop("NEWPRODUCT_CHATWORK_ENV", None)
+        f = getattr(self, "tokenfile", None)
+        if f:
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+        super().tearDown()
+
+    def test_the_room_is_unset_out_of_the_box(self):
+        """**送り先を種データで決めない。**決めるのは人。"""
+        rid = self.one()
+        st = self.m.chatwork_status(rid)
+        self.assertFalse(st["ready"])
+        self.assertTrue(any("部屋" in (b or "") for b in st["blockers"]))
+
+    def test_missing_token_says_so_instead_of_failing_silently(self):
+        """**黙って落ちない**（N-10）。何が足りないかを言葉で返す。"""
+        self._ready(token=False)
+        rid = self.one()
+        st = self.m.chatwork_status(rid)
+        self.assertFalse(st["ready"])
+        self.assertIn("chatwork.env", " ".join(b or "" for b in st["blockers"]))
+        self.assertIn("他のアプリのトークンを写さないでください",
+                      " ".join(b or "" for b in st["blockers"]))
+
+    def test_cannot_send_before_the_answers_are_in(self):
+        self._ready()
+        rid = self.one()
+        with self.assertRaises(ValueError):
+            self.m.chatwork_send(rid, "tester", sender=self.fake)
+        self.assertEqual(self.sent, [], "1通も出ていないこと")
+
+    def test_sends_once_and_records_it(self):
+        self._ready()
+        rid = self.one(title="スタンプ登録")
+        self.answer_all(rid)
+        r = self.m.chatwork_send(rid, "tester", sender=self.fake)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.sent[0][0], "99")
+        self.assertEqual(r["message_id"], "m1")
+        d = self.m.detail(rid)["request"]
+        self.assertEqual(d["sent_count"], 1)
+        self.assertEqual(d["sent_room"], "99")
+        self.assertIn("ChatWork", d["handoff_to"])
+
+    def test_pressing_twice_does_not_post_twice(self):
+        """**ChatWork は取り消せない。**二度押しを DB の記録で止める。"""
+        self._ready()
+        rid = self.one()
+        self.answer_all(rid)
+        self.m.chatwork_send(rid, "tester", sender=self.fake)
+        with self.assertRaises(ValueError) as e:
+            self.m.chatwork_send(rid, "tester", sender=self.fake)
+        self.assertIn("既に送っています", str(e.exception))
+        self.assertEqual(len(self.sent), 1)
+        # 明示的に再送を選べば通る
+        self.m.chatwork_send(rid, "tester", sender=self.fake, allow_resend=True)
+        self.assertEqual(len(self.sent), 2)
+
+    def test_the_body_uses_chatwork_notation_not_markdown(self):
+        """**Markdown は効かない。**`**` をそのまま送るとアスタリスクが出る。"""
+        self._ready()
+        rid = self.one(title="スタンプ登録", raw_request="元画像から各サイズ")
+        self.answer_all(rid)
+        body = self.m.chatwork_text(rid)
+        self.assertTrue(body.startswith("[info][title]"))
+        self.assertTrue(body.rstrip().endswith("[/info]"))
+        self.assertNotIn("**", body)
+        self.assertNotIn("# ", body)
+        self.assertIn("元画像から各サイズ", body)
+
+    def test_the_body_says_when_answers_are_missing(self):
+        """**穴を隠さない。**渡された側が気づけないと意味がない。"""
+        self._ready()
+        rid = self.one()
+        self.m.answer(rid, "input", "画像1枚", "tester")
+        body = self.m.chatwork_text(rid)
+        self.assertIn("未回答", body)
+        self.assertIn("実装の前に確かめてください", body)
+
+    def test_preview_is_returned_before_sending(self):
+        self._ready()
+        rid = self.one()
+        st = self.m.chatwork_status(rid)
+        self.assertEqual(st["preview"], self.m.chatwork_text(rid))
+        self.assertIn("取り消せません", st["note"])
+
+    def test_the_token_value_never_appears_in_what_we_return(self):
+        """**値を返さない。**在る／無いだけ。"""
+        self._ready()
+        rid = self.one()
+        blob = repr(self.m.chatwork_status(rid))
+        self.assertNotIn("dummy", blob)
 
 
 if __name__ == "__main__":

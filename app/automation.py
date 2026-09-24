@@ -29,6 +29,7 @@ AI予算枠（`newproduct-*`）は未取得（FR-146）。**いま AI を呼ぶ�
 """
 from __future__ import annotations
 
+from . import chatwork as cw
 from . import store
 
 STAGES = ["起票", "質問中", "要件確定", "実装待ち", "実装中", "実装済", "見送り"]
@@ -347,3 +348,129 @@ def requirement_text(request_id: str) -> str:
             out.append(f"- {n['at']} {n['by_user'] or '—'}"
                        + (f"（{QMAP[n['q_key']][1]}）" if n["q_key"] else "") + f": {n['body']}")
     return "\n".join(out) + "\n"
+
+
+# ══════════════════════════════════════════════════════════
+# ChatWork へ渡す（F-15-6 ／ 2026-09-24 十文字さんの選択C）
+#
+# **自動では送らない。**文面をそのまま見せて、人が押したときだけ送る。
+# lpscope が同じ部屋に対して「対外送信＝人の明示操作が必須・自動送信しない」を
+# 規約にしている。**こちらだけ黙って投げない。**ChatWork は取り消せない。
+# ══════════════════════════════════════════════════════════
+ROOM_SETTING = "automation.chatwork_room_id"
+BASE_URL_SETTING = "automation.app_base_url"
+
+
+def _setting(key: str, default=None):
+    r = store.one("SELECT value FROM setting WHERE key=?", (key,))
+    if r is None or r["value"] in (None, ""):
+        return default
+    return r["value"]
+
+
+def seed_settings() -> int:
+    rows = [
+        (ROOM_SETTING, "自動化依頼を渡す ChatWork の部屋ID", "text", None,
+         "**未設定です。**入れるまで送信できません。"
+         "トークンは `config/chatwork.env`（0600・このアプリ専用に発行）に置きます。"
+         "**他のアプリのトークンを写さないでください**"),
+        (BASE_URL_SETTING, "本文に載せるこのアプリのURL", "text", None, None),
+    ]
+    for key, label, kind, unit, why in rows:
+        store.ex("INSERT INTO setting (key,value,label,kind,unit,why) "
+                 "VALUES (?,?,?,?,?,?) "
+                 "ON CONFLICT(key) DO UPDATE SET label=excluded.label,"
+                 "kind=excluded.kind,unit=excluded.unit,why=excluded.why",
+                 (key, {BASE_URL_SETTING: "https://newproduct.fun-create.co.jp"}.get(key),
+                  label, kind, unit, why))
+    return len(rows)
+
+
+def chatwork_text(request_id: str) -> str:
+    """ChatWork へ出す文面。**Markdown は効かない**ので ChatWork 記法で組む。
+
+    **名乗らない**（自分のアカウントから出る）。
+    **穴を隠さない。**未回答は「未回答」と書く。渡された側が気づけないと意味がない。
+    """
+    d = detail(request_id)
+    if d is None:
+        raise ValueError("その依頼がありません")
+    r, e = d["request"], d["effort"]
+    base = (_setting(BASE_URL_SETTING) or "").rstrip("/")
+    lines = [f"[info][title]自動化の依頼: {r['title']}[/title]",
+             f"出した人: {r['requester'] or '—'}（{r['dept'] or '—'}）",
+             "標準タスク: " + (d["template"]["title"] if d["template"]
+                            else "178行のどれにも当たりません（表が現場に追いついていない）"),
+             "月あたり: " + (f"{e['hours_per_month']}h（年 {e['per_year']}h）"
+                          if e["hours_per_month"] is not None else "未計測"),
+             ""]
+    if r["raw_request"]:
+        lines += ["[hr]元の言葉（書き換えていません）", r["raw_request"], ""]
+    lines.append("[hr]質問と答え")
+    unanswered = 0
+    for q in d["questions"]:
+        if q["state"] == "未回答":
+            unanswered += 1
+            lines.append(f"・{q['text']} → 未回答")
+        elif q["state"] == "無しと回答":
+            lines.append(f"・{q['text']} → （無いとの回答）")
+        else:
+            lines.append(f"・{q['text']}")
+            lines.append(f"　{q['answer']}")
+    if unanswered:
+        lines.append("")
+        lines.append(f"※ 未回答が {unanswered} 件あります。実装の前に確かめてください")
+    if base:
+        lines += ["", f"全文: {base}/#/automation/{r['id']}"]
+    lines.append("[/info]")
+    return "\n".join(lines)
+
+
+def chatwork_status(request_id: str) -> dict:
+    """送れるか・送ったか。**押す前に、送る文面をそのまま返す。**"""
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    if r is None:
+        raise ValueError("その依頼がありません")
+    room = _setting(ROOM_SETTING)
+    st = cw.status(room)
+    p = progress(request_id)
+    blockers = []
+    if not st["ready"]:
+        blockers.append(st["why"])
+    if not p["ready"]:
+        blockers.append("必要な質問が %d問 残っています" % len(p["missing"]))
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "config": st,
+        "preview": chatwork_text(request_id),
+        "sent_count": r["sent_count"], "sent_at": r["sent_at"],
+        "sent_room": r["sent_room"], "sent_message_id": r["sent_message_id"],
+        "note": "**ChatWork は取り消せません。**送る前に上の文面をそのまま確かめてください。"
+                "自動では送りません（人が押したときだけ送ります）。",
+    }
+
+
+def chatwork_send(request_id: str, user_id: str, *, sender=None,
+                  allow_resend: bool = False) -> dict:
+    """人が押したときだけ呼ぶ。**二度押しで二重投稿しない。**"""
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    if r is None:
+        raise ValueError("その依頼がありません")
+    st = chatwork_status(request_id)
+    if st["blockers"]:
+        raise ValueError("送れません: " + " ／ ".join(x for x in st["blockers"] if x))
+    if r["sent_count"] and not allow_resend:
+        raise ValueError(
+            f"この依頼は {r['sent_at']} に既に送っています（{r['sent_count']} 回）。"
+            "もう一度送るなら「再送する」を選んでください。**ChatWork は取り消せません**")
+    room = _setting(ROOM_SETTING)
+    res = cw.post(room, st["preview"], sender=sender)
+    with store.tx() as c:
+        c.execute("UPDATE automation_request SET sent_at=?,sent_room=?,sent_by=?,"
+                  "sent_message_id=?,sent_count=sent_count+1,handoff_to=?,"
+                  "updated_at=?,updated_by=? WHERE id=?",
+                  (store.now_s(), room, user_id, str(res.get("message_id") or ""),
+                   f"ChatWork 部屋 {room}", store.now_s(), user_id, request_id))
+    return {"ok": True, "room": room, "message_id": res.get("message_id"),
+            "sent_count": (r["sent_count"] or 0) + 1}

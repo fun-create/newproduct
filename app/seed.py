@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from . import idea as idea_m
+from . import automation as auto_m
 from . import plan as plan_m
 from . import store
 
@@ -467,6 +468,8 @@ def run() -> dict:
     idea_m.seed_settings()
     # 第1段の残り（§4-3）。**商品タイプと挿入ルールの設定**（F-3）
     plan_m.seed()
+    # 自動化依頼の渡し先（F-15-6）。**未設定のまま出荷する**（送り先は人が決める）
+    auto_m.seed_settings()
     store.conn().commit()
     missing = None
     try:
