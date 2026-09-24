@@ -24,8 +24,11 @@
 
   // NAV に出さない画面を、どの NAV の下に置くか（画面設計 2-2）。
   // ゲート盤・発売後評価は「案件」の下。機会カレンダーは「プラン」の下。
+  // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
+  // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
-                "#/opportunities": "#/plan" };
+                "#/opportunities": "#/plan",
+                "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -677,6 +680,13 @@
             "担当", "標準h", "AI適用", "削減見込"], rows));
         }
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
+
+        // **帯に出していない画面への入口**（帯は7つまで）。
+        // 自動化依頼は「この作業をやらなくて済ませたい」なので、タスクの下に置く
+        b.appendChild(el("p", { "class": "np-note" }, [
+          "手でやっている作業を自動化したいときは ",
+          el("a", { href: "#/automation", text: "自動化依頼" }),
+          " へ。作業名だけで出せます（そのあと8つの質問で要件にします）。" ]));
 
         // ロール別の負荷（F-5-5）
         b.appendChild(el("h2", { text: "ロール別の負荷（月 × ロール）" }));
@@ -1508,6 +1518,235 @@
   }
 
   // ══════════════════════════════════════════════════════
+  // 自動化依頼（F-15 ／ FR-159〜）
+  //
+  // **このアプリは実装しない。**答えが揃ったら要件として書き出し、
+  // 作る人へ渡すところまで。画面にもそう書く。
+  // **未回答と「無いという答え」を区別する**（N-10）。語で出す。
+  // ══════════════════════════════════════════════════════
+  function viewAutomation() {
+    loading();
+    var q = hashQuery();
+    var p = [];
+    if (q.get("stage")) p.push("stage=" + encodeURIComponent(q.get("stage")));
+    if (q.get("only")) p.push("only=" + encodeURIComponent(q.get("only")));
+    api("/api/automation" + (p.length ? "?" + p.join("&") : "")).then(function (d) {
+      var b = clear();
+      b.appendChild(el("p", { "class": "np-note",
+        text: "手でやっている作業のうち、**自動化したいもの**を集める画面です。"
+          + "出したあと、8つの質問に答えると要件になります。"
+          + "**このアプリが実装するわけではありません。**要件を書き出して、作る人へ渡します。" }));
+
+      // 数の段。**測れていない件数を必ず出す**
+      var g = el("div", { "class": "np-grid np-grid-3" });
+      function card(label, n, sub, link) {
+        var c = el("div", { "class": "np-card" });
+        c.appendChild(el("h3", { text: label }));
+        c.appendChild(link ? el("a", { "class": "np-big", href: link, text: String(n) })
+                           : el("span", { "class": "np-big", text: String(n) }));
+        if (sub) c.appendChild(el("p", { "class": "np-sub", text: sub }));
+        return c;
+      }
+      g.appendChild(card("依頼", d.total, "状態別は下の表", "#/automation"));
+      g.appendChild(card("標準タスクに無い", d.not_in_template,
+        "「やっていない」ではなく、表が現場に追いついていないという意味です",
+        "#/automation?only=not_in_template"));
+      g.appendChild(d.hours_per_month === null
+        ? card("月あたりの時間", "未計測", d.hours_note)
+        : card("月あたりの時間", d.hours_per_month + "h", d.hours_note));
+      b.appendChild(g);
+      if (d.template_note)
+        b.appendChild(el("p", { "class": "np-warn", text: d.template_note }));
+
+      // 状態の絞り込み。**語で出す**（色にしない）
+      var bar = el("p", { "class": "np-sub" });
+      bar.appendChild(el("a", { href: "#/automation", text: "すべて" }));
+      d.stages.forEach(function (s) {
+        bar.appendChild(txt("　"));
+        bar.appendChild(el("a", { href: "#/automation?stage=" + encodeURIComponent(s),
+          text: s + "（" + (d.by_stage[s] || 0) + "）" }));
+      });
+      b.appendChild(bar);
+
+      if (!d.rows.length) {
+        b.appendChild(el("p", { "class": "np-note", text: "該当する依頼はありません。" }));
+      } else {
+        b.appendChild(table(["作業", "出した人", "状態", "答え", "標準タスク", "月あたり"],
+          d.rows.map(function (r) {
+            return el("tr", null, [
+              el("td", null, [el("a", { href: "#/automation/" + r.id, text: r.title })]),
+              el("td", { text: dash(r.requester) }),
+              el("td", { text: r.stage }),
+              el("td", { text: r.answered + " / " + r.required }),
+              el("td", { text: r.in_template ? "あり" : "**無し**" }),
+              el("td", { "class": "np-num",
+                text: r.hours_per_month === null ? "未計測" : r.hours_per_month + "h" })]);
+          })));
+      }
+      b.appendChild(autoAddForm());
+    }).catch(fail);
+  }
+
+  function autoAddForm() {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-note" });
+    box.appendChild(el("h2", { text: "自動化してほしい作業を出す" }));
+    box.appendChild(el("p", { "class": "np-note",
+      text: "**作業名だけで出して構いません。**細かいことは、このあと質問でうかがいます。" }));
+    var f = el("form", { "class": "np-form" });
+    f.appendChild(el("label", { text: "作業名" }));
+    f.appendChild(el("input", { name: "title", required: "required",
+      placeholder: "例: スタンプ登録" }));
+    f.appendChild(el("label", { text: "いまの困りごと・どうなってほしいか（任意）" }));
+    f.appendChild(el("textarea", { name: "raw_request", rows: "3",
+      placeholder: "元となる画像を作成したら、あとは各サイズ作って登録もしてほしい" }));
+    f.appendChild(el("label", { text: "出した人" }));
+    f.appendChild(el("input", { name: "requester" }));
+    f.appendChild(el("button", { type: "submit", text: "出す" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      Array.prototype.forEach.call(f.elements, function (x) {
+        if (x.name && x.value) o[x.name] = x.value;
+      });
+      post("/api/automation", o).then(function (r) {
+        location.hash = "#/automation/" + r.id;
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  function viewAutomationOne(id) {
+    loading();
+    api("/api/automation/" + encodeURIComponent(id)).then(function (d) {
+      var b = clear();
+      var r = d.request;
+      setTitle("自動化依頼", r.title);
+      b.appendChild(el("h2", { text: r.title }));
+      b.appendChild(el("p", { "class": "np-sub",
+        text: "出した人: " + dash(r.requester) + "（" + dash(r.dept) + "） ／ 状態: "
+          + r.stage + " ／ " + d.progress.note }));
+      b.appendChild(el("p", { "class": "np-note", text: d.handoff_note }));
+
+      if (r.raw_request) {
+        var o = el("div", { "class": "np-card" });
+        o.appendChild(el("h3", { text: "元の言葉（書き換えていません）" }));
+        o.appendChild(el("div", { "class": "np-raw", text: r.raw_request }));
+        b.appendChild(o);
+      }
+      // 標準タスクに当たるか。**無いことにも意味がある**
+      var t = el("p", { "class": d.template ? "np-note" : "np-warn" });
+      t.textContent = d.template
+        ? "標準タスク「" + d.template.title + "」（" + dash(d.template.flow_label) + "）に当たります。"
+        : "**標準タスク178行のどれにも当たりません。**「やっていない」のではなく、表のほうが現場に追いついていないという意味です。";
+      b.appendChild(t);
+      if (r.note) b.appendChild(el("p", { "class": "np-sub", text: r.note }));
+
+      b.appendChild(autoEffort(d));
+      b.appendChild(el("h2", { text: "質問（答えが揃うと要件になります）" }));
+      d.questions.forEach(function (q) { b.appendChild(autoQ(id, q)); });
+      b.appendChild(autoStage(d));
+    }).catch(fail);
+  }
+
+  function autoQ(id, q) {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-sub" });
+    box.appendChild(el("h3", { text: q.text + (q.required ? "" : "（任意）") }));
+    // **なぜ聞くかを必ず出す。**理由が無いと、答える側が埋めるだけになる
+    box.appendChild(el("p", { "class": "np-sub", text: q.why }));
+    if (q.example) box.appendChild(el("p", { "class": "np-sub", text: "例: " + q.example }));
+    // **未回答と「無いという答え」を語で区別する**（N-10）
+    box.appendChild(el("p", { "class": "np-sub", text: "状態: " + q.state
+      + (q.answered_by ? "（" + q.answered_by + " " + q.answered_at + "）" : "") }));
+    var f = el("form", { "class": "np-form" });
+    var ta = el("textarea", { name: "answer", rows: "2" });
+    ta.value = q.answer || "";
+    f.appendChild(ta);
+    f.appendChild(el("button", { type: "submit", text: "答えを保存" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/automation/" + encodeURIComponent(id) + "/answer",
+           { q_key: q.key, answer: ta.value })
+        .then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  function autoEffort(d) {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-note" });
+    var r = d.request, e = d.effort;
+    box.appendChild(el("h3", { text: "効果の見積り" }));
+    if (e.hours_per_month === null) {
+      // **未計測と 0 を区別する**（N-10）
+      box.appendChild(el("span", { "class": "np-big np-big-unmeasured", text: "未計測" }));
+      box.appendChild(el("p", { "class": "np-sub", text: e.why }));
+    } else {
+      box.appendChild(el("span", { "class": "np-big", text: e.hours_per_month + "h / 月" }));
+      box.appendChild(el("p", { "class": "np-sub", text: "年 " + e.per_year + "h" }));
+      box.appendChild(el("p", { "class": "np-sub", text: e.note }));
+    }
+    var f = el("form", { "class": "np-form" });
+    f.appendChild(el("label", { text: "1回あたり（分）" }));
+    var a = el("input", { name: "minutes_each", inputmode: "decimal" });
+    a.value = r.minutes_each === null ? "" : r.minutes_each;
+    f.appendChild(a);
+    f.appendChild(el("label", { text: "月あたりの回数" }));
+    var c = el("input", { name: "times_per_month", inputmode: "decimal" });
+    c.value = r.times_per_month === null ? "" : r.times_per_month;
+    f.appendChild(c);
+    f.appendChild(el("button", { type: "submit", text: "保存" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/automation/" + encodeURIComponent(r.id) + "/effort",
+           { minutes_each: a.value, times_per_month: c.value })
+        .then(function () { go(); })
+        .catch(function (x) { msg.textContent = "できませんでした: " + x.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  function autoStage(d) {
+    var box = el("div", { "class": "np-card" });
+    var msg = el("p", { "class": "np-note" });
+    var r = d.request;
+    box.appendChild(el("h3", { text: "状態を変える" }));
+    box.appendChild(el("p", { "class": "np-note",
+      text: "**答えが揃う前に「要件確定」から先へは進めません。**"
+        + "揃わないまま渡すと、作る側が想像で埋めることになります。" }));
+    var f = el("form", { "class": "np-form" });
+    var sel = el("select", { name: "stage" });
+    d.stages.forEach(function (s) {
+      var o = el("option", { value: s, text: s });
+      if (s === r.stage) o.setAttribute("selected", "selected");
+      sel.appendChild(o);
+    });
+    f.appendChild(sel);
+    f.appendChild(el("label", { text: "渡す相手（任意）" }));
+    var h = el("input", { name: "handoff_to" });
+    h.value = r.handoff_to || "";
+    f.appendChild(h);
+    f.appendChild(el("button", { type: "submit", text: "変える" }));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/automation/" + encodeURIComponent(r.id) + "/stage",
+           { stage: sel.value, handoff_to: h.value })
+        .then(function () { go(); })
+        .catch(function (x) { msg.textContent = "できませんでした: " + x.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    box.appendChild(el("p", null, [
+      el("a", { href: "/api/automation/" + encodeURIComponent(r.id) + "/requirement",
+                text: "要件として書き出す（作る人へ渡す）" })]));
+    return box;
+  }
+
+  // ══════════════════════════════════════════════════════
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
@@ -1533,10 +1772,13 @@
 
     var m = /^#\/projects\/([A-Za-z0-9_-]+)$/.exec(path);
     var mi = /^#\/ideas\/([A-Za-z0-9_-]+)$/.exec(path);
+    var ma = /^#\/automation\/([A-Za-z0-9_-]+)$/.exec(path);
     if (path === "#/") return viewHome();
     if (m) return viewProject(m[1]);
     if (mi) return viewIdea(mi[1]);
+    if (path === "#/automation") return viewAutomation();
     if (path === "#/plan") return viewPlan();
+    if (ma) return viewAutomationOne(ma[1]);
     if (path === "#/ideas") return viewIdeas();
     if (path === "#/projects") return viewProjects();
     if (path === "#/tasks") return viewTasks();

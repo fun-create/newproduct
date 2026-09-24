@@ -131,3 +131,14 @@ p.np-actions button {
 }
 table.np tr[data-level="warn"] > td:first-child { border-left: 3px solid var(--fca-gold); }
 table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted var(--fca-muted); }
+
+/* 自動化依頼（F-15）。原文をそのまま出す欄 */
+/* **書体を指定しない。**VPS にもブラウザにも入っていない書体を書くと、
+   黙って別の書体に落ちる（selfcheck が font-family を見張っている）。
+   `pre` ではなく `div` に white-space を掛けているのはそのため */
+.np-raw {
+  white-space: pre-wrap; word-break: break-word;
+  margin: .4rem 0; padding: .6rem .8rem;
+  border-left: 3px solid var(--fca-line);
+  background: var(--fca-bg); font-size: .95rem;
+}

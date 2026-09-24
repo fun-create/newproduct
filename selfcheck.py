@@ -369,6 +369,27 @@ def check_stage2_screens():
          "app.js が商品名の組み立てをしていない",
          "分類とサイズはサーバ側（project.product_label）で作る（N-6-2）")
 
+    # 自動化依頼（F-15 ／ 2026-09-24）。**揃う前に渡さない**のが芯
+    nav = (UI / "index.html").read_text(encoding="utf-8")
+    for s4, why in [
+        ("viewAutomation", "自動化依頼の画面"),
+        ("このアプリが実装するわけではありません", "実装しないことを画面に書く"),
+        ("答えが揃う前に", "揃う前に実装へ渡さない、の断り"),
+        ("表のほうが現場に追いついていない", "標準タスクに無いことの読み方"),
+    ]:
+        note(OK if s4 in js else NG, f"app.js に {why}", "" if s4 in js else s4)
+    # **帯は7つまで。**足さずに ALIAS で「タスク」の下へ置いた
+    note(OK if '"#/automation": "#/tasks"' in js else NG,
+         "自動化依頼が帯の下（タスク）に置かれている",
+         "帯は7つまで（keiei の layout.py の上限）。8つ目を足さない")
+    auto_py = (BASE / "app" / "automation.py").read_text(encoding="utf-8")
+    note(OK if "無しと回答" in auto_py else NG,
+         "自動化依頼が未回答と「無いという答え」を語で分けている",
+         "**空欄を『無し』と読み替えない**（N-10）。行が無い＝未回答")
+    note(OK if "AI に作らせない" in auto_py else NG,
+         "自動化依頼の質問が固定である",
+         "AI予算枠が未取得（FR-146）。いま AI を呼ぶ口は開けない")
+
     # 予備時間（F-5-7 ／ 2026-09-23 の決定）。**実作業と1つの数にしない**
     for s3, why in [
         ("予備h", "実作業と予備を別の列で出す"),

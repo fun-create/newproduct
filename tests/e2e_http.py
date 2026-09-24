@@ -339,8 +339,51 @@ def main() -> int:
              "ページリニューアルは発売本数に数えない（F-10-11）",
              kinds["pagerenew"]["label"])
 
+        # ── 自動化依頼（F-15 ／ FR-159〜）────────────────
+        # **HTTP を通して「揃う前に渡せない」ことを見る。**
+        st, d = cl.post("/api/automation", {
+            "title": "E2E: スタンプ登録",
+            "raw_request": "元画像を作ったら各サイズ作って登録まで",
+            "requester": "増地さん"})
+        aid = d.get("id")
+        note(st == 200 and bool(aid), "自動化依頼を出せる（作業名だけで可）", str(st))
+
+        st, d = cl.post("/api/automation/" + aid + "/stage", {"stage": "実装待ち"})
+        note(st == 400 and "残っています" in (d.get("error") or ""),
+             "答えが揃う前は実装へ渡せない（F-15 の芯）", str(d.get("error"))[:60])
+
+        st, d = cl.get("/api/meta")
+        qs = [q["key"] for q in d["automation"]["questions"] if q["required"]]
+        note(len(qs) == 8, "必須の質問が8問", str(len(qs)))
+        for k in qs:
+            cl.post("/api/automation/" + aid + "/answer",
+                    {"q_key": k, "answer": "" if k == "judgement" else "こう答えました"})
+
+        st, d = cl.get("/api/automation/" + aid)
+        byk = {q["key"]: q for q in d["questions"]}
+        note(byk["judgement"]["state"] == "無しと回答"
+             and byk["extra"]["state"] == "未回答",
+             "未回答と「無いという答え」を分けて出す（N-10）",
+             f"judgement={byk['judgement']['state']} / extra={byk['extra']['state']}")
+
+        st, d = cl.post("/api/automation/" + aid + "/stage",
+                        {"stage": "実装待ち", "handoff_to": "NEW PRODUCT"})
+        note(st == 200 and d.get("stage") == "実装待ち",
+             "答えが揃えば実装へ渡せる", str(d))
+
+        cl.post("/api/automation/" + aid + "/effort",
+                {"minutes_each": "30", "times_per_month": "20"})
+        st, d = cl.get("/api/automation/" + aid)
+        note(d["effort"]["hours_per_month"] == 10.0,
+             "効果が 分×回数 から出る", str(d["effort"]["hours_per_month"]))
+
+        st, body = cl.get("/api/automation/" + aid + "/requirement")
+        txt = body.decode("utf-8") if isinstance(body, bytes) else str(body)
+        note(st == 200 and "# 自動化の要件" in txt and "**未回答。**" in txt,
+             "要件の書き出しに、未回答が未回答として出る", str(st))
+
         n = store.val("SELECT COUNT(*) FROM audit")
-        note(n >= 23, "全操作が audit に残る", f"{n} 件")
+        note(n >= 34, "全操作が audit に残る", f"{n} 件")
         # **断られた操作は残らない。**残るのは成功した操作だけ、が現在の設計
         acts = {r[0] for r in store.q(
             "SELECT DISTINCT action FROM audit WHERE action LIKE 'plan.%'")}

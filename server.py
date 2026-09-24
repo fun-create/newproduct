@@ -43,6 +43,7 @@ sys.path.insert(0, str(BASE))
 import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 参照）
 
 from app import ai_score as ai_m  # noqa: E402
+from app import automation as auto_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
 from app import idea as idea_m   # noqa: E402
 from app import plan as plan_m    # noqa: E402
@@ -410,6 +411,9 @@ class H(BaseHTTPRequestHandler):
                     "margin_bands_note": idea_m.MARGIN_BANDS_NOTE,
                 },
                 "ai_scoring": ai_m.status(),
+                # 自動化依頼（F-15）。**質問は固定。サーバの1か所に置く**
+                "automation": {"questions": auto_m.questions(),
+                               "stages": auto_m.STAGES},
                 # 年間プラン（第1段の残り・F-3）
                 "plan": {
                     "kinds": plan_m.kinds(),
@@ -569,6 +573,53 @@ class H(BaseHTTPRequestHandler):
                 store.audit(uid, "plan.slot.convert", sid,
                             {"project_id": r["project_id"],
                              "task_setup_due": r["task_setup_due"].get("due")}, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
+
+        # ── /api/automation（F-15 ／ FR-159〜）──────────
+        #
+        # **このアプリは実装しない。**答えが揃ったら要件として書き出し、
+        # 作る人へ渡すところまで。`set_stage` が答えの不足で断るのがその担保。
+        if parts == ["automation"] and method == "GET":
+            return self.sendj(200, auto_m.listing(qs))
+        if parts == ["automation"] and method == "POST":
+            d = self.body()
+            r = auto_m.create(uid, **d)
+            store.audit(uid, "automation.create", r["id"], d, ip)
+            return self.sendj(200, r)
+        if len(parts) == 2 and parts[0] == "automation" and method == "GET":
+            d = auto_m.detail(parts[1])
+            if d is None:
+                return self.sendj(404, {"error": "その依頼がありません"})
+            return self.sendj(200, d)
+        if len(parts) == 3 and parts[0] == "automation" and method == "GET" \
+                and parts[2] == "requirement":
+            try:
+                body = auto_m.requirement_text(parts[1]).encode("utf-8")
+            except ValueError as e:
+                return self.sendj(404, {"error": str(e)})
+            return self.send(200, body, "text/markdown; charset=utf-8")
+        if len(parts) == 3 and parts[0] == "automation" and method == "POST":
+            rid, what = parts[1], parts[2]
+            d = self.body()
+            if what == "answer":
+                r = auto_m.answer(rid, d.get("q_key", ""), d.get("answer", ""), uid)
+                store.audit(uid, "automation.answer", rid,
+                            {"q_key": d.get("q_key")}, ip)
+                return self.sendj(200, r)
+            if what == "effort":
+                r = auto_m.set_effort(rid, d.get("minutes_each"),
+                                      d.get("times_per_month"), uid)
+                store.audit(uid, "automation.effort", rid, d, ip)
+                return self.sendj(200, r)
+            if what == "stage":
+                r = auto_m.set_stage(rid, d.get("stage", ""), uid,
+                                     d.get("handoff_to", ""))
+                store.audit(uid, "automation.stage", rid, d, ip)
+                return self.sendj(200, r)
+            if what == "note":
+                r = auto_m.add_note(rid, d.get("body", ""), uid, d.get("q_key", ""))
+                store.audit(uid, "automation.note", rid, {}, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
 
