@@ -1,0 +1,522 @@
+	進捗管理（商品開発）
+		週表示:	1
+					※期限が過ぎた日付は色が付きます。\n崩れたらF列全体を選択し、\n「表示形式」-「条件付き書式」-「範囲に適用」を\n「F2:F(最終行を入力)」に変更
+	タスク	担当者	進捗状況	開始	期限	所要時間\n（h/日）	今日\n対応	１日後\n対応	2日後\n対応	3日後\n対応	4日後\n対応	5日後\n対応	6日後\n対応
+	2025年度（5～4月）
+	7月発売
+	夫婦食器の在庫処分						←終了したらグループを折り畳む
+	冷感タオル　Mサイズ						←終了したらグループを折り畳む
+	【改修】バッグ						←終了したらグループを折り畳む
+	【改修】キャンバス						←終了したらグループを折り畳む
+	8月発売
+	ハンディファン						←終了したらグループを折り畳む
+	リルハイブリッド3.0 スキンシール						←終了したらグループを折り畳む
+	9月発売
+	シルエットステッカー（テニス男女）						←終了したらグループを折り畳む
+	Ploom AURA スキンシール						←終了したらグループを折り畳む
+	10月発売
+	アクリル時計						←終了したらグループを折り畳む
+	glo HILO スキンシール						←終了したらグループを折り畳む
+	フレークシール（フリーカット）						←終了したらグループを折り畳む
+	iPhone17シリーズ スキンシール						←終了したらグループを折り畳む
+	11月発売
+	ミニトート						←終了したらグループを折り畳む
+	ブランケットの素材変更						←終了したらグループを折り畳む
+	スタンプ 浸透印						←終了したらグループを折り畳む
+	12月発売
+	NFCカード						←終了したらグループを折り畳む
+	等身大タオル						←終了したらグループを折り畳む
+	1月発売
+	switch2 スキンシール						←終了したらグループを折り畳む
+	Air Pods Pro3スキンシール						←終了したらグループを折り畳む
+	【システム】画像送信と注文の一元化						←終了したらグループを折り畳む
+	2月発売
+	スタンプ 浸透印　1×1cm追加						←終了したらグループを折り畳む
+	お名前シール 衣類用						←終了したらグループを折り畳む
+	嵐うちわキット＆デコプリシール						←終了したらグループを折り畳む
+	3月発売
+	ブロックメモ						←終了したらグループを折り畳む
+	等身大アクスタ						←終了したらグループを折り畳む
+	嵐スケスケ衣装アクスタ/アクキー						←終了したらグループを折り畳む
+	嵐スケスケ衣装スタンプ浸透印						←終了したらグループを折り畳む
+	Ploom CUBE スキンシール						←終了したらグループを折り畳む
+	iPhone17e スキンシール						←終了したらグループを折り畳む
+	4月発売
+	嵐ピンクスーツ アクスタ/アクキー/スタンプ浸透印						←終了したらグループを折り畳む
+	PS5 Slim デジタルエディション /PS5 Pro スキンシール						←終了したらグループを折り畳む
+
+
+	2026年度（5～4月）
+	5月発売
+	ビールジョッキ販売再開（半透明新品/透明B級品）						←終了したらグループを折り畳む
+	マークシールのリニューアル						←終了したらグループを折り畳む
+	等身大パネル						←終了したらグループを折り畳む
+等身大パネル	実際の製作費用と照らし合わせて販売価格が適正か確認\n\\New-terastation\buckup-share\00ファンクリ運営サイト\Web decoシミュレーション\NEW_ITEM\NEW_ITEM_20240913（等身大アクスタ、等身大パネル）\Prozy株式会社	管理者	完了	8月17日	8月17日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+等身大パネル	送料の修正依頼	管理者	未着手	9月18日	9月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	アイコスイルマiワン【NEW本体用】						←終了したらグループを折り畳む
+	6月発売
+	マックブック、iPad スキンシール						←終了したらグループを折り畳む
+	アクスタ スタンプ						←終了したらグループを折り畳む
+	7月発売
+	ユニフォーム型・長方形ピンズ						←終了したらグループを折り畳む
+	8月発売
+	ユニフォーム型バッテリー（type-C）
+ユニフォーム型バッテリー（type-C）	試作用サンプル資材発注依頼・決定→在庫価格一覧表に資材情報を記入	管理者	完了	6月18日	6月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	販売価格変更の必要あるか検討	管理者	完了	6月19日	6月19日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	試作・調整	メンバー	完了	6月23日	6月23日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	Webdecoシミュレーション提出用データを作成	メンバー	完了	6月25日	6月25日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	Webdecoシミュレーションデータ提出　※メール件名に商品名も入れる	メンバー	完了	6月25日	6月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	「品質について」を記入	メンバー	完了	6月26日	6月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	資材の本番発注依頼	メンバー	完了	6月26日	6月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	商品ページ依頼準備（フルオーダー・簡単オーダー・Web deco）	メンバー	完了	6月29日	6月29日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	Webマーケ部（Web管理者）と打合せ・ページ依頼	メンバー	完了	6月29日	6月29日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	各競技ユニフォーム背景を登録（パートさんが出来そうなら依頼）	メンバー	完了	6月29日	7月3日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	完成シミュレーションの確認　※生産部（生産管理者）も確認	メンバー	完了	7月2日	7月2日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	シミュレーション情報をWebマーケに共有	メンバー	完了	7月2日	7月2日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	フルオーダー　販売開始・全体に周知	管理者	完了	7月24日	7月24日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	Web deco　販売開始・全体に周知	管理者	完了	8月31日	8月31日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ユニフォーム型バッテリー（type-C）	簡単オーダー　販売開始・全体に周知	管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						11.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	9月発売
+	[LOVOT]等身大クッション/フリーカットクッションのサイズ指定方法を変更						←終了したらグループを折り畳む
+	[LOVOT]クッションキーホルダー						←終了したらグループを折り畳む
+[LOVOT]クッションキーホルダー	生産の問題点を確認→解決とフィードバックをプラン	メンバー	未着手	9月28日	10月2日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	目印チャームに移行（リニューアル分）						←終了したらグループを折り畳む
+	ウォールステッカー						←終了したらグループを折り畳む
+ウォールステッカー	資材のサンプル発注	管理者	完了	3月3日	3月3日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	競合調査	メンバー	完了	3月5日	3月5日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	ターゲット選定	管理者	完了	3月12日	3月12日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	ニーズまとめ	管理者	完了	3月12日	3月12日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	試作・調整	メンバー	完了	4月7日	4月7日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	作成方法を生産部（生産管理者）と打合せ　※誰がデータ作成するか相談	メンバー	完了	4月22日	4月22日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	差別化	メンバー	完了	4月22日	4月22日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	販売価格の決定	管理者	完了	5月1日	5月1日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	目標設定	管理者	完了	5月1日	5月1日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	コンセプトまとめ	管理者	完了	5月1日	5月1日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	社長の確認（コンセプトを送信）	管理者	完了	5月1日	5月1日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	商品ページ依頼準備（LP依頼シート）	管理者	完了	5月7日	5月7日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	完了	5月7日	5月7日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	「品質について」を記入	メンバー	完了	5月12日	5月12日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	シートの再検討・貼付けと剥がしのテスト（1週間以上）	商品開発部	完了	5月14日	5月26日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	完了	5月28日	5月28日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	完了	5月29日	5月29日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	在庫価格一覧表に資材情報を記入→杉浦さんへ	管理者	完了	5月29日	5月29日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	販売価格の再設定（新資材にて）※200cmまで仮決め・小さいサイズは複数個にする	管理者	完了	6月5日	6月5日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	貼りなおし何回できるかテスト（壁の種類ごとに）	メンバー	完了	6月8日	6月8日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	カット圧の設定（PCで設定？だめならプリセットで設定）	メンバー	完了	6月8日	6月8日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	テストシール販売検討（先に安く購入できるようにする）	管理者	完了	6月8日	6月8日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	シートの設置位置・取り違え防止チェック方法を決める	商品開発部	完了	6月9日	6月9日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	完了	6月18日	6月18日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	見積確認・本番発注	管理者	完了	6月22日	6月22日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	追加情報をWebチームに連絡	管理者	完了	6月26日	6月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	うちわ本店のシーン提案をWebマーケに共有、サンプルの相談	商品開発部	完了	7月13日	7月13日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	サイズ指定方法の変更に伴う新価格表を共有→Webマーケへ	管理者	完了	9月3日	9月3日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	ページ用サンプル作成	メンバー	未着手	9月17日	9月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	商品ページチェック・修正依頼	管理者	未着手	10月1日	10月1日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	PRO FUN-CREATORにページ共有	管理者	未着手	10月1日	10月1日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	10月2日	10月2日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	データ入稿テンプレート作成	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	データ入稿を販売開始	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	売上集計（2週間後）→準備シートに記録	メンバー	未着手	10月16日	10月16日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウォールステッカー	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手	11月30日	12月4日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						21	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	10月発売
+	等身大商品のサイズ指定方法を変更						←終了したらグループを折り畳む
+等身大商品のサイズ指定方法を変更	フチのサイズを決定	生産部	未着手	9月21日	9月22日		FALSE	TRUE	TRUE	FALSE	FALSE	FALSE	FALSE
+等身大商品のサイズ指定方法を変更	サイズ指定方法の変更に伴う新価格表を共有→Webマーケへ	管理者	未着手	9月25日	9月25日	1	FALSE	FALSE	FALSE	FALSE	FALSE	TRUE	FALSE
+等身大商品のサイズ指定方法を変更	プランをPRO FUN-CREATORに共有	管理者	未着手	9月25日	9月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	TRUE	FALSE
+等身大商品のサイズ指定方法を変更	テスト注文依頼＆チェック・販売開始・全体に周知	管理者	未着手	10月2日	10月2日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						1.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	Switch2 Proコン スキンシール　※お問い合わせあり						←終了したらグループを折り畳む
+Switch2 Proコン スキンシール　※お問い合わせあり	機器本体（またはカットデータ）の購入	管理者	完了	9月7日	9月7日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	試作・調整	メンバー	完了	9月7日	9月7日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	Webdecoシミュレーション提出用データを作成	メンバー	完了	9月7日	9月7日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	Webdecoシミュレーションデータ提出　※メール件名に商品名も入れる	メンバー	完了	9月8日	9月8日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	商品ページの追加内容を整理	メンバー	完了	9月17日	9月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	Webマーケ部（Web管理者）と打合せ・ページ依頼	メンバー	完了	9月17日	9月17日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	完成シミュレーションの確認　※生産部（生産管理者）も確認	メンバー	未着手	10月6日	10月6日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	シミュレーション情報をWebマーケに共有	メンバー	未着手	10月6日	10月6日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	商品ページチェック・修正依頼	メンバー	未着手	10月9日	10月9日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	メンバー	未着手	10月9日	10月9日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	楽天に出品	Webマーケ	未着手	10月16日	10月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	Amazonに出品	Webマーケ	未着手	10月16日	10月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	giftmallに出品	Webマーケ	未着手	10月16日	10月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Switch2 Proコン スキンシール　※お問い合わせあり	Yahoo!に出品	Webマーケ	未着手	10月16日	10月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						6.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	glo hyper pro+スキンシール						←終了したらグループを折り畳む
+glo hyper pro+スキンシール	機器本体（またはカットデータ）の購入	管理者	完了	8月20日	8月20日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	試作・調整	メンバー	完了	8月24日	8月25日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	Webdecoシミュレーション提出用データを作成	メンバー	完了	8月25日	8月25日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	Webdecoシミュレーションデータ提出　※メール件名に商品名も入れる	メンバー	完了	8月25日	8月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	商品ページの追加内容を整理	メンバー	完了	9月17日	9月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	Webマーケ部（Web管理者）と打合せ・ページ依頼	メンバー	完了	9月17日	9月17日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	完成シミュレーションの確認　※生産部（生産管理者）も確認	メンバー	未着手	10月6日	10月6日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	シミュレーション情報をWebマーケに共有	メンバー	未着手	10月6日	10月6日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	商品ページチェック・修正依頼	メンバー	未着手	10月14日	10月14日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	メンバー	未着手	10月14日	10月14日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	楽天に出品	Webマーケ	未着手	10月20日	10月20日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	Amazonに出品	Webマーケ	未着手	10月20日	10月20日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	giftmallに出品	Webマーケ	未着手	10月20日	10月20日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+glo hyper pro+スキンシール	Yahoo!に出品	Webマーケ	未着手	10月20日	10月20日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						6.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	目印チャームに移行（新規分）						←終了したらグループを折り畳む
+目印チャームに移行（リニューアル分）	フルオーダー 目印チャーム　販売開始・全体に周知	メンバー	未着手	10月16日	10月16日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	簡単オーダー 目印チャーム　販売開始・全体に周知	メンバー	未着手	10月16日	10月16日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	シリコンリング黒100個購入　※発注依頼済	生産部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	シリコンリング全色セット　価格決定、管理ページ作成依頼	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	シリコンリング全色セットを販売開始・全体に周知	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	ユニフォーム以外のストラップ商品の販売停止（在庫無くなり次第順次）	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+目印チャームに移行（リニューアル分）	ナンバープレートをナスカンキーホルダー付きにリニューアル	パートさん	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+		メンバー				0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	うちの子 足形 アクスタスタンプ						←終了したらグループを折り畳む
+うちの子 足形 アクスタスタンプ	競合調査	管理者	完了	8月25日	8月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	ターゲット選定	管理者	完了	8月25日	8月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	ニーズまとめ	管理者	完了	8月25日	8月25日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	注文方法、作成方法を検討	メンバー	完了	8月24日	9月4日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	試作・調整	メンバー	完了	9月8日	9月9日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	差別化	管理者	完了	9月15日	9月15日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	商品名を検討	管理者	完了	9月15日	9月15日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	販売価格の決定	管理者	完了	9月17日	9月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	目標設定	管理者	完了	9月17日	9月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	コンセプトまとめ	管理者	完了	9月17日	9月17日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	社長の確認（コンセプトを送信）	管理者	未着手	9月18日	9月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	作成方法を生産部（生産管理者）と打合せ	商品開発部	未着手	9月18日	9月18日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	作成方法の詳細・生産の流れ確定	生産部	未着手	9月18日	9月25日		TRUE	TRUE	TRUE	TRUE	TRUE	TRUE	FALSE
+うちの子 足形 アクスタスタンプ	発売日確定・PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	未着手	9月25日	9月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	TRUE	FALSE
+うちの子 足形 アクスタスタンプ	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	未着手	9月29日	9月29日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	商品内容を調整	商品開発部	未着手	9月29日	10月2日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	未着手	10月2日	10月2日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	資材の情報を生産管理者に共有・本番発注依頼　※在庫一覧表記入の必要なし	メンバー	未着手	10月2日	10月2日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	「品質について」を記入	メンバー	未着手	10月2日	10月2日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	商品ページ依頼準備（LP依頼シート）	管理者	未着手	10月5日	10月5日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	未着手	10月6日	10月6日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	商品ページチェック・修正依頼	管理者	未着手	10月20日	10月20日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	PRO FUN-CREATORにページ共有	管理者	未着手	10月20日	10月20日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	10月23日	10月23日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	楽天に出品	Webマーケ	未着手	10月30日	10月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	Amazonに出品	Webマーケ	未着手	10月30日	10月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	giftmallに出品	Webマーケ	未着手	10月30日	10月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	Yahoo!に出品	Webマーケ	未着手	10月30日	10月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	売上集計（2週間後）→準備シートに記録	メンバー	未着手	11月6日	11月6日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちの子 足形 アクスタスタンプ	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手	12月24日	1月7日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						14.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	新型iPhoneスキンシール						←終了したらグループを折り畳む
+新型iPhoneスキンシール	機器本体（またはカットデータ）の購入	管理者	未着手	10月1日	10月1日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	試作・調整	メンバー	未着手	10月1日	10月1日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	Webdecoシミュレーション提出用データを作成	メンバー	未着手	10月2日	10月2日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	Webdecoシミュレーションデータ提出　※メール件名に商品名も入れる	メンバー	未着手	10月2日	10月2日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	商品ページの追加内容を整理	メンバー	未着手	10月16日	10月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	Webマーケ部（Web管理者）と打合せ・ページ依頼	メンバー	未着手	10月16日	10月16日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	完成シミュレーションの確認　※生産部（生産管理者）も確認	メンバー	未着手	10月27日	10月27日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	シミュレーション情報をWebマーケに共有	メンバー	未着手	10月27日	10月27日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	商品ページチェック・修正依頼	メンバー	未着手	10月30日	10月30日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	メンバー	未着手	10月30日	10月30日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	楽天に出品	Webマーケ	未着手	11月6日	11月6日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	Amazonに出品	Webマーケ	未着手	11月6日	11月6日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	giftmallに出品	Webマーケ	未着手	11月6日	11月6日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新型iPhoneスキンシール	Yahoo!に出品	Webマーケ	未着手	11月6日	11月6日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						6.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	11月発売
+	[LOVOT]ノンアイロンシール						←終了したらグループを折り畳む
+[LOVOT]ノンアイロンシール	ノンアイロンシール　出来る仕様を提案用にまとめる	管理者	未着手	9月18日	9月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール	LOVOTページに追加依頼	管理者	未着手	10月23日	10月23日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール	商品ページチェック・修正依頼	管理者	未着手	11月13日	11月13日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ノンアイロンシール	販売開始・全体に周知	メンバー	未着手	11月13日	11月13日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	[LOVOT]ネームプレート						←終了したらグループを折り畳む
+[LOVOT]ネームプレート	ネームプレート　データ調整アクションを作成	メンバー	完了	9月4日	9月4日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	ネームプレート　ピンの接着部分を決定	商品開発部	未着手	9月14日	9月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	ネームプレート　サンプルをLOVOTさんに送る（チェックのため）	管理者	未着手	9月18日	9月18日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	ネームプレート　LOVOTページに追加依頼	管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート		管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	LOVOTページに追加依頼	管理者	未着手	10月23日	10月23日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	商品ページチェック・修正依頼	管理者	未着手	11月13日	11月13日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+[LOVOT]ネームプレート	販売開始・全体に周知	メンバー	未着手	11月13日	11月13日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	ウェルカムボックス						←終了したらグループを折り畳む
+ウェルカムボックス	競合調査	管理者	完了	2月2日	2月2日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	ターゲット選定	管理者	完了	2月13日	2月13日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	ニーズまとめ	管理者	完了	2月16日	2月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	ターゲットのニーズからラインナップ決定	商品開発部	未着手	10月1日	10月1日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	パッケージ資材の検討・決定	メンバー	未着手	10月2日	10月2日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	おおまかな作成方法を検討	メンバー	未着手	10月5日	10月5日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	販売価格の決定	管理者	未着手	10月6日	10月6日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	社長の確認	管理者	未着手	10月6日	10月6日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	作成方法の詳細・生産の流れ確定	生産部	未着手	10月8日	10月8日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	目標設定	管理者	未着手	10月8日	10月8日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	未着手	10月9日	10月9日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	商品ページ依頼準備（LP依頼シート）	管理者	未着手	10月9日	10月9日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	未着手	10月9日	10月9日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	未着手	10月16日	10月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	未着手	11月20日	11月20日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	商品ページチェック・修正依頼	管理者	未着手	11月20日	11月20日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	PRO FUN-CREATORにページ共有	管理者	未着手	11月20日	11月20日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	11月27日	11月27日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+ウェルカムボックス	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						12.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	12月発売
+	アクスタ特殊オーダー入口設置（ジオラマ等）						←終了したらグループを折り畳む
+アクスタ特殊オーダー入口設置（ジオラマ等）	過去の特殊オーダーを分析	メンバー	完了	5月7日	5月7日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	案内する特殊オーダーの内容（シーン提案）を決定	メンバー	完了	5月8日	5月8日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	ページの見せ方を検討	メンバー	完了	5月21日	5月22日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	特殊オーダーの受け方についてMTG（生産管理者・受注担当・Web管理者＆担当者）	商品開発部	完了	5月26日	5月26日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	ジオラマの注文方法を決定　※テスト：長島さん済→杉浦さん	管理者	完了	6月1日	6月9日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	指示書の自動作成について希望をSE部に依頼	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	ページ作成依頼準備	メンバー	未着手			1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	ページ作成依頼	商品開発部	未着手			1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	商品ページチェック・修正依頼	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	PRO FUN-CREATORにページ共有	管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	12月4日	12月4日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ特殊オーダー入口設置（ジオラマ等）	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						7.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	うちわ型紙ページのリニューアル						←終了したらグループを折り畳む
+うちわ型紙ページのリニューアル	型紙商品の今後についてMTG（生産と）	商品開発部	完了				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	売上実績の調査	メンバー	完了	4月16日	4月16日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新ラインナップ作成・データ準備依頼（知名さんへ）	メンバー	完了	4月16日	4月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新ラインナップとセット案を検討	パートさん	完了	4月16日	4月23日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	旧商品の販売停止・全体に周知	管理者	完了	5月29日	5月29日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新ラインナップとセット案を再検討、データ作成依頼	メンバー	完了	6月1日	6月5日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新ラインナップ作成・データ準備　※優先順位付けて出来るところまで	パートさん	未着手	10月1日	10月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	ページ改修依頼　※販売停止は依頼済	メンバー	未着手	11月6日	11月6日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新しいプリンターの検討　※買う方向で相談してください（社長より）	生産部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	新セット販売開始・全体に周知・マスタ更新	メンバー	未着手	12月11日	12月11日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	ラインナップ追加時のアシロボ対応可否を確認　※スタート時アシロボ無しでもOK	SE部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+うちわ型紙ページのリニューアル	ラインナップ追加の仕組み化（パートさんで勝手に追加できるように）	商品開発部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						5.50	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	Webdeco化						←終了したらグループを折り畳む
+Webdeco化	優先順位とシミュレーション作成日程をプラン	管理者	未着手	10月12日	10月12日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	Webdecoシミュレーション提出用データを作成	メンバー	未着手			2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	Webdecoシミュレーションデータ提出	メンバー	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	完成シミュレーションの確認、背景書き出し用aiファイルを作成	メンバー	未着手			1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	背景登録　※商品開発以外のパートさんに依頼（浅岡さん・堀田さんなど）	パートさん	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	簡単オーダー用スポーツ別ID作成→各店舗用URL作成（浅岡さん・堀田さんなど）	パートさん	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	→作成したIDが消去されないようにテクノアに依頼	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	商品ページの追加内容を整理	メンバー	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	Webマーケ部（Web管理者）と打合せ・ページ依頼	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	商品ページチェック・修正依頼	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	PRO FUN-CREATORにページ共有	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	メンバー	未着手	12月18日	12月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	楽天に出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	Amazonに出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	giftmallに出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	Yahoo!に出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Webdeco化	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						6.00	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	スポーツ言葉ステッカー						←終了したらグループを折り畳む
+スポーツ言葉ステッカー	機会・ターゲット・コンセプト・デザインイメージの大枠をメンバーに共有	管理者	未着手	11月23日	11月23日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	競合調査（デザイン面の人気を調べる）	メンバー	未着手	11月23日	11月23日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	デザインのラインナップと名称を決定	メンバー	未着手	11月24日	11月24日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	販売価格の決定	メンバー	未着手	11月24日	11月24日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	目標設定	メンバー	未着手	11月26日	11月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	社長の確認（ターゲット、デザイン、データ作成方法）	メンバー	未着手	11月27日	11月27日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	データ作成用テンプレートを作成	メンバー	未着手	12月3日	12月3日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	商品ページ依頼	商品開発部	未着手	12月4日	12月4日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	商品情報と作成方法を現場に共有	商品開発部	未着手	12月15日	12月15日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	商品ページチェック・修正依頼	管理者	未着手	12月17日	12月17日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	PRO FUN-CREATORにページ共有	管理者	未着手	12月17日	12月17日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	12月18日	12月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	楽天に出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	Amazonに出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	giftmallに出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	Yahoo!に出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	FBA化を検討（6か月後）	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+スポーツ言葉ステッカー	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						8.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	1月発売
+	アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	競合調査　※再	管理者	未着手	12月1日	12月1日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	ターゲット選定　※再	管理者	未着手	12月1日	12月1日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	ニーズまとめ　※再	管理者	未着手	12月1日	12月1日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	資材の検討・決定	管理者	未着手	12月4日	12月4日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	商品の形状、商品名を検討	管理者	未着手	12月7日	12月7日	4	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	商品決定の根拠などを商品開発部内に共有	管理者	未着手	12月7日	12月7日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	注文方法、作成方法を検討	メンバー	未着手	12月7日	12月7日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	試作・調整	メンバー	未着手	12月8日	12月14日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	差別化	管理者	未着手	12月15日	12月15日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	販売価格の決定	管理者	未着手	12月17日	12月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	目標設定	管理者	未着手	12月17日	12月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	コンセプトまとめ	管理者	未着手	12月18日	12月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	社長の確認（コンセプトを送信）	管理者	未着手	12月18日	12月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	作成方法を生産部（生産管理者）と打合せ	商品開発部	未着手	12月21日	12月21日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	作成方法の詳細・生産の流れ確定	生産部	未着手	12月22日	12月28日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	発売日確定・PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	未着手	12月29日	12月29日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	未着手	12月28日	12月28日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	商品内容を調整	商品開発部	未着手	12月29日	1月7日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	未着手	1月8日	1月8日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	資材の情報を生産管理者に共有・本番発注依頼　※在庫一覧表記入の必要なし	メンバー	未着手	1月8日	1月8日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	「品質について」を記入	メンバー	未着手	1月8日	1月8日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	商品ページ依頼準備（LP依頼シート）	管理者	未着手	1月12日	1月12日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	未着手	1月13日	1月13日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	商品ページチェック・修正依頼	管理者	未着手	1月26日	1月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	PRO FUN-CREATORにページ共有	管理者	未着手	1月26日	1月26日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	1月29日	1月29日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	楽天に出品	Webマーケ	未着手	2月5日	2月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	Amazonに出品	Webマーケ	未着手	2月5日	2月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	giftmallに出品	Webマーケ	未着手	2月5日	2月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	Yahoo!に出品	Webマーケ	未着手	2月5日	2月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	売上集計（2週間後）→準備シートに記録	メンバー	未着手	2月12日	2月12日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+アクスタ名札（名刺）※会社員名刺としては売れない。LOVOT売れる。	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手	3月29日	4月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						19.75	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	2月発売
+	3月発売
+	定期便 アクリルスタンド						←終了したらグループを折り畳む
+定期便 アクリルスタンド	競合調査	管理者	完了	6月30日	6月30日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	ターゲット選定	管理者	完了	6月30日	6月30日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	ニーズまとめ	管理者	完了	6月30日	6月30日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	注文方法、作成方法を検討	商品開発部	未着手	2月2日	2月8日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	差別化	管理者	未着手	2月9日	2月9日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	販売価格の決定	管理者	未着手	2月9日	2月9日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	目標設定	管理者	未着手	2月10日	2月10日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	コンセプトまとめ	管理者	未着手	2月10日	2月10日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	社長の確認	管理者	未着手	2月12日	2月12日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	作成方法を生産部（生産管理者）と打合せ	商品開発部	未着手	2月15日	2月15日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	作成方法の詳細・生産の流れ確定	生産部	未着手	2月16日	2月22日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	発売日確定・PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	未着手	2月24日	2月24日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	未着手	2月22日	2月22日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	商品内容を調整	商品開発部	未着手	2月24日	2月25日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	未着手	2月26日	2月26日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	商品ページ依頼準備（LP依頼シート）	管理者	未着手	3月1日	3月1日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	未着手	3月2日	3月2日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	商品ページチェック・修正依頼	管理者	未着手	3月16日	3月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	PRO FUN-CREATORにページ共有	管理者	未着手	3月16日	3月16日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	3月19日	3月19日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+定期便 アクリルスタンド	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						12.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	お名前ポエムグッズ（アクロスティック）						←終了したらグループを折り畳む
+お名前ポエムグッズ（アクロスティック）	商品決定の根拠などを商品開発部内に共有	管理者	完了				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	競合調査	メンバー	完了	3月16日	3月16日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	ターゲット選定	メンバー	完了	3月17日	3月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	ニーズまとめ	メンバー	完了	3月17日	3月17日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	商品ラインナップ、商品名を検討	メンバー	完了	3月19日	3月19日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	注文方法、作成方法を検討	商品開発部	完了			2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	社長の確認（ラインナップについて）	商品開発部	完了	3月24日	3月24日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	差別化	商品開発部	完了	3月27日	3月27日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	目標設定	管理者	完了	3月27日	3月27日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	販売価格の決定	管理者	完了	6月9日	6月9日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	コンセプトまとめ	管理者	完了	6月9日	6月9日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	お名前ポエムメーカーの調整	商品開発部	完了	7月9日	7月9日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	お名前ポエムメーカーの費用概算	管理者	完了	7月27日	7月27日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	運用方法や費用についてミーティング（社長）	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	商品ページ依頼準備（LP依頼シート）	管理者	未着手			2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	作成方法を生産部（生産管理者）と打合せ→生産の流れ確定	商品開発部	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリングを招集	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	generate.js を本番用に差し替える	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	Webマーケ部（Web管理者）と打合せ・ページ依頼	商品開発部	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	PRO FUN-CREATORにオフラインで商品情報共有＆ヒアリング	商品開発部	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	商品内容を最終調整	商品開発部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	PRO FUN-CREATORヒアリング内容のフィードバック	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	商品ページチェック・修正依頼	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	PRO FUN-CREATORにページ共有	管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	テスト注文依頼＆チェック・販売開始・全体に周知・マスタ更新	管理者	未着手	3月26日	3月26日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	giftmallに出品	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	売上集計（2週間後）→準備シートに記録	メンバー	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+お名前ポエムグッズ（アクロスティック）	生産の問題点を確認（2か月後）→解決とフィードバックをプラン	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+						15.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	4月発売
+	商品発売以外のタスク
+	進捗共有
+進捗共有	★今週の全体感を商品開発部内で共有★	商品開発部	取組み中	9月24日	9月24日	0.5	FALSE	FALSE	FALSE	FALSE	TRUE	FALSE	FALSE
+進捗共有	★2週間後までの発売予定を全体に共有★	管理者	取組み中	9月18日	9月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+進捗共有	★FUN-Meeting（商品開発×Webマーケ - 進捗報告）★　	商品開発部	取組み中	9月29日	9月29日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	4か月目標作成
+	AI活用・商品開発プロセスの仕組み化
+AI活用・商品開発プロセスの仕組み化	AIで効率化できる商品開発業務を洗い出す。	管理者	完了	6月30日	6月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	AI効率化による削減時間が20時間以上となるよう、効率化対象業務を選定する。	管理者	完了	6月30日	6月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	商品開発マニュアルv2の改訂版（AI活用手順を組み込み）を作成	管理者	完了	7月2日	7月31日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	AI活用による月間削減時間を集計（石原）	管理者	未着手	8月31日	8月31日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	自分が担当している業務の記録を作業単位で現状工数を記録する	メンバー	未着手	6月22日	6月30日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	AI効率化による削減時間が5時間以上となるようAI利用手順を作成	メンバー	未着手	7月2日	7月31日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+AI活用・商品開発プロセスの仕組み化	AI活用による月間削減時間を集計（増地）	メンバー	未着手	8月31日	8月31日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	新商品・新ラインナップのリリース量最大化
+新商品・新ラインナップのリリース量最大化	アイデアリストから4月までの開発商品を仮設定	管理者	完了	8月31日	9月1日	3	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	4月までの開発商品を決定する	商品開発部	未着手	9月18日	9月18日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	主に長寿・婚礼・出産テーマでセット商品候補を出し、販売する4件を決定する。	商品開発部	未着手	7月9日	7月9日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	既成デザインアイデア候補を既存商品・過去企画からアイデア候補を洗い出す	メンバー	未着手	7月3日	7月3日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	AIを使って追加候補を出し、内容を整理する	メンバー	未着手	7月3日	7月3日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	商品化検討リスト作成・報告	メンバー	未着手	6月29日	7月3日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	高額商品候補をAIを使って追加候補を出し、内容を整理する	メンバー	未着手	7月6日	7月17日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	高額商品商品化検討リスト作成・報告	メンバー	未着手	8月3日	8月7日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	アイデアリストの追加（高額商品候補20件）	メンバー	未着手	8月10日	8月28日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+新商品・新ラインナップのリリース量最大化	アイデアリストの追加（既成デザイン商品20件）	メンバー	未着手	8月10日	8月28日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	BtoB・データ入稿商品の販売基盤整備
+BtoB・データ入稿商品の販売基盤整備	【BtoB】対象商品一覧（対応チェックボックス付き）作成→生産・Webに共有	管理者	完了	6月26日	6月26日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】BtoB向け商品の料金表を作成し、社長に確認する。	管理者	未着手	9月18日	9月18日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】BtoBページ作成のため優先順位をつける（除外商品は最小限で検討可）	管理者	未着手	9月24日	9月25日	1	FALSE	FALSE	FALSE	FALSE	TRUE	TRUE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】Webdeco（同デザイン）の5個以上オーダー価格ルールを決める	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【データ入稿】商品タイプごとのデータ入稿用テンプレートの作成	生産部	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】①アクスタ②アクキーの価格設定（再）の社長確認フィードバック	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】①アクスタ②アクキー テンプレ完成　※見本・詳細説明を入れる　→宇都野さんへ	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+BtoB・データ入稿商品の販売基盤整備	【BtoB】①アクスタ②アクキーの販売開始	Webマーケ	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	市場調査・販売データ・企画判断のPDCA化
+市場調査・販売データ・企画判断のPDCA化	販売済み商品集計CSVを作成する。→毎週レポート	管理者	完了				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+市場調査・販売データ・企画判断のPDCA化	SNSモニタリング対象を整理し、候補抽出基準を決める。	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+市場調査・販売データ・企画判断のPDCA化	国内人気急上昇アイドル候補リストを作成する。	メンバー	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+							FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	Amazon
+Amazon	Amazon.comGTIN免除を確認	管理者	完了	9月9日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ）商品登録を完了	管理者	完了	9月9日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ）バーコード作成、貼り付け、梱包	管理者	完了	9月11日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ）納品プラン作成、SipperMakerで転送依頼	管理者	完了	9月11日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ）グローバルブランドに発送	管理者	完了	9月11日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA納品マニュアル作成	管理者	完了	9月11日	9月11日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）在庫作成依頼	管理者	完了	11月7日	11月7日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）JANコード付与	管理者	完了	11月7日	11月7日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）商品登録	管理者	完了	11月10日	11月10日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（カラーシール）在庫作成依頼　※折れ対策の相談	管理者	完了	11月10日	11月11日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（カラーシール）JANコード付与	管理者	完了	11月11日	11月11日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）商品画像を作成、登録	メンバー	完了	11月14日	11月14日	2	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）バーコード作成、貼り付け、梱包	管理者	完了	11月18日	11月18日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）納品プラン作成	管理者	完了	11月18日	11月18日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）SipperMakerで転送依頼	管理者	完了	11月18日	11月18日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）グローバルブランドに発送	管理者	完了	11月18日	11月18日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（うちわキット）追跡番号をSipperMaker→セラセンに転記	管理者	完了	11月20日	11月20日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	アメリカ・カナダ・メキシコの会計処理についてMTG	管理者	完了	1月30日	1月30日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	同梱チラシの検討	管理者	完了	3月12日	3月12日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	同梱チラシ作成	管理者	完了	3月12日	3月12日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ追加）バーコード作成、貼り付け、梱包	管理者	完了	5月29日	5月29日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ追加）納品プラン作成、SipperMakerで転送依頼	管理者	完了	6月1日	6月1日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ追加）グローバルブランドに発送	管理者	完了	6月4日	6月4日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	Amazon.com用のFBA商品（黒うちわ追加）追跡番号をSipperMaker→セラセンに転記	管理者	完了	6月11日	6月11日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon
+Amazon	リードタイム変更をWebチームに権限委譲	管理者	未着手			0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon		管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+Amazon	来年の祝日設定（セラーセントラルにて）をWebチームに権限委譲	管理者	未着手	12月22日	12月22日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+		管理者	未着手			0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+	【旧商品の修正・生産からの要望】
+【旧商品の修正・生産からの要望】	缶バッジ　シミュレーションの注記画像追加依頼	メンバー	完了	8月19日	8月20日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	冷感タオルMサイズ出力データ修正依頼	管理者	完了	8月29日	8月29日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	FBA国旗シール120ヵ国を130ヵ国に登録情報修正→130ヵ国を納品の依頼	管理者	完了	9月5日	9月5日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	ボイスアクスタの音声ファイル形式「MP3」のみと追記	管理者	完了	9月16日	9月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	iPhoneスキンシール15以降の穴を修正	メンバー	完了	10月17日	10月17日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	タペストリー（スタンダード）612*1212のポールのガイドを広くする依頼	管理者	完了	12月25日	12月25日	0.25	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	Webdecoユニフォーム柔道　水色帯を追加	メンバー	完了	2月24日	2月24日	0.5	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	アイロン系にサムネ付ける　テクノア依頼→納期を佐藤さんへ	管理者	完了	4月16日	4月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	野球マウスパッド　首元のタグ　メインビジュアル修正	Webマーケ	完了	4月16日	4月16日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	マルチケース剣道・弓道テンプレート修正　→全店ページ修正依頼	パートさん	完了	4月17日	4月17日		FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	訳あり商品登録のトレーニング→知名さんへ	管理者	完了	9月3日	9月3日	1	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	アイロン系（全面）の出力時アートボードサイズ変更依頼（テクノアへ）	メンバー	未着手	9月25日	9月25日		FALSE	FALSE	FALSE	FALSE	FALSE	TRUE	FALSE
+【旧商品の修正・生産からの要望】	国旗グッズを全店展開（国を絞る・アイテムを絞る）※香港追加なども	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	フリーカットの特殊オーダー窓口ページ設置　アクスタ以外も	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	ユニフォームフルオーダーのモール価格（デザイン料もととれない）対応策検討	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	デザイン識別方法検討（主にタオル系商品）	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+【旧商品の修正・生産からの要望】	円相（おススメ画像を追加する（文字数1.2文字））	管理者	未着手				FALSE	FALSE	FALSE	FALSE	FALSE	FALSE	FALSE
+
+	この行の上に新しい行を挿入する

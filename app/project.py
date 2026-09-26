@@ -82,7 +82,7 @@ def flow(code: str | None) -> dict | None:
 
 
 # ── 作る ──────────────────────────────────────────────
-def create(user_id: str, **f) -> dict:
+def create(user_id: str, expand: bool = True, **f) -> dict:
     """案件を1件。**テンプレートがあれば同時に展開する。**
 
     ⑦ページリニューアルは種データに標準タスクが1行も無い。
@@ -129,7 +129,9 @@ def create(user_id: str, **f) -> dict:
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,"
                   "what) VALUES (?,?,?,?)",
                   (pid, store.now_s(), user_id, "起票"))
-    n = expand_tasks(pid, user_id)
+    # 移行（進捗管理シートから実タスクを持ち込む）では展開しない。
+    # 展開すると、実際に消化した137件の完了と、雛形の未着手が二重に並ぶ
+    n = expand_tasks(pid, user_id) if expand else 0
     return {"id": pid, "tasks_created": n,
             "template_defined": bool(fl and fl["has_template"])}
 
