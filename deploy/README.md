@@ -72,7 +72,25 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
 5. `cp deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup`（04:15）
    **`backup.sh` の置き場を 700 にしない。**755 でないと watchdog の glob から見えず、
    **警報も出ないまま監視から外れる**（2026-09-21 実測）
-6. `/opt/accounts/roles/newproduct.json` に利用者を登録（Calendar の画面から）
+6. `/opt/accounts/roles/newproduct.json` に利用者を登録。**Calendar の画面にはこの設定は無い**
+   （2026-09-27 実測: calfc の `/api/accounts/*` はパスワードと停止だけ。`roles/` を書くコードは無い）。
+   **root がファイルを直接編集する。**中身は `{"共通ID": "admin" か "user"}` の1段の辞書。
+   共通IDは `/opt/accounts/users.json` に**先に居る人**だけ（人の追加はカレンダーの管理画面）。
+
+   ```bash
+   sudo python3 - <<'EOF'
+   import json, os, tempfile
+   p = "/opt/accounts/roles/newproduct.json"
+   d = json.load(open(p))
+   d.update({"tsubasa": "admin", "yukiho": "user"})   # ← 足す人
+   fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p)); os.write(fd, json.dumps(d, ensure_ascii=False, indent=2).encode()); os.close(fd)
+   os.chmod(tmp, 0o640); os.replace(tmp, p)
+   os.system(f"chgrp funcreate-auth {p}")
+   EOF
+   ```
+
+   **所有者 root・グループ funcreate-auth・0640 を崩さない**（アプリが読めなくなる）。
+   ログイン中の人には次のリクエストから効く（再起動は不要）
 
 ## 戻す
 
