@@ -72,10 +72,7 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
 5. `cp deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup`（04:15）
    **`backup.sh` の置き場を 700 にしない。**755 でないと watchdog の glob から見えず、
    **警報も出ないまま監視から外れる**（2026-09-21 実測）
-6. 利用者を足す。**ログインを決めているのは `config/users.json`**（`auth.USERS_PATH`）。
-   **`/opt/accounts/roles/newproduct.json` は誰も読まない写し**で、足しても入れない
-   （2026-09-27 に Calendar セッションの指摘で判明。09-21 に私が手で書いたもの。
-   **「Calendar の画面から」も誤り**で、画面には無い）。
+6. 利用者を足す。**いまログインを決めているのは `config/users.json`**（`auth.USERS_PATH`）。
 
    ```bash
    sudo -u newproduct python3 tools/add_user.py --list                # 共通台帳とこのアプリの差
@@ -87,6 +84,15 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
    - 合言葉の照合は共通台帳が行う。`config/users.json` の `password` は使われない
      （道具は誰も知らないでたらめな合言葉のダイジェストを入れる。**JSON を手で書かない**）
    - 再起動は不要。次のログインから効く
+
+   **これから変わること（2026-09-27〜）**: 利用許可の正を **`/opt/accounts/roles/newproduct.json`** に
+   一本化する仕組みが Calendar にできた（カレンダーの ☰ →「人とアプリ」で付け外し）。
+   **取り込み順は ①LP SCOPE ②経営（keiei）③NEW PRODUCT。**newproduct の `auth.py` は
+   lpscope → keiei → newproduct の複製（`tests/test_upstream.py`）なので、**上流に層が入ってから写す**。
+   写したら VPS で `python3 /opt/calfc/tools/roles_reconcile.py --sync newproduct` →
+   `--enforce newproduct`（層が無い／締め出しが残る場合は道具が断る）。
+   **それまでは上の `add_user.py` が正しい手順。**`roles/newproduct.json` は消さない
+   （切り替えた時点で正になる。いまはカレンダーの画面が書き込む先）
    - 業務ロール（生産部など・ゲートの承認資格）は別軸: `tools/grant_role.py`
 
 ## 戻す

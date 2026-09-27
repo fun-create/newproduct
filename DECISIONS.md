@@ -1018,3 +1018,33 @@ Auto GROWTH が `POST/GET http://127.0.0.1:8789/api/ai-usage` を配備（`ac416
 **影響**: FR-38（F-4-8）未着手→実装済／FR-82 に移行の注記／FR-47 に74件
 **根拠**: `tools/import_plan2026.py` `tools/import_ledger.py` `migrations/014_migration_keys.sql` ／
 `tests/test_migration.py` 12件 ／ 確認表 `docs/product-dev/2026-09-26_移行前の確認_*.md`
+
+---
+
+## ADR-041 — 利用者の台帳を2度取り違えた。**いまの正は `config/users.json`、将来は `roles/`**（2026-09-27）
+
+**取り違え**:
+1. 09-21〜26 の手順書「`roles/newproduct.json` に Calendar の画面から登録」—— **画面は無かった**
+2. 09-27 朝の訂正「`roles/newproduct.json` を root で直接編集」—— **ログインを決めているのは
+   `config/users.json`**（`auth.py:70`）。`roles/` を読むコードは6アプリのどこにも無かった
+   （Calendar セッションの指摘）
+
+**2度とも、実物（コード）を確かめずに手順を書いた。**設置時の想定をそのまま手順にしていた。
+
+**直したこと**: `tools/add_user.py` を新設（`auth.create()` を通す＝錠・世代・0600）。
+共通台帳に居る人だけ足せる。共通ログインでは照合が共通台帳なので、ローカルには
+誰も知らないダイジェストだけが入る。本番の Python で検査4件が通った。
+
+**これから**: 十文字さんの決定（Calendar セッションで直接・09-27）で、利用許可の正を
+`/opt/accounts/roles/<app>.json` に一本化する仕組みが Calendar にできた。
+**取り込み順は ①LP SCOPE ②keiei ③NEW PRODUCT**（`auth.py` の複製の系統に合わせる。
+先に newproduct だけ入れると `tests/test_upstream.py` が落ち、共通ルール §6
+「下流で直接編集しない」にも反する。差分も `session_of()` で当たらなかった）。
+上流に入ってから写し、`roles_reconcile.py --sync` → `--enforce` で切り替える。
+
+**業務ロール（生産部など・`role_member`）は newproduct に残す。**`roles/` が持つのは
+「使えるか」と「admin / user」だけ。
+
+**影響**: FR-02（認証は上流の複製）・運用手順
+**根拠**: `auth.py:70` ／ `tools/add_user.py` ／ `tests/test_add_user.py` ／
+Calendar `docs/2026-09-27_利用許可をroles_に一本化_各アプリの取り込み.md`
