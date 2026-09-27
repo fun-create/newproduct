@@ -19,7 +19,7 @@
 | 実データ | アイデア **881件**・機会 **年間53＋ライフ31件**（採点19）・自動化依頼15件。**2026-09-26 移行**: 年間プラン2026年度 **26枠（策定中）**・案件 **20件**（発売済2・開発中18）・実タスク **310件**・案件外の仕事 **74件**。**準備シートの本文（カルテの節）は未移行** |
 | 〜~~`/api/ai-usage` の口~~ | — | **2026-09-25 解消** | FR-146 実装済。`app/ai_budget.py` で疎通済（cap 5.0）。**モデルを呼ぶ実装はまだ無い** |
 | ChatWork | **未設定。**`config/chatwork.env` と `automation.chatwork_room_id` を置くまで送らない |
-| 利用者 | `masateru`（アプリ権限 `admin`）**1名のみ** |
+| 利用者 | **13名**（2026-09-27 十文字さん指示「tsubasa以外はuserで」）。`admin` は `masateru`・`tsubasa`、他11名は `user` |
 | バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に**5世代** |
 | テスト | `selfcheck.py` **144件**（本番）・`tests/` **187件**・`tests/e2e_http.py` 失敗0 |
 
@@ -123,7 +123,7 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。減衰は**こちら側**でかける（FR-137） |
 | **旧ダッシュボード `fun-create.co.jp/fctr/` の撤去** | 十文字さん | **2026-09-24 から** | FR-81。**乱数由来の「月商見込」（最大 ¥1.6億）が、担当者名つきの実行計画の体裁で載ったまま**配信されている。実測 401（Basic認証）だが、パスワードは ChatWork 2部屋へ配布済。消す実体は `index.html` と `dashboard.html` の2本。**承認が出れば Auto GROWTH が差し替える** |
 | **ChatWork のトークンと部屋ID** | 十文字さん | **2026-09-24 から** | FR-171。`config/chatwork.env`（`CHATWORK_API_TOKEN=…`・600・所有者 newproduct）と 設定 `automation.chatwork_room_id`。**他アプリのトークンは写さない**（どのアプリが投げたか分からなくなり、片方を止めると両方止まる）。置くまで送信は断り、理由を画面に出す |
-| **利用者の登録** | 十文字さん（誰かを決める）→ new-product が入れる | 2026-09-20 から | いま使えるのは `masateru` 1名。**いまの正は `config/users.json`**、足すのは `tools/add_user.py`。共通台帳の13名のうち誰を、が未回答。**利用許可を `roles/` に一本化する仕組みが Calendar にでき**（09-27）、取り込み順は ①LP SCOPE ②keiei ③NEW PRODUCT。**上流に入ってから写す**（`deploy/README.md` 6） |
+| **利用者の登録** | 済（2026-09-27） | — | 共通台帳の13名を全員登録。`admin` は masateru・tsubasa、残り11名 `user`（十文字さん「tsubasa以外はuserで」。masateru は元から admin なので据え置き）。**いまの正は `config/users.json`**、足し外しは `tools/add_user.py`。`roles/` への一本化は ①LP SCOPE ②keiei ③NEW PRODUCT の順で、**上流に入ってから写す**（`deploy/README.md` 6） |
 
 ---
 
