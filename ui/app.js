@@ -614,6 +614,7 @@
       var row = el("p", null, [lab, input]);
       if (fd.hint) row.appendChild(el("span", { "class": "np-sub", text: " " + fd.hint }));
       f.appendChild(row);
+      if (fd.key === "copy_recipe_from" && o.configured && o.editable) f.appendChild(similarPicker(pid, f, input));
     });
     if (o.vocab.cat1 === null) f.appendChild(el("p", { "class": "np-sub",
       text: "分類は、seisan の登録口ができるまで既存の値と照らせません。seisan の画面の表記どおりに入れてください。" }));
@@ -668,6 +669,33 @@
       });
       w.appendChild(g);
     }
+    return w;
+  }
+
+  /** レシピ複製元を、seisan の既存商品から分類で探して選ぶ。**商品名は出ない**（seisan が返さない）。 */
+  function similarPicker(pid, f, input) {
+    var w = el("div");
+    var btn = el("button", { type: "button", text: "似ている商品を探す（上の分類で絞ります）" });
+    w.appendChild(btn);
+    btn.addEventListener("click", function () {
+      var q = ["cat1", "cat2", "cat3"].filter(function (k) { return f.elements[k].value; })
+        .map(function (k) { return k + "=" + encodeURIComponent(f.elements[k].value); });
+      while (w.childNodes.length > 1) w.removeChild(w.lastChild);
+      if (!q.length) { w.appendChild(el("p", { "class": "np-err", text: "先に大分類を選んでください" })); return; }
+      api("/api/projects/" + encodeURIComponent(pid) + "/seisan-similar?" + q.join("&")).then(function (r) {
+        if (!r.rows.length) { w.appendChild(el("p", { "class": "np-note", text: "この分類の商品は seisan にありません。" })); return; }
+        w.appendChild(el("p", { "class": "np-sub", text: r.rows.length + " 件（レシピのある商品が先。最大50件）。行の「選ぶ」で複製元に入ります。" }));
+        w.appendChild(table(["コード", "販売タイプ", "分類", "形状", "サイズ", "色", "レシピ", ""],
+          r.rows.map(function (x) {
+            var pick = el("button", { type: "button", text: "選ぶ" });
+            pick.addEventListener("click", function () { input.value = x.code; input.focus(); });
+            return el("tr", null, [el("td", { text: x.code }), el("td", { text: dash(x.sales_type) }),
+              el("td", { text: [x.cat1, x.cat2, x.cat3].filter(Boolean).join(" / ") }),
+              el("td", { text: dash(x.shape) }), el("td", { text: dash(x.size) }), el("td", { text: dash(x.color) }),
+              el("td", { text: x.has_recipe ? "あり" : "なし" }), el("td", null, [pick])]);
+          })));
+      }).catch(function (e) { w.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    });
     return w;
   }
 
