@@ -49,6 +49,7 @@ from app import idea as idea_m   # noqa: E402
 from app import plan as plan_m    # noqa: E402
 from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
+from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
 
@@ -439,6 +440,39 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "案件がありません"})
             return self.sendj(200, d)
+
+        # ── seisan への商品登録（第3段・FR-103／FR-60・ADR-043）──
+        # **マスタは持たない。正は seisan。**ここは下書きと共通商品コードだけ
+        if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("seisan"):
+            pid, what = parts[1], parts[2]
+            try:
+                if what == "seisan" and method == "GET":
+                    return self.sendj(200, seisan_m.overview(pid, uid))
+                if what == "seisan-similar" and method == "GET":
+                    return self.sendj(200, {"rows": seisan_m.similar(
+                        qs.get("cat1", ""), qs.get("cat2", ""), qs.get("cat3", ""))})
+                if method != "POST":
+                    return self.sendj(404, {"error": "not found"})
+                d = self.body()
+                vid = d.get("variant_id") or None
+                if what == "seisan-draft":
+                    r = seisan_m.save_draft(pid, vid, d, uid)
+                elif what == "seisan-register":
+                    r = seisan_m.register(pid, vid, uid)
+                elif what == "seisan-code":
+                    r = seisan_m.record_code(pid, vid, d.get("code", ""), uid)
+                elif what == "seisan-reset":
+                    r = seisan_m.reset(pid, vid, uid)
+                else:
+                    return self.sendj(404, {"error": "not found"})
+                # 監査には**商品名を残さない**（正は seisan。ここに写しを作らない）
+                store.audit(uid, "project." + what, pid,
+                            {"variant_id": vid, "code": d.get("code")}, ip)
+                return self.sendj(200, r)
+            except seisan_m.NotConfigured as e:
+                return self.sendj(409, {"error": str(e)})
+            except seisan_m.Refused as e:
+                return self.sendj(409, {"error": "seisan が断りました: " + str(e)})
 
         if len(parts) == 3 and parts[0] == "projects" and method == "POST":
             pid, what = parts[1], parts[2]

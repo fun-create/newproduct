@@ -360,6 +360,9 @@ class TestPermissions(Base):
                 v = 5.5 if col == "effort_point" else "検査"
                 store.ex(f"UPDATE project SET {col}=? WHERE id=?", (v, self.p["id"]))
                 store.conn().commit()
+            elif m["check"] == "seisan":
+                from app import seisan
+                seisan.record_code(self.p["id"], None, "TEST-" + self.p["id"], "kanri")
             elif m["check"].startswith("lines:"):
                 _, key, n = m["check"].split(":")
                 project.save_section(self.p["id"], key,

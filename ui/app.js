@@ -461,6 +461,13 @@
           })));
         b.appendChild(v);
 
+        // seisan への登録（第3段・FR-103）。**別に読む**（seisan が落ちていても案件は見える）
+        var sv = el("div", { "class": "np-card", id: "np-sec-seisan" });
+        sv.appendChild(el("h2", { text: "seisan への登録" }));
+        sv.appendChild(el("p", { "class": "np-note", text: "読み込んでいます。" }));
+        b.appendChild(sv);
+        seisanPanel(d.id, sv);
+
         // タスク
         var tv = el("div", { "class": "np-card" });
         tv.appendChild(el("h2", { text: "タスク（" + d.tasks.length + "件）" }));
@@ -530,6 +537,137 @@
         .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
     });
     w.appendChild(f);
+    return w;
+  }
+
+  /** seisan への商品登録（第3段・FR-103／FR-60・ADR-043）。
+   *  **マスタは持たない。正は seisan。**ここは「登録前の下書き」と「共通商品コード」だけ。
+   *  経路は2つ: この画面から登録する／seisan の画面で登録してコードを記録する。
+   *  **商品名の欄はこの画面だけの例外**（N-6-2）。seisan が必須とするため。
+   *  開発部が付ける名前で、お客さまの入力値ではない。登録できたら消える。 */
+  function seisanPanel(pid, box) {
+    function fail(e) {
+      box.appendChild(el("p", { "class": "np-err", text: e.message }));
+    }
+    api("/api/projects/" + encodeURIComponent(pid) + "/seisan").then(function (o) {
+      while (box.childNodes.length > 1) box.removeChild(box.lastChild);
+      box.appendChild(el("p", { "class": "np-sub",
+        text: "商品マスタは seisan が持ちます。ここで入れるのは登録前の下書きで、"
+          + "登録できたら消え、共通商品コードだけが残ります。" }));
+      if (!o.configured) box.appendChild(el("p", { "class": "np-warn",
+        text: "この画面からの登録はまだできません。" + o.why }));
+      o.targets.forEach(function (t) { box.appendChild(seisanTarget(pid, o, t)); });
+    }).catch(fail);
+  }
+
+  function seisanTarget(pid, o, t) {
+    var w = el("div", { "class": "np-field" });
+    var vid = t.variant_id === null ? "" : String(t.variant_id);
+    w.appendChild(el("h3", { text: t.label + " — " + t.state }));
+    function err(node, e) { node.appendChild(el("p", { "class": "np-err", text: e.message })); }
+
+    if (t.state === "登録済") {
+      w.appendChild(el("p", { text: "共通商品コード " + t.product_code + "（"
+        + (t.via === "newproduct" ? "この画面から登録" : "seisan の画面で登録") + "・"
+        + (t.registered_at || "") + " " + (t.registered_by || "") + "）" }));
+      w.appendChild(el("p", { "class": t.verified ? "np-note" : "np-warn",
+        text: t.verified ? "seisan に在ることを確かめました。"
+          : "seisan に在るかは未確認です（seisan の登録口ができたら、開いたときに確かめます）。" }));
+      w.appendChild(el("p", { "class": "np-sub",
+        text: "内容を直すときは seisan の画面で直してください（正は seisan）。" }));
+      if (o.can_register && o.editable) {
+        var rb = el("button", { type: "button", text: "この記録を取り消す（seisan の商品は消えません）" });
+        rb.addEventListener("click", function () {
+          if (!window.confirm("このアプリの記録だけを下書きに戻します。seisan の商品は残ります。よろしいですか")) return;
+          post("/api/projects/" + pid + "/seisan-reset", { variant_id: vid })
+            .then(function () { go(); }).catch(function (e) { err(w, e); });
+        });
+        w.appendChild(rb);
+      }
+      return w;
+    }
+
+    if (t.last_error) w.appendChild(el("p", { "class": "np-err",
+      text: "前回 seisan が断った理由: " + t.last_error }));
+
+    // 下書き。**seisan の画面と同じ並び・同じ選択肢**
+    var f = el("form");
+    o.fields.forEach(function (fd) {
+      var id = "sz-" + pid + "-" + (vid || "0") + "-" + fd.key;
+      var lab = el("label", { "for": id, text: fd.label + (fd.required ? "（必須）" : "") });
+      var cur = (t.draft && t.draft[fd.key]) || "";
+      var input;
+      var choices = fd.key === "sales_type" ? o.vocab.sales_types
+        : (/^cat[123]$/.test(fd.key) ? o.vocab[fd.key] : null);
+      if (choices) {
+        input = el("select", { id: id, name: fd.key });
+        input.appendChild(el("option", { value: "", text: "（選ぶ）" }));
+        choices.forEach(function (c) { input.appendChild(el("option", { value: c, text: c })); });
+        if (cur && choices.indexOf(cur) < 0)
+          input.appendChild(el("option", { value: cur, text: cur + "（seisan に無い値）" }));
+        input.value = cur;
+      } else {
+        input = el("input", { id: id, name: fd.key, maxlength: "200" });
+        input.value = cur;
+      }
+      if (!o.editable) input.setAttribute("disabled", "disabled");
+      var row = el("p", null, [lab, input]);
+      if (fd.hint) row.appendChild(el("span", { "class": "np-sub", text: " " + fd.hint }));
+      f.appendChild(row);
+    });
+    if (o.vocab.cat1 === null) f.appendChild(el("p", { "class": "np-sub",
+      text: "分類は、seisan の登録口ができるまで既存の値と照らせません。seisan の画面の表記どおりに入れてください。" }));
+
+    var list = t.errors.map(function (m) { return el("li", { text: "止まる: " + m }); })
+      .concat(t.warnings.map(function (m) { return el("li", { text: "注意: " + m }); }));
+    if (list.length) f.appendChild(el("ul", { "class": "np-miss" }, list));
+
+    var bar = el("p", { "class": "np-sub" });
+    if (o.editable) bar.appendChild(el("button", { type: "submit", text: "下書きを保存" }));
+    var reg = el("button", { type: "button", text: "seisan に登録する" });
+    var why = !o.configured ? "（seisan の登録口がまだありません）"
+      : !o.can_register ? "（G5 を判定できる業務ロールの人だけが登録できます）"
+      : t.state === "未着手" ? "（先に下書きを保存してください）"
+      : t.errors.length ? "（止まる項目を直してください）" : "";
+    if (why || !o.editable) reg.setAttribute("disabled", "disabled");
+    bar.appendChild(txt(" "));
+    bar.appendChild(reg);
+    if (why) bar.appendChild(txt(" " + why));
+    f.appendChild(bar);
+
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var obj = { variant_id: vid };
+      o.fields.forEach(function (fd) { obj[fd.key] = f.elements[fd.key].value; });
+      post("/api/projects/" + pid + "/seisan-draft", obj)
+        .then(function () { go(); }).catch(function (e) { err(bar, e); });
+    });
+    reg.addEventListener("click", function () {
+      var code = (t.draft && t.draft.code) || "";
+      if (!window.confirm("保存済みの下書きで、seisan に共通商品コード「" + code
+        + "」を登録します。seisan の商品マスタに入り、取り消しは seisan の画面で行います。よろしいですか")) return;
+      post("/api/projects/" + pid + "/seisan-register", { variant_id: vid })
+        .then(function (r) {
+          if (r.copy_error) window.alert("登録しました。ただしレシピの複製は失敗しました: " + r.copy_error);
+          go();
+        }).catch(function (e) { err(bar, e); });
+    });
+    w.appendChild(f);
+
+    // もう1つの経路: seisan の画面で登録した
+    if (o.can_register && o.editable) {
+      var g = el("form", { "class": "np-inline" });
+      var cid = "szc-" + pid + "-" + (vid || "0");
+      g.appendChild(el("label", { "for": cid, text: "seisan の画面で登録した場合 — 共通商品コード " }));
+      g.appendChild(el("input", { id: cid, name: "code", maxlength: "64" }));
+      g.appendChild(el("button", { type: "submit", text: "記録する" }));
+      g.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        post("/api/projects/" + pid + "/seisan-code", { variant_id: vid, code: g.elements.code.value })
+          .then(function () { go(); }).catch(function (e) { err(g, e); });
+      });
+      w.appendChild(g);
+    }
     return w;
   }
 

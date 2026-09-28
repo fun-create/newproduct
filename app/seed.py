@@ -102,6 +102,7 @@ def _item(key, label, check, goto, stage=None, hint=None):
 #   lines:<節キー>:<n>  … その節に空でない行が n 行以上ある
 #   variants:<n>        … バリエーションが n 件以上ある
 #   manual              … **このアプリがまだ持っていないデータ。**人が確認した記録を見る
+#   seisan              … seisan への登録が全対象（バリエーション）で済んでいる（第3段）
 GATES = [
     ("G0", 0, "起票", ["devdept", "admin", "member", "president"], ALL_FLOWS, [
         _item("internal_name", "商品案名（社内呼称）", "project:internal_name", "A"),
@@ -154,8 +155,8 @@ GATES = [
     ("G5", 5, "発売可", ["admin"], ALL_FLOWS, [
         _item("testorder", "テスト注文チェック済み", "manual", "F"),
         _item("lp", "商品ページ公開確認", "section:F.lp", "F"),
-        _item("product_code", "Seisan の商品コード確定", "manual", "F", "第3段",
-              "F-6-7。口頭ではなく連携（F-12）の完了をもって判定します"),
+        _item("product_code", "Seisan の商品コード確定", "seisan", "seisan", None,
+              "F-6-7。この画面から seisan へ登録するか、seisan で登録したコードを記録すると埋まります"),
         _item("goal_entered", "年間目標が入力済み", "manual", "D", "第4段"),
         _item("announce", "全体周知済み", "manual", "F"),
         _item("profc", "PRO FUN-CREATOR 共有済み", "manual", "F"),

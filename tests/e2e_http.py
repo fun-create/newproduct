@@ -198,6 +198,29 @@ def main() -> int:
                         {"result": "保留", "reason_code": "effort_over"})
         note(st == 200, "保留を理由つきで記録できる", f"{st} {d}")
 
+        # ── seisan への登録（第3段・ADR-043）。**本番と同じく登録口が無い状態** ──
+        st, d = cl.get(f"/api/projects/{pid}/seisan")
+        note(st == 200 and d["configured"] is False and d["targets"][0]["state"] == "未着手"
+             and len(d["vocab"]["sales_types"]) == 10,
+             "seisan 欄: 登録口が無いと言い、販売タイプ10種を出す", f"{st}")
+        st, d = cl.post(f"/api/projects/{pid}/seisan-draft",
+                        {"code": "E2E-1", "name": "E2E名前ABC", "sales_type": "定型",
+                         "cat1": "うちわ"})
+        note(st == 200, "seisan 下書きの保存", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/seisan-register", {})
+        note(st == 409 and "吉田さん" in d.get("error", ""),
+             "登録口が無いと登録を断り、理由を言う", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/seisan-code", {"code": "E2E-1"})
+        note(st == 200 and d.get("verified") is False,
+             "seisan で登録したコードを記録できる（未確認と返す）", f"{st} {d}")
+        leaked = store.val("SELECT COUNT(*) FROM audit WHERE detail LIKE ?",
+                           ("%E2E名前ABC%",), 0)
+        kept = store.val("SELECT COUNT(*) FROM seisan_registration WHERE draft_json LIKE ?",
+                         ("%E2E名前ABC%",), 0)
+        note(leaked == 0 and kept == 0,
+             "商品名が監査にも残らず、記録後は下書きも消える（正は seisan）",
+             f"audit={leaked} draft={kept}")
+
         st, d = cl.get("/api/tasks")
         note(st == 200 and d["when"] == "overdue+today",
              "/api/tasks の既定が「期限切れ＋今日」", str(st))
