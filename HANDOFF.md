@@ -135,7 +135,7 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
 
 ```
   president  masateru
-  admin      masateru, tsubasa
+  admin      masateru, tsubasa, chieko, yoko（後2名 2026-09-28）
   prod       masateru, tsubasa, risa
   devdept    yoko, chieko（2026-09-28）
 ```
