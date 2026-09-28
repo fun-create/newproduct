@@ -19,6 +19,14 @@
 ダイジェストだけが残り、照合には使われない）。`auth.create()` を通すのは、
 錠・世代・0600 を守るため。**JSON を手で書かない。**
 
+## 共通台帳の利用許可（`roles/`）に切り替えた後（2026-09-28〜）
+
+`roles/_enforced.json` に newproduct が載ったら、**入れるか・admin/user かは
+`/opt/accounts/roles/newproduct.json` が決める**（カレンダーの ☰ →「人とアプリ」）。
+そのあとは、ここで足しても役割を変えても**変わったように見えて何も効かない**ので、
+`--list` 以外は `auth.ROLES_MOVED` を出して断る（上流の経営・LP SCOPE の画面と同じ）。
+**業務上の役割（`role_member`・`tools/grant_role.py`）は引き続きこのアプリが持つ。**
+
 **共通台帳（`/opt/accounts/users.json`）に居ない人は足さない。**居ない人を
 ここに足しても、合言葉の照合ができず入れない。表示名は共通台帳から写す。
 """
@@ -65,6 +73,9 @@ def main() -> int:
     a = ap.parse_args()
 
     if a.list:
+        if auth.roles_enforced():
+            print("※ 共通台帳の利用許可に従っています。入れるかどうかは "
+                  "/opt/accounts/roles/newproduct.json が決めます（下の「このアプリ」は写し）")
         people = shared_people()
         local = {u["user_id"]: u for u in auth.users()}
         print(f"  {'ID':12} {'表示名':10} {'このアプリ':10} 共通台帳")
@@ -77,6 +88,10 @@ def main() -> int:
 
     if not a.who:
         ap.error("--who か --list を指定してください")
+    if auth.roles_enforced():
+        # **何も効かない変更をさせない。**役割は毎回 roles/ から引かれ、足した人には許可が無い
+        print(auth.ROLES_MOVED, file=sys.stderr)
+        return 2
     uid = auth.norm_user_id(a.who)
     people = shared_people()
     if auth.shared_on() and people and uid not in people:

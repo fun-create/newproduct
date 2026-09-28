@@ -1,6 +1,6 @@
 # ══════════════════════════════════════════════════════════
-# 出どころ: keiei /opt/keiei/app/auth.py（2026-09-21 取得）
-#           さらにその上流は lpscope /opt/lpscope/reports/auth.py
+# 出どころ: keiei /opt/keiei/app/auth.py（2026-09-28 取得・0cfd760）
+#           さらにその上流は lpscope /opt/lpscope/reports/auth.py（156fd16）
 # **上流をコピーしたもの**。直接編集すると、次に上流を取り込むときに
 # 食い違いが生じる。直したいときは上流を直してから持ってくる。
 # 複製元の指紋は _upstream.json にある。
@@ -391,6 +391,30 @@ def create(user_id, name, password, role="user", created_by="",
         return _public(rec), ""
 
 
+def _provision(uid, name, role):
+    """許可に従って、このアプリに記録を作る。**合言葉は持たせない**
+    （照合は共通台帳。ローカルに持たせると、共通側で変えても古いものが残る）。
+    既に在れば何もせずそれを返す。"""
+    with _LOCK:
+        doc = _read(for_write=True)
+        for u in doc["users"]:
+            if u.get("user_id") == uid:
+                return u
+        rec = {
+            "user_id": uid,
+            "name": str(name or uid).strip()[:60],
+            "role": role if role in ROLE_LABEL else "user",
+            "active": True,
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "created_by": "(利用許可から)",
+            "last_login": "",
+            "must_change": False,
+        }
+        doc["users"].append(rec)
+        _write(doc)
+        return rec
+
+
 def update(user_id, *, name=None, role=None, active=None, actor=""):
     """**`test` と `loopback_only` は受けない。作成時にしか立てられない。**
 
@@ -562,7 +586,9 @@ def public_users():
 # 持ち分を分ける:
 #   /opt/accounts/users.json … **その人が誰か**（ID・氏名・合言葉）だけ
 #   各アプリの config/users.json … **そのアプリを使えるか／どの役割か**
-# 共通台帳に載っていても、アプリの台帳に居なければ入れない。**権限は増えない。**
+#     ただし `roles/_enforced.json` にそのアプリが載ったら、使えるか／役割は
+#     `roles/<アプリ>.json` が決める（下の `role_grant()`・2026-09-27〜）
+# 共通台帳に載っていても、許可が無ければ入れない。**権限は増えない。**
 #
 # `ACCOUNTS_DIR` が無ければ**今までどおり**動く（既定は使わない側に倒す）。
 ACCOUNTS_DIR = os.environ.get("ACCOUNTS_DIR", "")
@@ -617,6 +643,83 @@ def _shared_load():
 
 def shared_get(common_id):
     return _shared_load()[0].get(common_id)
+
+
+# ── 利用許可（`roles/<app>.json`）───────────────────────────────
+# 2026-09-27 十文字さん決定: **「誰がどのアプリを使えるか」は共通台帳が正。**
+# それまでは各アプリの `config/users.json` が決めていて、`roles/` は手で写した
+# 控えだった。**読むコードはどこにも無く**、実測で3件ずれていた
+# （calfc と seisan の吉田さん・keiei の渡邊さんが控えに無かった）。
+#
+# **切り替えは明示の印に載ったアプリだけ**（`roles/_enforced.json`）。
+# `roles/<app>.json` は6アプリとも既にあるので「在れば従う」にすると、
+# この部品を入れた瞬間に一斉に切り替わり、控えとずれていた人が**黙って締め出される**。
+# 印を付けるのは照合の道具（ずれ0件を確かめてから）だけ。**外せば元の判定に戻る。**
+#
+# 印が無いアプリでは、この層は何もしない（`config/users.json` が今までどおり決める）。
+ROLE_VALUES = ("admin", "user")
+_ROLES_CACHE = {"at": 0.0, "on": None, "grants": None}
+
+
+def _roles_load():
+    """(このアプリが roles/ に従うか, {共通ID: 役割})。**読めなければ例外。**
+
+    印のファイルが**無い**のは「どのアプリも切り替えていない」で、正常。
+    **在るのに読めない**のは障害で、例外にする（黙って元の判定へ戻さない ——
+    戻すと、カレンダーで外した人が入れてしまう）。
+    """
+    now = time.time()
+    c = _ROLES_CACHE
+    if c["on"] is not None and (now - c["at"]) < SHARED_TTL:
+        return c["on"], c["grants"]
+    if not (shared_on() and AUTH_APP):
+        c.update(at=now, on=False, grants=None)
+        return False, None
+    base = os.path.join(ACCOUNTS_DIR, "roles")
+    try:
+        with open(os.path.join(base, "_enforced.json"), encoding="utf-8") as f:
+            enf = json.load(f)
+    except FileNotFoundError:
+        c.update(at=now, on=False, grants=None)
+        return False, None
+    except (OSError, ValueError) as e:
+        raise SharedUnavailable(f"利用許可の印を読めません: {e}") from e
+    if not isinstance(enf, dict) or AUTH_APP not in enf:
+        c.update(at=now, on=False, grants=None)
+        return False, None
+    try:
+        with open(os.path.join(base, AUTH_APP + ".json"), encoding="utf-8") as f:
+            g = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SharedUnavailable(f"利用許可（{AUTH_APP}）を読めません: {e}") from e
+    if not isinstance(g, dict):
+        raise SharedUnavailable(f"利用許可（{AUTH_APP}）の形が違います")
+    # **知らない値は許可として数えない**（綴り違いで管理者になる形を残さない）
+    grants = {k: v for k, v in g.items() if v in ROLE_VALUES}
+    c.update(at=now, on=True, grants=grants)
+    return True, grants
+
+
+# 切り替えた後、このアプリの画面で「追加」「権限の変更」をさせない理由。
+# **変わったように見えて何も変わらない**（役割は毎回 roles/ から引き、追加した人には
+# 許可が無いので入れない）。カレンダーが切り替え直後に踏んだ穴（2026-09-27）
+ROLES_MOVED = ("利用者の追加と権限の変更は、カレンダーの ☰ →「人とアプリ」で行ってください"
+               "（このアプリは共通台帳の利用許可に従っています）")
+
+
+def roles_enforced():
+    """このアプリが `roles/` に従っているか。**読めないときは True**
+    （従っている前提で扱う。False に倒すと、止めた人の役割が戻る）。"""
+    try:
+        return _roles_load()[0]
+    except SharedUnavailable:
+        return True
+
+
+def role_grant(common_id):
+    """(従っているか, 役割 or None)。**読めなければ例外。**"""
+    on, grants = _roles_load()
+    return on, ((grants or {}).get(common_id) if on else None)
 
 
 def _test_local(uid):
@@ -883,6 +986,25 @@ def login(user_id, password, ip=""):
         rec = get(uid)
     except LedgerCorrupt:
         return None, "利用者台帳が読めません。管理者にご連絡ください"
+
+    # **利用許可（roles/）に従うアプリでは、許可が無ければ入れない。**
+    # 理由は画面に出さない（「そのIDは在る」を漏らさない）。journal には出す。
+    grant, no_grant = None, False
+    if shared_on() and not _test_local(typed) and pwrec is not None:
+        try:
+            enforced, grant = role_grant(typed)
+        except SharedUnavailable:
+            return None, "ログインの台帳が読めません。管理者にご連絡ください"
+        if enforced and grant is None:
+            pwrec, no_grant = None, True
+        elif enforced and rec is None and pwrec.get("active", True) \
+                and verify_password(pwrec, password or ""):
+            # **許可はあるが、このアプリにまだ記録が無い人。** 画面で許可を付けた
+            # だけの人がここに来る。**合言葉を確かめてから作る** —— 先に作ると、
+            # 名前を当てるだけで誰でもこのアプリに記録を作れてしまう。
+            # 合言葉は共通台帳にあるので、ローカルには持たせない
+            rec = _provision(uid, pwrec.get("name") or typed, grant)
+
     if pwrec is None and not shared_on():
         pwrec = rec
     elif _test_local(typed):
@@ -906,7 +1028,8 @@ def login(user_id, password, ip=""):
         # **利用者への文言は変えない。**理由を出すと「そのIDは在る」が漏れる。
         # ただし運用側は「なぜ入れないか」を即答できる必要がある。
         # 止められた人・割り当ての無い人と、ただの入力ミスが、画面では見分けられない
-        _note_denied(typed, _deny_reason(rec, pwrec, alive))
+        _note_denied(typed, "このアプリの利用許可がありません（roles/）"
+                     if no_grant else _deny_reason(rec, pwrec, alive))
         n, _ = _FAILS.get(typed, (0, 0.0))
         _FAILS[typed] = (n + 1, time.time())
         _shared_fail_bump(typed)
@@ -934,6 +1057,11 @@ def login(user_id, password, ip=""):
             for u in doc["users"]:
                 if u.get("user_id") == uid:
                     u["last_login"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                    # **役割は許可に揃える。** 画面の一覧（このアプリの台帳）が
+                    # 古い役割を出し続けないように。判定そのものは session_of が
+                    # 毎回許可から引くので、ここが遅れても権限はずれない
+                    if grant and u.get("role") != grant:
+                        u["role"] = grant
             _write(doc)
     except LedgerCorrupt:
         # **最終ログインが書けないだけでログインを止めない。**
@@ -1019,6 +1147,15 @@ def session_of(sid):
         _SESSIONS.pop(h, None)
         _persist()
         return None, None
+    # **役割は許可から引く**（従っているアプリだけ）。画面で「一般」に変えたら、
+    # ログインし直さなくても次の操作から一般になる。読めないときは手元の役割のまま
+    # （読めない一瞬で全員の管理者権限が外れる形にしない）
+    try:
+        on, g = role_grant(_local_to_common(s["user_id"]) or s["user_id"])
+    except SharedUnavailable:
+        on, g = False, None
+    if on and g and u.get("role") != g:
+        u = dict(u, role=g)
     s["expires"] = time.time() + SESSION_TTL      # 操作のたびに延長（無操作で切れる）
     return s, _public(u)
 
@@ -1052,6 +1189,15 @@ def _shared_allows(s):
         # **剥奪は必ず `active=false`。map の削除だけで済ませない。**
         return True
     if not rec.get("active", True):
+        return False
+    # **許可を外したら、生きているセッションも切る。** 既定は「ログアウトするまで
+    # 入ったまま」なので、ここで切らないと、外しても何日も使えてしまう。
+    # 読めないときは切らない（上の方針と同じ。一瞬で全員が切れる形にしない）
+    try:
+        on, g = role_grant(cid)
+    except SharedUnavailable:
+        on, g = False, None
+    if on and g is None:
         return False
     changed = rec.get("password_changed_at") or ""
     if not changed:

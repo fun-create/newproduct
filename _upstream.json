@@ -1,17 +1,18 @@
 {
   "_note": "上流からコピーしたファイルの指紋。上流が変わったら tests/test_upstream.py が知らせる。newproduct 側で直接編集しないこと。local_edits は tests/test_upstream.py の ALLOWED_EDITS と1対1。片方だけ増やすと検査が落ちる。",
-  "taken_at": "2026-09-21",
+  "taken_at": "2026-09-28",
   "upstream": "/opt/keiei/app/",
-  "upstream_origin": "lpscope /opt/lpscope/reports/ （keiei が 2026-09-16 に取得したもの）",
+  "upstream_origin": "lpscope /opt/lpscope/reports/ （156fd16・keiei が 2026-09-28 に取得したもの）",
   "files": {
-    "auth.py": "7bcee1414e4e4ab4865e0e70413ad3b5a766f474f5e8616cdf8b9d3b1b67391b"
+    "auth.py": "cce5fd2429c78c5ecdf3e80c3532b6864878960d4042ff5febe195927a0ac4eb"
   },
   "local_edits": {
     "auth.py": [
-      "先頭コメント: 出どころの記述を keiei 経由に書き換え（2026-09-21 追記。挙動には影響しないが差分としては出る）",
+      "先頭コメント: 出どころの記述を keiei 経由に書き換え（2026-09-21 から。2026-09-28 の取り込みで 0cfd760・156fd16 に更新。挙動には影響しないが差分としては出る）",
       "CONFIG: parent.parent -> parent（keiei は app/auth.py・本アプリは直下 auth.py）",
       "SESSION_COOKIE: keiei_sid -> newproduct_sid",
       "CSRF_HEADER: X-KEIEI-CSRF -> X-NEWPRODUCT-CSRF"
     ]
-  }
+  },
+  "upstream_commit": "0cfd760"
 }

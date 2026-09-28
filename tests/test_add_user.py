@@ -90,6 +90,27 @@ class TestAddUser(unittest.TestCase):
         self.run_tool("--who", "yoko", "--role", "user")
         self.assertEqual(sum(1 for u in self.auth.users() if u["user_id"] == "yoko"), 1)
 
+    def test_after_roles_switch_changes_are_refused(self):
+        """切り替え後は、ここで足しても役割を変えても**何も効かない**。だから断る。"""
+        self.run_tool("--who", "masateru", "--role", "admin")
+        roles = self.tmp / "accounts" / "roles"
+        roles.mkdir()
+        (roles / "newproduct.json").write_text(json.dumps({"masateru": "admin"}), encoding="utf-8")
+        (roles / "_enforced.json").write_text(json.dumps({"newproduct": "2026-09-28"}),
+                                             encoding="utf-8")
+        self.auth._ROLES_CACHE.update(at=0.0, on=None, grants=None)
+        self.assertTrue(self.auth.roles_enforced())
+        self.assertEqual(self.run_tool("--who", "yoko", "--role", "user"), 2)
+        self.assertIsNone(self.auth.get("yoko"), "足していない")
+        self.assertEqual(self.run_tool("--who", "masateru", "--role", "user"), 2)
+        self.assertEqual(self.auth.get("masateru")["role"], "admin", "役割も変えていない")
+        self.assertEqual(self.run_tool("--who", "masateru", "--off"), 2)
+        self.assertEqual(self.run_tool("--list"), 0, "一覧は見られる")
+        # 印を外せば元どおり（戻せる）
+        (roles / "_enforced.json").write_text("{}", encoding="utf-8")
+        self.auth._ROLES_CACHE.update(at=0.0, on=None, grants=None)
+        self.assertEqual(self.run_tool("--who", "yoko", "--role", "user"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
