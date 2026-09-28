@@ -1107,3 +1107,18 @@ actor が seisan の管理者でなければ 403・監査に「NEW PRODUCT 経�
 （変更前は外から 403＝アプリだけで断っていた。変更後 404。画面 200・`/api/me` 401 は不変）、
 `config/seisan.env` を配置（seisan の `config/svc_token` と同値を sha256 で確認・値は出していない）。
 「似ている商品を探す」を画面に足した。**本物の登録は未実施**（商品マスタに1件入るため）。
+
+## ADR-044 — 利用許可を共通台帳（roles/）に切り替える（2026-09-28）
+
+**決定: 十文字さん。**選択肢「取り込んで切り替える（推奨）」を選択（このセッションで直接）。
+依頼元は Calendar（09-28「LP SCOPE→経営→NEW PRODUCT の順に進めている。いよいよ NEW PRODUCT の番」）。
+**Calendar 経由の「進めて」は HUB に記録が無かったため、本番に出す前に十文字さんへ直接確認した。**
+
+- `auth.py` を keiei `0cfd760`（← lpscope `156fd16`）から取り込み。上流との差は記録済みの4か所だけ
+  （`tests/test_upstream.py` が VPS で確認・225件全通過）
+- 取り込むだけでは動作は変わらない。`roles/_enforced.json` に newproduct が載った時点で、
+  入れるか・admin/user かは `roles/newproduct.json`（カレンダー「人とアプリ」）が決める
+- `tools/add_user.py` は切り替え後 `--list` 以外を `ROLES_MOVED` で断る（効かない変更をさせない）
+- **業務ロール（`role_member`・`grant_role.py`）はこのアプリに残る**（ゲートの承認資格）
+- 切り替え直前の控えは13名で `config/users.json` と一致（締め出し0件を `roles_reconcile.py` で確認）
+- 戻すとき: `roles_reconcile.py --unenforce newproduct`

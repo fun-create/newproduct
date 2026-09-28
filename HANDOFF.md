@@ -19,7 +19,7 @@
 | 実データ | アイデア **881件**・機会 **年間53＋ライフ31件**（採点19）・自動化依頼15件。**2026-09-26 移行**: 年間プラン2026年度 **26枠（策定中）**・案件 **20件**（発売済2・開発中18）・実タスク **310件**・案件外の仕事 **74件**。**準備シートの本文（カルテの節）は未移行** |
 | 〜~~`/api/ai-usage` の口~~ | — | **2026-09-25 解消** | FR-146 実装済。`app/ai_budget.py` で疎通済（cap 5.0）。**モデルを呼ぶ実装はまだ無い** |
 | ChatWork | **未設定。**`config/chatwork.env` と `automation.chatwork_room_id` を置くまで送らない |
-| 利用者 | **13名**（2026-09-27 十文字さん指示「tsubasa以外はuserで」）。`admin` は `masateru`・`tsubasa`、他11名は `user` |
+| 利用者 | **13名**（2026-09-27 十文字さん指示「tsubasa以外はuserで」）。`admin` は `masateru`・`tsubasa`、他11名は `user`。**2026-09-28 から正は共通台帳 `roles/newproduct.json`（カレンダー「人とアプリ」で付け外し）**（ADR-044） |
 | バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に**5世代** |
 | テスト | `selfcheck.py` **144件**（本番）・`tests/` **187件**・`tests/e2e_http.py` 失敗0 |
 

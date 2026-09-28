@@ -72,27 +72,23 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
 5. `cp deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup`（04:15）
    **`backup.sh` の置き場を 700 にしない。**755 でないと watchdog の glob から見えず、
    **警報も出ないまま監視から外れる**（2026-09-21 実測）
-6. 利用者を足す。**いまログインを決めているのは `config/users.json`**（`auth.USERS_PATH`）。
+6. 利用者を足す。**2026-09-28 から、入れるか・admin/user かは共通台帳の利用許可
+   `/opt/accounts/roles/newproduct.json` が決める**（十文字さん決定。`auth.py` に層を取り込み、
+   Calendar が `roles_reconcile.py --enforce newproduct` で切り替え）。
+
+   **足す・外す・権限を変えるのは、カレンダーの ☰ →「人とアプリ」。**
+   `tools/add_user.py` は `--list` 以外を `auth.ROLES_MOVED` で断る
+   （ここで足しても役割を変えても何も効かないため）。
 
    ```bash
-   sudo -u newproduct python3 tools/add_user.py --list                # 共通台帳とこのアプリの差
-   sudo -u newproduct python3 tools/add_user.py --who yoko --role user
-   sudo -u newproduct python3 tools/add_user.py --who yoko --off      # 停止（消さない）
+   sudo -u newproduct python3 tools/add_user.py --list                # 共通台帳とこのアプリの写し
    ```
 
-   - **共通台帳（`/opt/accounts/users.json`）に居る人だけ**足せる。居ない人は先にカレンダーの管理画面で人を登録する
-   - 合言葉の照合は共通台帳が行う。`config/users.json` の `password` は使われない
-     （道具は誰も知らないでたらめな合言葉のダイジェストを入れる。**JSON を手で書かない**）
-   - 再起動は不要。次のログインから効く
-
-   **これから変わること（2026-09-27〜）**: 利用許可の正を **`/opt/accounts/roles/newproduct.json`** に
-   一本化する仕組みが Calendar にできた（カレンダーの ☰ →「人とアプリ」で付け外し）。
-   **取り込み順は ①LP SCOPE ②経営（keiei）③NEW PRODUCT。**newproduct の `auth.py` は
-   lpscope → keiei → newproduct の複製（`tests/test_upstream.py`）なので、**上流に層が入ってから写す**。
-   写したら VPS で `python3 /opt/calfc/tools/roles_reconcile.py --sync newproduct` →
-   `--enforce newproduct`（層が無い／締め出しが残る場合は道具が断る）。
-   **それまでは上の `add_user.py` が正しい手順。**`roles/newproduct.json` は消さない
-   （切り替えた時点で正になる。いまはカレンダーの画面が書き込む先）
+   - 許可を付けた人が初めてログインすると、このアプリの `config/users.json` に記録が自動で作られる
+     （合言葉は持たない。照合は共通台帳）
+   - **戻すとき**: VPS で `sudo python3 /opt/calfc/tools/roles_reconcile.py --unenforce newproduct`。
+     印を外せば元の判定（`config/users.json`）に戻り、`add_user.py` もまた使える
+   - `roles/newproduct.json` は消さない（切り替え後はこれが正）
    - 業務ロール（生産部など・ゲートの承認資格）は別軸: `tools/grant_role.py`
 
 ## 戻す
