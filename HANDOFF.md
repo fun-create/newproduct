@@ -136,6 +136,7 @@ ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
   president  masateru
   admin      masateru, tsubasa
   prod       masateru, tsubasa, risa
+  devdept    yoko（2026-09-28）
 ```
 
 ゲートの承認資格は**業務ロール**で決まる（ADR-005）。アプリ権限の `admin` とは別物。
