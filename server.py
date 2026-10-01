@@ -51,6 +51,7 @@ from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
 from app import sales as sales_m  # noqa: E402
 from app import cost as cost_m    # noqa: E402
+from app import compat as compat_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -451,6 +452,25 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "案件がありません"})
             return self.sendj(200, d)
+
+        # 対応確認（FR-102）。ひな形は商品開発部が作る（項目の中身は発明しない）
+        if parts == ["compat", "templates"] and method == "POST":
+            d = self.body()
+            r = compat_m.save_template(d, uid)
+            store.audit(uid, "compat.template", r["name"], {"items": len(r["items"])}, ip)
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("compat"):
+            pid, what = parts[1], parts[2]
+            if what == "compat" and method == "GET":
+                return self.sendj(200, compat_m.overview(pid, uid))
+            if method == "POST" and what in ("compat-apply", "compat-result"):
+                d = self.body()
+                r = (compat_m.apply(pid, d.get("template_id"), uid) if what == "compat-apply"
+                     else compat_m.set_result(pid, d.get("id"), d.get("result", ""), d.get("note", ""), uid))
+                store.audit(uid, "project." + what, pid,
+                            {k: d.get(k) for k in ("template_id", "id", "result")}, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
 
         # 新商品の発売後の売上（FR-183）。見るだけ
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "sales" and method == "GET":

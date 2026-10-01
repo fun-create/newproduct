@@ -468,6 +468,12 @@
           })));
         b.appendChild(v);
 
+        // 対応確認（FR-102）。**ひな形は商品開発部が作る**（項目の中身は発明しない）
+        var cp = el("div", { "class": "np-card", id: "np-sec-compat" });
+        cp.appendChild(el("h2", { text: "対応確認" }));
+        b.appendChild(cp);
+        compatPanel(d.id, cp, h.editable);
+
         // 発売後の売上（FR-183）。seisan に登録したコード → 店の商品番号 → 売上フィード
         var ps = el("div", { "class": "np-card", id: "np-sec-sales" });
         ps.appendChild(el("h2", { text: "発売後の売上" }));
@@ -573,6 +579,75 @@
     });
     w.appendChild(f);
     return w;
+  }
+
+  /** 対応確認（FR-102・2026-10-01「商品開発部に決めてもらう」）。
+   *  ひな形を選ぶと項目が写る。**写した後にひな形を直しても、この案件の記録は変わらない。** */
+  function compatPanel(pid, box, editable) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    api(P + "/compat").then(function (o) {
+      var sm = o.summary;
+      box.appendChild(el("p", { "class": "np-sub", text: "確認済 " + sm["確認済"] + "／不可 " + sm["不可"] + "／未確認 " + sm["未確認"] }));
+      if (o.rows.length) {
+        box.appendChild(table(["項目", "結果", "備考", ""], o.rows.map(function (r) {
+          var act = el("td");
+          if (editable) o.results.forEach(function (res) {
+            if (res === r.result) return;
+            var bt = el("button", { type: "button", text: res });
+            bt.addEventListener("click", function () {
+              var note = res === "不可" ? window.prompt("「不可」の理由（必須）", r.note || "") : (r.note || "");
+              if (note === null) return;
+              post(P + "/compat-result", { id: r.id, result: res, note: note }).then(function () { go(); })
+                .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            act.appendChild(bt); act.appendChild(txt(" "));
+          });
+          return el("tr", null, [el("td", { text: r.item }), el("td", { text: r.result }), el("td", { text: dash(r.note) }), act]);
+        })));
+      } else {
+        box.appendChild(el("p", { "class": "np-note", text: "まだ確認項目がありません。下で商品の種類（ひな形）を選ぶと項目が入ります。" }));
+      }
+      if (editable && o.templates.length) {
+        var f = el("form", { "class": "np-inline" });
+        var sel = el("select", { name: "template_id", "aria-label": "商品の種類" });
+        o.templates.forEach(function (t) { sel.appendChild(el("option", { value: String(t.id), text: t.name + "（" + t.items.length + "項目）" })); });
+        [txt("商品の種類を選んで項目を入れる "), sel, txt(" "), el("button", { type: "submit", text: "入れる" })].forEach(function (x) { f.appendChild(x); });
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          post(P + "/compat-apply", { template_id: sel.value }).then(function () { go(); })
+            .catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        box.appendChild(f);
+      } else if (!o.templates.length) {
+        box.appendChild(el("p", { "class": "np-warn", text: "商品の種類ごとの確認項目（ひな形）がまだありません。商品開発部で作ってください（下の「ひな形を作る・直す」）。" }));
+      }
+      if (o.can_edit_templates) {
+        var det = el("details");
+        det.appendChild(el("summary", { text: "ひな形を作る・直す（商品開発部・管理者）" }));
+        var tf = el("form", { "class": "np-field" });
+        var nm = el("input", { name: "name", size: "20", list: "np-ctpl" });
+        var dl = el("datalist", { id: "np-ctpl" });
+        o.templates.forEach(function (t) { dl.appendChild(el("option", { value: t.name })); });
+        var ta = el("textarea", { name: "items", rows: "5", "aria-label": "確認する項目（1行に1つ）" });
+        nm.addEventListener("change", function () {
+          var t = o.templates.filter(function (x) { return x.name === nm.value; })[0];
+          if (t) ta.value = t.items.join("\n");
+        });
+        tf.appendChild(el("p", null, [el("label", null, ["商品の種類 ", nm]), dl,
+          el("span", { "class": "np-sub", text: "　同じ名前なら上書きします（案件に写した項目は変わりません）" })]));
+        tf.appendChild(el("label", { text: "確認する項目（1行に1つ）" }));
+        tf.appendChild(ta);
+        var bar = el("p", null, [el("button", { type: "submit", text: "保存" })]);
+        tf.appendChild(bar);
+        tf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          post("/api/compat/templates", { name: nm.value, items: ta.value }).then(function () { go(); })
+            .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        det.appendChild(tf);
+        box.appendChild(det);
+      }
+    }).catch(function (e) { box.appendChild(el("p", { "class": "np-err", text: e.message })); });
   }
 
   /** 原価・調達（第3段・ADR-047）。
