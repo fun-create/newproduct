@@ -86,6 +86,10 @@ def _satisfied(check: str, proj: dict, secs: dict, chks: dict,
         n = store.val("SELECT COUNT(*) FROM project_variant WHERE project_id=?",
                       (project_id,), 0)
         return n >= int(rest or 1), f"バリエーション {n} 件"
+    if kind == "cost":
+        # 第3段（FR-88）。最新の版に材料か外注の行が1つでもあれば「v1 あり」
+        from app import cost
+        return cost.gate_state(project_id)
     if kind == "seisan":
         # 第3段（FR-60）。**正は seisan。**ここは登録されたコードの記録を見るだけ
         from app import seisan          # seisan が gate を読むので、ここで読む

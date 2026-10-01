@@ -424,8 +424,11 @@ def _verify_pending(pid: str):
                      "AND state='登録済' AND verified_at IS NULL", (pid,)):
         try:
             if exists(r["product_code"]):
-                store.ex("UPDATE seisan_registration SET verified_at=? WHERE id=?",
-                         (store.now_s(), r["id"]))
+                # **確定まで行う。**画面を開く（GET）経路なので、後で誰も commit しない。
+                # store.ex のままだと書き込みの途中で残り、他の書き込みを待たせる
+                with store.tx() as c:
+                    c.execute("UPDATE seisan_registration SET verified_at=? WHERE id=?",
+                              (store.now_s(), r["id"]))
         except (NotConfigured, Refused):
             return
 

@@ -462,6 +462,13 @@
           })));
         b.appendChild(v);
 
+        // 原価・調達（第3段・ADR-047）。**マスタは持たない。**候補と試算だけ
+        var cv = el("div", { "class": "np-card", id: "np-sec-cost" });
+        cv.appendChild(el("h2", { text: "原価・調達" }));
+        cv.appendChild(el("p", { "class": "np-note", text: "読み込んでいます。" }));
+        b.appendChild(cv);
+        costPanel(d.id, cv);
+
         // seisan への登録（第3段・FR-103）。**別に読む**（seisan が落ちていても案件は見える）
         var sv = el("div", { "class": "np-card", id: "np-sec-seisan" });
         sv.appendChild(el("h2", { text: "seisan への登録" }));
@@ -538,6 +545,184 @@
         .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
     });
     w.appendChild(f);
+    return w;
+  }
+
+  /** 原価・調達（第3段・ADR-047）。
+   *  **マスタは seisan。**ここは案件ごとの相見積の候補と試算原価の版だけ。
+   *  金額は円・税抜（為替は持たない）。**未確定は 0 と書かない。** */
+  function cyen(v) { return (v === null || v === undefined) ? "未確定" : Math.round(v).toLocaleString("ja-JP") + "円"; }
+  function cnum(v, u) { return (v === null || v === undefined) ? "未確定" : String(v) + (u || ""); }
+
+  function costPanel(pid, box) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    function err(node, e) { node.appendChild(el("p", { "class": "np-err", text: e.message })); }
+    api(P + "/cost").then(function (o) {
+      while (box.childNodes.length > 1) box.removeChild(box.lastChild);
+      box.appendChild(el("p", { "class": "np-sub",
+        text: "外注先・仕入先・原材料の一覧は seisan が持ちます。ここには、この案件で比べた候補と試算原価だけを置きます。金額は円・税抜で入れてください（外貨で見積もったときは、換算したレートを備考に）。" }));
+
+      // 発注の締切（FR-101）
+      var dl = o.deadline;
+      box.appendChild(el("h3", { text: "本番発注の締切" }));
+      box.appendChild(el("p", { "class": dl.state === "間に合う" ? "np-note" : "np-warn",
+        text: dl.state + (dl.due ? "：" + dl.due + " まで（発売日 " + dl.launch_date + " − " + dl.by + " のリードタイム "
+          + dl.lead_days + "日。" + (dl.days_left >= 0 ? "あと " + dl.days_left + " 日" : "") + "）" : "") + (dl.why ? "　" + dl.why : "") }));
+
+      // 相見積（FR-98・FR-96）
+      box.appendChild(el("h3", { text: "相見積の候補（" + o.candidates.length + "件）" }));
+      if (o.candidates.length) {
+        box.appendChild(table(["種類", "仕入先・外注先", "形状・サイズ", "単価", "最低ロット", "リードタイム", "安定供給", "判断"],
+          o.candidates.map(function (c) {
+            var judge = el("td");
+            judge.appendChild(txt(c.adopted ? "採用" : (c.not_adopted_reason ? "不採用：" + c.not_adopted_reason : "未判断")));
+            if (o.editable) {
+              var yes = el("button", { type: "button", text: "採用" });
+              var no = el("button", { type: "button", text: "不採用" });
+              yes.addEventListener("click", function () {
+                post(P + "/cost-adopt", { id: c.id, adopted: "1" }).then(function () { go(); }).catch(function (e) { err(judge, e); });
+              });
+              no.addEventListener("click", function () {
+                var r = window.prompt("採用しなかった理由（後で同じ候補を探し直さないため・必須）", c.not_adopted_reason || "");
+                if (r === null) return;
+                post(P + "/cost-adopt", { id: c.id, adopted: "0", reason: r }).then(function () { go(); }).catch(function (e) { err(judge, e); });
+              });
+              judge.appendChild(txt(" ")); judge.appendChild(yes); judge.appendChild(txt(" ")); judge.appendChild(no);
+            }
+            return el("tr", null, [el("td", { text: c.kind + (c.part ? "・" + c.part : "") }),
+              el("td", null, [c.url && /^https?:\/\//i.test(c.url) ? el("a", { href: c.url, rel: "noopener noreferrer", target: "_blank", text: c.supplier }) : txt(c.supplier)]),
+              el("td", { text: dash(c.shape_size) }), el("td", { "class": "np-num", text: cyen(c.unit_price) }),
+              el("td", { "class": "np-num", text: cnum(c.min_lot, "個") }), el("td", { "class": "np-num", text: cnum(c.lead_days, "日") }),
+              el("td", { text: dash(c.stability) }), judge]);
+          })));
+      } else {
+        box.appendChild(el("p", { "class": "np-note", text: "まだ候補がありません。" }));
+      }
+      if (o.editable) box.appendChild(candidateForm(P, o));
+
+      // 試算原価（FR-88〜92）
+      box.appendChild(el("h3", { text: "試算原価" }));
+      if (!o.versions.length) {
+        box.appendChild(el("p", { "class": "np-note", text: "まだ版がありません。「v1 を作る」から始めてください（ゼロから行を積みます）。" }));
+      }
+      o.versions.forEach(function (v) { box.appendChild(versionBlock(P, o, v)); });
+      if (o.editable) {
+        var nb = el("button", { type: "button", text: o.versions.length ? "新しい版を作る（v" + (o.versions[0].version + 1) + "。前の版は残ります）" : "v1 を作る" });
+        nb.addEventListener("click", function () {
+          post(P + "/cost-version", {}).then(function () { go(); }).catch(function (e) { err(box, e); });
+        });
+        box.appendChild(el("p", null, [nb]));
+      }
+    }).catch(function (e) { err(box, e); });
+  }
+
+  function candidateForm(P, o) {
+    var f = el("form", { "class": "np-field" });
+    f.appendChild(el("p", { "class": "np-sub", text: "候補を足す" }));
+    function sel(name, label, opts) {
+      var s = el("select", { name: name, "aria-label": label });
+      opts.forEach(function (x) { s.appendChild(el("option", { value: x[0], text: x[1] })); });
+      return el("label", null, [label + " ", s]);
+    }
+    function inp(name, label, size) { return el("label", null, [label + " ", el("input", { name: name, size: size || "10" })]); }
+    var row1 = el("p", null, [sel("kind", "種類", o.kinds.map(function (k) { return [k, k]; })), txt(" "),
+      sel("part", "区分（資材）", [["", "—"]].concat(o.parts_material.map(function (k) { return [k, k]; }))), txt(" "),
+      inp("supplier", "仕入先・外注先", 16), txt(" "), inp("shape_size", "形状・サイズ", 10)]);
+    var row2 = el("p", null, [inp("unit_price", "単価（円・税抜）", 7), txt(" "), inp("min_lot", "最低ロット", 5), txt(" "),
+      inp("lead_days", "リードタイム（日）", 4), txt(" "), inp("min_designs", "最低デザイン数（外注）", 4), txt(" "),
+      sel("sample_ok", "印刷サンプル", [["", "未確認"], ["1", "可"], ["0", "不可"]])]);
+    var row3 = el("p", null, [inp("url", "URL", 24), txt(" "), inp("stability", "安定供給の見込み", 14), txt(" "),
+      inp("features", "特徴", 18), txt(" "), inp("note", "備考", 18)]);
+    var bar = el("p", null, [el("button", { type: "submit", text: "候補を足す" }),
+      el("span", { "class": "np-sub", text: "　分からない値は空欄のまま（未確定として扱い、0 にはしません）" })]);
+    [row1, row2, row3, bar].forEach(function (x) { f.appendChild(x); });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var obj = {};
+      ["kind", "part", "supplier", "shape_size", "unit_price", "min_lot", "lead_days", "min_designs",
+       "sample_ok", "url", "stability", "features", "note"].forEach(function (k) { obj[k] = f.elements[k].value; });
+      post(P + "/cost-candidate", obj).then(function () { go(); })
+        .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    return f;
+  }
+
+  function versionBlock(P, o, v) {
+    var w = el("div", { "class": "np-field" });
+    var t = v.totals;
+    w.appendChild(el("h4", { text: "v" + v.version + (v.latest ? "（最新）" : "（前の版・変更不可）")
+      + "　確度 " + dash(v.confidence) + "　作成 " + dash(v.created_at) + " " + dash(v.created_by) }));
+    var unknown = t.direct.unknown ? "（未確定 " + t.direct.unknown + " 行を含む。その分は入っていません）" : "";
+    w.appendChild(table(["項目", "金額"], [
+      el("tr", null, [el("td", { text: "材料費" }), el("td", { "class": "np-num", text: cyen(t.material.yen) + (t.material.unknown ? "＋未確定" + t.material.unknown + "行" : "") })]),
+      el("tr", null, [el("td", { text: "外注費" }), el("td", { "class": "np-num", text: cyen(t.outsource.yen) + (t.outsource.unknown ? "＋未確定" + t.outsource.unknown + "行" : "") })]),
+      el("tr", null, [el("td", { text: "直接費（材料＋外注）" }), el("td", { "class": "np-num", text: cyen(t.direct.yen) + unknown })]),
+      el("tr", null, [el("td", { text: "工数費（別列・粗利から引かない）" }), el("td", { "class": "np-num", text: cyen(t.labor.yen) })]),
+      el("tr", null, [el("td", { text: "販売価格（税抜）" }), el("td", { "class": "np-num",
+        text: cyen(t.price_ex_tax) + (t.price_in_tax !== null ? "（税込 " + cyen(t.price_in_tax) + "・税率 " + t.tax_rate + "%）" : "") })]),
+      el("tr", null, [el("td", { text: "想定粗利" }), el("td", { "class": "np-num",
+        text: cyen(t.gross.yen) + (t.gross.rate !== null ? "（" + t.gross.rate + "%）" : "") + (t.gross.overstated ? "　※未確定の行があるため、実際より大きく出ています" : "") })])
+    ]));
+    if (v.lines.length) {
+      w.appendChild(table(["区分", "何の費用か", "使用量", "単価", "小計", "備考", ""], v.lines.map(function (l) {
+        var sub = (l.qty === null || l.unit_price === null) ? null : l.qty * l.unit_price;
+        var act = el("td");
+        if (v.latest && o.editable) {
+          var del = el("button", { type: "button", text: "消す" });
+          del.addEventListener("click", function () {
+            post(P + "/cost-line-delete", { version_id: v.id, id: l.id }).then(function () { go(); })
+              .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: e.message })); });
+          });
+          act.appendChild(del);
+        }
+        return el("tr", null, [el("td", { text: l.part }), el("td", { text: l.name }),
+          el("td", { "class": "np-num", text: cnum(l.qty, l.unit ? " " + l.unit : "") }),
+          el("td", { "class": "np-num", text: cyen(l.unit_price) }), el("td", { "class": "np-num", text: cyen(sub) }),
+          el("td", { text: dash(l.note) }), act]);
+      })));
+    }
+    if (!(v.latest && o.editable)) return w;
+
+    // 価格・確度
+    var vf = el("form", { "class": "np-inline" });
+    var pr = el("input", { name: "price_ex_tax", size: "8", "aria-label": "販売価格（税抜）" }); pr.value = v.price_ex_tax === null ? "" : v.price_ex_tax;
+    var cf = el("select", { name: "confidence", "aria-label": "確度" });
+    cf.appendChild(el("option", { value: "", text: "確度—" }));
+    o.confidence.forEach(function (c) { cf.appendChild(el("option", { value: c, text: "確度 " + c })); });
+    cf.value = v.confidence || "";
+    var nt = el("input", { name: "note", size: "20", "aria-label": "版の備考" }); nt.value = v.note || "";
+    [txt("販売価格（税抜） "), pr, txt(" "), cf, txt(" 備考 "), nt, txt(" "), el("button", { type: "submit", text: "保存" })].forEach(function (x) { vf.appendChild(x); });
+    vf.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post(P + "/cost-version-update", { version_id: v.id, price_ex_tax: pr.value, confidence: cf.value, note: nt.value })
+        .then(function () { go(); }).catch(function (e) { vf.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    w.appendChild(vf);
+
+    // 行を足す
+    var lf = el("form", { "class": "np-inline" });
+    var part = el("select", { name: "part", "aria-label": "区分" });
+    o.parts.forEach(function (p2) { part.appendChild(el("option", { value: p2, text: p2 })); });
+    var cand = el("select", { name: "candidate_id", "aria-label": "候補から単価を写す" });
+    cand.appendChild(el("option", { value: "", text: "候補から写さない" }));
+    o.candidates.forEach(function (c) {
+      cand.appendChild(el("option", { value: String(c.id), text: c.supplier + "（" + cyen(c.unit_price) + (c.adopted ? "・採用" : "") + "）" }));
+    });
+    var nm = el("input", { name: "name", size: "14", "aria-label": "何の費用か" });
+    var qy = el("input", { name: "qty", size: "4", "aria-label": "使用量" });
+    var un = el("input", { name: "unit", size: "3", "aria-label": "単位" });
+    var up = el("input", { name: "unit_price", size: "6", "aria-label": "単価（円・税抜）" });
+    var no = el("input", { name: "note", size: "12", "aria-label": "備考" });
+    [txt("行を足す："), part, txt(" 何の費用か "), nm, txt(" 使用量 "), qy, un, txt(" 単価 "), up, txt(" "), cand,
+     txt(" 備考 "), no, txt(" "), el("button", { type: "submit", text: "足す" })].forEach(function (x) { lf.appendChild(x); });
+    lf.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post(P + "/cost-line", { version_id: v.id, part: part.value, name: nm.value, qty: qy.value, unit: un.value,
+        unit_price: up.value, candidate_id: cand.value, note: no.value })
+        .then(function () { go(); }).catch(function (e) { lf.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    w.appendChild(lf);
+    w.appendChild(el("p", { "class": "np-sub", text: "単価が分からない行は空欄で足してください（未確定として残ります）。候補を選ぶと、その時点の単価を写します（あとで候補を直しても、この版は変わりません）。" }));
     return w;
   }
 
@@ -2164,7 +2349,7 @@
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/cost": ["原価・調達", "第3段", "調達先・外注できるか・相見積・試算原価。商品マスタは seisan が持ちます（seisan への登録は案件画面の「seisan への登録」から）。"],
+    "#/cost": ["原価・調達（案件をまたいだ一覧）", "第3段の後半", "相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。ここに案件をまたいだ一覧（締切が近い順など）を作る予定です。外注先・仕入先・原材料の一覧は seisan が持ちます。"],
     "#/settings": ["設定", "—", "マスタ・利用者・データの出どころ・監査ログ。第2段では監査の記録だけ取っています。"]
   };
 

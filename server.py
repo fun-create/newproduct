@@ -50,6 +50,7 @@ from app import plan as plan_m    # noqa: E402
 from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
 from app import sales as sales_m  # noqa: E402
+from app import cost as cost_m    # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -446,6 +447,33 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "案件がありません"})
             return self.sendj(200, d)
+
+        # ── 原価・調達（第3段・ADR-047）。**マスタは持たない。**案件ごとの候補と試算だけ ──
+        if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("cost"):
+            pid, what = parts[1], parts[2]
+            if what == "cost" and method == "GET":
+                return self.sendj(200, cost_m.overview(pid))
+            if method != "POST":
+                return self.sendj(404, {"error": "not found"})
+            d = self.body()
+            if what == "cost-candidate":
+                r = cost_m.save_candidate(pid, d, uid)
+            elif what == "cost-adopt":
+                r = cost_m.adopt(pid, d.get("id"), d.get("adopted") in ("1", "true", "on"),
+                                 d.get("reason", ""), uid)
+            elif what == "cost-version":
+                r = cost_m.new_version(pid, d, uid)
+            elif what == "cost-version-update":
+                r = cost_m.update_version(pid, d.get("version_id"), d, uid)
+            elif what == "cost-line":
+                r = cost_m.save_line(pid, d.get("version_id"), d, uid)
+            elif what == "cost-line-delete":
+                r = cost_m.delete_line(pid, d.get("version_id"), d.get("id"), uid)
+            else:
+                return self.sendj(404, {"error": "not found"})
+            store.audit(uid, "project." + what, pid,
+                        {k: d.get(k) for k in ("id", "version_id", "kind", "part", "adopted")}, ip)
+            return self.sendj(200, r)
 
         # ── seisan への商品登録（第3段・FR-103／FR-60・ADR-043）──
         # **マスタは持たない。正は seisan。**ここは下書きと共通商品コードだけ

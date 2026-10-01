@@ -241,6 +241,12 @@ class Register(Base):
         self.fake.missing_api = False
         self.fake.products.add("S-1")
         self.assertTrue(self.m.overview(self.pid, "kanri")["targets"][0]["verified"])
+        # **画面を開く経路の書き込みも確定している**（別の接続から見える）
+        import sqlite3
+        other = sqlite3.connect(self.dbfile)
+        self.assertIsNotNone(other.execute(
+            "SELECT verified_at FROM seisan_registration").fetchone()[0])
+        other.close()
 
     def test_similar_never_keeps_names(self):
         rows = self.m.similar("うちわ")

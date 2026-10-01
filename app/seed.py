@@ -103,6 +103,7 @@ def _item(key, label, check, goto, stage=None, hint=None):
 #   variants:<n>        … バリエーションが n 件以上ある
 #   manual              … **このアプリがまだ持っていないデータ。**人が確認した記録を見る
 #   seisan              … seisan への登録が全対象（バリエーション）で済んでいる（第3段）
+#   cost                … 試算原価の最新の版に材料か外注の行がある（第3段）
 GATES = [
     ("G0", 0, "起票", ["devdept", "admin", "member", "president"], ALL_FLOWS, [
         _item("internal_name", "商品案名（社内呼称）", "project:internal_name", "A"),
@@ -136,8 +137,8 @@ GATES = [
     ("G3", 3, "コンセプト承認", ["president"], NOT_NEWMODEL, [
         _item("concept", "コンセプト文", "section:C.concept", "C"),
         _item("diff3", "差別化 3点以上", "lines:C.diff:3", "C"),
-        _item("cost_v1", "試算原価 v1", "manual", "D", "第3段",
-              "原価・調達（第3段）ができたら cost_estimate から自動で埋まります"),
+        _item("cost_v1", "試算原価 v1", "cost", "cost", None,
+              "案件画面の「原価・調達」で試算原価の版を作り、材料か外注の行を入れると埋まります"),
         _item("price", "販売価格", "section:D.price", "D"),
         _item("goal", "年間目標（根拠つき）", "manual", "D", "第4段",
               "発売後評価（第4段）ができたら sales_target の方式と根拠で判定します"),

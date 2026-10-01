@@ -360,6 +360,11 @@ class TestPermissions(Base):
                 v = 5.5 if col == "effort_point" else "検査"
                 store.ex(f"UPDATE project SET {col}=? WHERE id=?", (v, self.p["id"]))
                 store.conn().commit()
+            elif m["check"] == "cost":
+                from app import cost
+                v = cost.new_version(self.p["id"], {}, "kanri")
+                cost.save_line(self.p["id"], v["id"], {"part": "本体", "name": "検査", "qty": "1",
+                                                       "unit_price": "100"}, "kanri")
             elif m["check"] == "seisan":
                 from app import seisan
                 seisan.record_code(self.p["id"], None, "TEST-" + self.p["id"], "kanri")

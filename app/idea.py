@@ -279,12 +279,14 @@ SETTINGS = [
      "**未確定です。**年間36本か52本かが未決で、F-14（販売計画シミュレーション）"
      "で決める設計になっています。決まるまで「コンセプト在庫月数」は計算しません"),
     ("concept_stock_floor", "コンセプト在庫月数の下限", "number", "か月", None),
+    ("cost_tax_rate", "消費税率（試算原価の税込表示）", "number", "%", None),
     ("ai_scoring_enabled", "AI採点を使う", "bool", None,
      "**既定は off。**`newproduct-*` のAI予算枠（AutoGrowth の ai_budget.json）が"
      "未取得のため（全体設計書 第11章 ⑩）"),
 ]
 
-SETTING_DEFAULTS = {"concept_stock_floor": "6", "ai_scoring_enabled": "0"}
+SETTING_DEFAULTS = {"concept_stock_floor": "6", "ai_scoring_enabled": "0",
+                    "cost_tax_rate": "10"}   # 現行10%（F-7-2）
 
 
 def seed_settings() -> int:

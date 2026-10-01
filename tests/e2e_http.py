@@ -198,6 +198,20 @@ def main() -> int:
                         {"result": "保留", "reason_code": "effort_over"})
         note(st == 200, "保留を理由つきで記録できる", f"{st} {d}")
 
+        # ── 原価・調達（第3段・ADR-047）──
+        st, d = cl.post(f"/api/projects/{pid}/cost-candidate",
+                        {"kind": "資材", "part": "本体", "supplier": "E2E社", "lead_days": "10"})
+        note(st == 200, "相見積の候補を足せる", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/cost-adopt", {"id": str(d.get("id")), "adopted": "0"})
+        note(st == 400 and "理由" in d.get("error", ""), "不採用は理由が要る", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/cost-version", {"price_ex_tax": "1000"})
+        note(st == 200 and d.get("version") == 1, "試算原価 v1 を作れる", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/cost-line",
+                        {"version_id": str(d.get("id")), "part": "本体", "name": "本体", "qty": "1"})
+        st, d = cl.get(f"/api/projects/{pid}/cost")
+        note(st == 200 and d["versions"][0]["totals"]["material"]["yen"] is None,
+             "単価の無い行は 0 円ではなく未確定", f"{st}")
+
         # ── 売上実績（2026-10-01）。出どころが無い環境では「無い」と言う（0 にしない）──
         st, d = cl.get("/api/sales?site=goods")
         note(st == 200 and len(d["sites"]) == 6 and (d["month"] is None and "ありません" in d.get("why", "")
