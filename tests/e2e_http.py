@@ -198,6 +198,13 @@ def main() -> int:
                         {"result": "保留", "reason_code": "effort_over"})
         note(st == 200, "保留を理由つきで記録できる", f"{st} {d}")
 
+        # ── 売上実績（2026-10-01）。出どころが無い環境では「無い」と言う（0 にしない）──
+        st, d = cl.get("/api/sales?site=goods")
+        note(st == 200 and len(d["sites"]) == 6 and (d["month"] is None and "ありません" in d.get("why", "")
+             or d["month"]), "/api/sales が6サイトを返し、集計が無ければ理由を言う", f"{st}")
+        st, d = cl.get("/api/sales?site=yahoo")
+        note(st == 400, "/api/sales は知らないサイトを断る", f"{st}")
+
         # ── seisan への登録（第3段・ADR-043）。**本番と同じく登録口が無い状態** ──
         st, d = cl.get(f"/api/projects/{pid}/seisan")
         note(st == 200 and d["configured"] is False and d["targets"][0]["state"] == "未着手"

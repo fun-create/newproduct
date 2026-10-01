@@ -142,3 +142,11 @@ table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted
   border-left: 3px solid var(--fca-line);
   background: var(--fca-bg); font-size: .95rem;
 }
+
+/* 構成比の棒（売上実績）。**1色。**長さだけで見せ、数字を必ず横に添える（N-11） */
+.np-share {
+  display: inline-block; width: 6rem; height: .6rem; vertical-align: middle;
+  border: 1px solid var(--fca-line); border-radius: 2px; background: var(--fca-bg);
+}
+.np-share-fill { display: block; height: 100%; background: var(--fca-navy); }
+@media (max-width: 480px) { .np-share { width: 3rem; } }

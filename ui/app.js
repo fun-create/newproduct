@@ -27,6 +27,7 @@
   // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
+                "#/cost": "#/sales",
                 "#/opportunities": "#/plan",
                 "#/automation": "#/tasks" };
 
@@ -1989,16 +1990,169 @@
   }
 
   // ══════════════════════════════════════════════════════
+  // 売上実績（2026-10-01 十文字さん決定）
+  // **何が売れているか（構成）を見る画面。**正式な売上は経営管理。
+  // 金額は税込（決定）。前年比は丸1か月どうしのときだけ。未計測は「未計測」と書く（0 にしない）
+  // ══════════════════════════════════════════════════════
+  function yen(v) { return (v === null || v === undefined) ? "未計測" : Math.round(v).toLocaleString("ja-JP") + "円"; }
+  function pct(v) { return (v === null || v === undefined) ? "—" : v.toFixed(1) + "%"; }
+  function yoy(v) { return (v === null || v === undefined) ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v).toFixed(1) + "%"; }
+  /** 構成比の棒。**1色。**長さだけで見せ、数字を必ず横に添える（色に意味を持たせない） */
+  function shareBar(v) {
+    var w = el("span", { "class": "np-share" });
+    if (v !== null && v !== undefined)
+      w.appendChild(el("span", { "class": "np-share-fill", style: "width:" + Math.max(0, Math.min(100, v)) + "%" }));
+    return el("span", null, [w, " " + pct(v)]);
+  }
+
+  function salesSubnav(cur) {
+    var n = el("div", { "class": "np-filters", role: "tablist", "aria-label": "売上・原価" });
+    [["#/sales", "売上実績"], ["#/cost", "原価・調達"]].forEach(function (x) {
+      n.appendChild(el("a", { href: x[0], text: x[1], "aria-current": x[0] === cur ? "true" : null }));
+    });
+    return n;
+  }
+
+  function viewSales() {
+    loading();
+    var q = hashQuery();
+    var site = q.get("site") || "all", month = q.get("month") || "";
+    api("/api/sales?site=" + encodeURIComponent(site) + (month ? "&month=" + encodeURIComponent(month) : ""))
+      .then(function (d) {
+        var b = clear();
+        setTitle("売上実績", "／ " + d.site_label + (d.month ? " " + d.month : ""));
+        b.appendChild(salesSubnav("#/sales"));
+        function href(st, m) { return "#/sales?site=" + st + (m ? "&month=" + m : ""); }
+
+        // サイトのタブ
+        var tabs = el("div", { "class": "np-filters", role: "tablist", "aria-label": "サイト" });
+        d.sites.forEach(function (s) {
+          tabs.appendChild(el("a", { href: href(s.key, d.month), text: s.label,
+            "aria-current": s.key === d.site ? "true" : null }));
+        });
+        b.appendChild(tabs);
+        if (!d.month || d.why) {
+          b.appendChild(el("p", { "class": "np-warn", text: d.why || "集計がありません。" }));
+          return;
+        }
+        // 月
+        var mf = el("div", { "class": "np-filters", "aria-label": "月" });
+        d.months.forEach(function (m) {
+          mf.appendChild(el("a", { href: href(d.site, m), text: m, "aria-current": m === d.month ? "true" : null }));
+        });
+        b.appendChild(mf);
+        if (!d.complete) b.appendChild(el("p", { "class": "np-warn",
+          text: d.month + " はまだ終わっていない月です。前年比は出しません（丸1か月の前年と比べると必ず低く出るため）。" }));
+
+        // 1段目: 合計
+        var t = d.total, top = el("div", { "class": "np-card" });
+        top.appendChild(el("h2", { text: d.site_label + " " + d.month + "（" + d.tax + "・" + d.basis + "）" }));
+        if (t.revenue === null) {
+          top.appendChild(el("span", { "class": "np-big np-big-unmeasured", text: "未計測" }));
+          if (t.why) top.appendChild(el("p", { "class": "np-note", text: t.why }));
+        } else {
+          top.appendChild(el("span", { "class": "np-big", text: yen(t.revenue) }));
+          top.appendChild(el("p", { "class": "np-sub",
+            text: "前年同月（" + (d.prev_year_month || "—") + "） " + yen(t.prev_revenue) + "　前年比 " + yoy(t.yoy) }));
+        }
+        b.appendChild(top);
+
+        // 2段目: 月ごとの推移
+        var tr = el("div", { "class": "np-card" });
+        tr.appendChild(el("h2", { text: "月ごとの推移" }));
+        var maxv = d.trend.reduce(function (a, x) { return Math.max(a, x.revenue || 0, x.prev_revenue || 0); }, 0);
+        tr.appendChild(table(["月", "売上", "", "前年同月", "前年比"], d.trend.map(function (x) {
+          return el("tr", null, [el("td", { text: x.month + (x.complete ? "" : "（途中）") }),
+            el("td", { "class": "np-num", text: yen(x.revenue) }),
+            el("td", null, [shareBar(maxv && x.revenue !== null ? x.revenue / maxv * 100 : null)]),
+            el("td", { "class": "np-num", text: yen(x.prev_revenue) }),
+            el("td", { "class": "np-num", text: x.complete && x.revenue !== null && x.prev_revenue
+              ? yoy((x.revenue - x.prev_revenue) / x.prev_revenue * 100) : "—" })]);
+        })));
+        tr.appendChild(el("p", { "class": "np-note", text: "棒は表の中の最大の月を100としています。いま見られるのは " + d.months.length + " か月分です（Auto GROWTH の月次集計がある月）。" }));
+        b.appendChild(tr);
+
+        // 全体のときだけ: 店別
+        if (d.stores) {
+          var sc = el("div", { "class": "np-card" });
+          sc.appendChild(el("h2", { text: "店別" }));
+          sc.appendChild(table(["店", "売上", "構成比", "前年同月", "前年比"], d.stores.map(function (x) {
+            return el("tr", null, [el("td", { text: x.store }), el("td", { "class": "np-num", text: yen(x.revenue) }),
+              el("td", null, [shareBar(x.share)]), el("td", { "class": "np-num", text: yen(x.prev_revenue) }),
+              el("td", { "class": "np-num", text: yoy(x.yoy) })]);
+          })));
+          b.appendChild(sc);
+        }
+
+        // 3段目: 構成（分類）
+        var cc = el("div", { "class": "np-card" });
+        cc.appendChild(el("h2", { text: "構成（分類）" }));
+        var c = d.composition;
+        if (!c.rows) {
+          cc.appendChild(el("p", { "class": "np-big-unmeasured", text: "未計測" }));
+          cc.appendChild(el("p", { "class": "np-note", text: c.why }));
+        } else {
+          cc.appendChild(el("p", { "class": "np-sub", text: "大分類の行を押すと中分類が開きます。分類済み " + pct(c.classified_share)
+            + "（分類が付かない明細は「分類なし」に入れています）" }));
+          var rows = [];
+          c.rows.forEach(function (r, i) {
+            var btn = el("button", { type: "button", "aria-expanded": "false", text: r.name });
+            var head = el("tr", null, [el("td", null, [btn]), el("td", { "class": "np-num", text: yen(r.revenue) }),
+              el("td", null, [shareBar(r.share)]), el("td", { "class": "np-num", text: yoy(r.yoy) })]);
+            rows.push(head);
+            var kids = r.children.map(function (k) {
+              var tr2 = el("tr", { hidden: "hidden" }, [el("td", { text: "　└ " + k.name }),
+                el("td", { "class": "np-num", text: yen(k.revenue) }), el("td", null, [shareBar(k.share)]),
+                el("td", { "class": "np-num", text: yoy(k.yoy) })]);
+              rows.push(tr2);
+              return tr2;
+            });
+            btn.addEventListener("click", function () {
+              var open = btn.getAttribute("aria-expanded") === "true";
+              btn.setAttribute("aria-expanded", open ? "false" : "true");
+              kids.forEach(function (k) { if (open) k.setAttribute("hidden", "hidden"); else k.removeAttribute("hidden"); });
+            });
+          });
+          rows.push(el("tr", null, [el("td", { text: "分類なし（要確認・新商品など）" }),
+            el("td", { "class": "np-num", text: yen(c.unclassified) }), el("td", null, [shareBar(c.unclassified_share)]),
+            el("td", { "class": "np-num", text: "—" })]));
+          cc.appendChild(table(["分類", "売上", "構成比", "前年比"], rows));
+          if (d.site === "all") cc.appendChild(el("p", { "class": "np-note",
+            text: "サイトごとの構成は、売上フィードと seisan の対応表が届いてから、各サイトのタブに出ます。" }));
+        }
+        b.appendChild(cc);
+
+        // 4段目: 商品別
+        var pc = el("div", { "class": "np-card" });
+        pc.appendChild(el("h2", { text: "商品別" }));
+        pc.appendChild(el("p", { "class": "np-big-unmeasured", text: "未計測" }));
+        pc.appendChild(el("p", { "class": "np-note", text: d.products.why }));
+        b.appendChild(pc);
+
+        // 数え方
+        var nc = el("div", { "class": "np-card" });
+        nc.appendChild(el("h2", { text: "数え方と出どころ" }));
+        var ul = el("ul", { "class": "np-miss" });
+        [ "金額は" + d.tax + "の商品代です（送料・決済手数料・クーポンは含みません）。会社の正式な売上（経営管理）は税抜・注文ごとの請求金額なので、ここの数字とは一致しません。",
+          "出どころ: " + (d.source || "—") + "（" + (d.generated_at || "—") + " 作成）" ]
+          .concat(d.caveats).forEach(function (x) { ul.appendChild(el("li", { text: x })); });
+        nc.appendChild(ul);
+        b.appendChild(nc);
+      }).catch(fail);
+  }
+
+  // ══════════════════════════════════════════════════════
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/cost": ["原価・調達", "第3段", "調達先・資材・為替・試算原価と、seisan への商品マスタ登録ファイル。"],
+    "#/cost": ["原価・調達", "第3段", "調達先・外注できるか・相見積・試算原価。商品マスタは seisan が持ちます（seisan への登録は案件画面の「seisan への登録」から）。"],
     "#/settings": ["設定", "—", "マスタ・利用者・データの出どころ・監査ログ。第2段では監査の記録だけ取っています。"]
   };
 
   function viewNotYet(path, entry) {
     var b = clear();
     var x = NOT_YET[path] || [entry.label, "—", ""];
+    if (path === "#/cost") { setTitle("原価・調達"); b.appendChild(salesSubnav("#/cost")); }
     b.appendChild(el("p", { "class": "np-warn",
       text: "未実装です（" + x[1] + "で作ります）。" }));
     if (x[2]) b.appendChild(el("p", { "class": "np-note", text: x[2] }));
@@ -2025,6 +2179,7 @@
     if (path === "#/projects") return viewProjects();
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }
+    if (path === "#/sales") return viewSales();
     return viewNotYet(path, entry);
   }
 

@@ -49,6 +49,7 @@ from app import idea as idea_m   # noqa: E402
 from app import plan as plan_m    # noqa: E402
 from app import project as project_m  # noqa: E402
 from app import seed as seed_m   # noqa: E402
+from app import sales as sales_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -425,6 +426,11 @@ class H(BaseHTTPRequestHandler):
 
         if parts == ["dashboard"]:
             return self.sendj(200, task_m.dashboard(uid))
+
+        # 売上実績（2026-10-01 決定）。**見るだけ。**利用者全員（十文字さん「利用者全員」）
+        if parts == ["sales"] and method == "GET":
+            return self.sendj(200, sales_m.overview(qs.get("site") or "all",
+                                                    qs.get("month") or None))
 
         # /api/projects
         if parts == ["projects"] and method == "GET":
