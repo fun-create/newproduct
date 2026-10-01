@@ -168,3 +168,24 @@ def names(site: str, keys: list[str]) -> dict[str, str]:
         return {r["k"]: r["name"] for r in c.execute(q, (shop, *keys))}
     finally:
         c.close()
+
+
+def by_codes_daily(site: str, keys: list[str], since: str) -> dict[str, dict]:
+    """指定した商品番号だけの、日ごとの {revenue, qty}（since 以降）。新商品の発売後の売上用。"""
+    keys = [k for k in keys if k]
+    if not keys:
+        return {}
+    shop, _st, col = SHOPS[site]
+    c, _meta = _open()
+    try:
+        rows = c.execute(
+            f"""SELECT o.order_date d,
+                       SUM((COALESCE(l.unit_price,0)+COALESCE(l.option_price,0))*COALESCE(l.qty,0)) amt,
+                       SUM(COALESCE(l.qty,0)) q
+                FROM order_lines l JOIN orders o USING (shop, order_no)
+                WHERE l.shop=? AND o.order_date>=? AND COALESCE(o.status,'') NOT IN (?,?,?)
+                  AND l.{col} IN ({','.join('?' * len(keys))})
+                GROUP BY d""", (shop, max(since, SINCE), *EXCLUDED, *keys)).fetchall()
+        return {r["d"]: {"revenue": float(r["amt"] or 0), "qty": float(r["q"] or 0)} for r in rows}
+    finally:
+        c.close()

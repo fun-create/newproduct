@@ -452,6 +452,10 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(404, {"error": "案件がありません"})
             return self.sendj(200, d)
 
+        # 新商品の発売後の売上（FR-183）。見るだけ
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "sales" and method == "GET":
+            return self.sendj(200, sales_m.project_sales(parts[1]))
+
         # ── 原価・調達（第3段・ADR-047）。**マスタは持たない。**案件ごとの候補と試算だけ ──
         if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("cost"):
             pid, what = parts[1], parts[2]

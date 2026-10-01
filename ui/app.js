@@ -468,6 +468,27 @@
           })));
         b.appendChild(v);
 
+        // 発売後の売上（FR-183）。seisan に登録したコード → 店の商品番号 → 売上フィード
+        var ps = el("div", { "class": "np-card", id: "np-sec-sales" });
+        ps.appendChild(el("h2", { text: "発売後の売上" }));
+        b.appendChild(ps);
+        api("/api/projects/" + encodeURIComponent(d.id) + "/sales").then(function (r) {
+          if (r.why) { ps.appendChild(el("p", { "class": "np-note", text: r.why })); return; }
+          ps.appendChild(el("p", { "class": "np-sub", text: "共通商品コード " + r.codes.join("、") + "／発売日 " + r.launch_date
+            + "／金額は" + r.tax + "の商品代（取消・返金を除く）。" + r.amazon }));
+          ps.appendChild(table(["サイト", "店の商品番号", "発売から" + r.checkpoints[0] + "日", "発売から" + r.checkpoints[1] + "日", "発売からの合計", "数量"],
+            r.sites.map(function (x) {
+              function cp(c) { return c.revenue === null ? "—" : yen(c.revenue) + (c.reached ? "" : "（途中）"); }
+              return el("tr", null, [el("td", { text: x.label }),
+                el("td", { text: x.store_codes.length ? x.store_codes.join("、") : "紐付けなし" }),
+                el("td", { "class": "np-num", text: cp(x.checkpoints[0]) }), el("td", { "class": "np-num", text: cp(x.checkpoints[1]) }),
+                el("td", { "class": "np-num", text: x.total === null ? "—" : yen(x.total) }),
+                el("td", { "class": "np-num", text: x.qty === null ? "—" : Math.round(x.qty).toLocaleString("ja-JP") })]);
+            })));
+          if (r.shared.length) ps.appendChild(el("p", { "class": "np-warn",
+            text: "ほかの商品と共有している店の商品番号は数えていません（按分しないため）: " + r.shared.join("、") }));
+        }).catch(function (e) { ps.appendChild(el("p", { "class": "np-err", text: e.message })); });
+
         // 原価・調達（第3段・ADR-047）。**マスタは持たない。**候補と試算だけ
         var cv = el("div", { "class": "np-card", id: "np-sec-cost" });
         cv.appendChild(el("h2", { text: "原価・調達" }));

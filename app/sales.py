@@ -304,3 +304,71 @@ def overview_ag(site: str = "all", month: str | None = None) -> dict:
     else:
         out["composition"] = {"rows": None, "why": WHY_FBA if site == "fba" else WHY_SITE_MIX}
     return out
+
+
+# ── 新商品の発売後の売上（FR-183・第4段の下ごしらえ）──────────────────
+CHECKPOINTS = (14, 60)     # G6 の 14日・60日チェック（F-11）
+
+
+def project_sales(pid: str) -> dict:
+    """NEW PRODUCT から出した商品（seisan に登録したコード）の、発売後の売上。
+
+    seisan の紐付け表で「共通商品コード → 店の商品番号」を引き、売上フィードで集計する。
+    **1つの商品番号がほかの商品と共有されている場合は数えない**（按分しない。理由を出す）。
+    Amazon は売上フィードに無いので未計測。"""
+    from app import salesfeed, store
+    p = store.one("SELECT * FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    codes = sorted({r["product_code"] for r in store.q(
+        "SELECT product_code FROM seisan_registration WHERE project_id=? AND state='登録済' "
+        "AND product_code IS NOT NULL", (pid,))})
+    base = {"codes": codes, "launch_date": p["launch_date"], "checkpoints": list(CHECKPOINTS)}
+    if not codes:
+        return {**base, "why": "seisan への登録（共通商品コード）がまだありません。登録すると、ここに発売後の売上が出ます"}
+    if not p["launch_date"]:
+        return {**base, "why": "発売日がありません"}
+    try:
+        cmap, why = salesfeed.code_map()
+    except salesfeed.Unavailable as e:
+        return {**base, "why": f"未計測: {e}"}
+    if cmap is None:
+        return {**base, "why": "未計測: " + (why or "")}
+    want = set(codes)
+    sites, shared = [], []
+    launch = p["launch_date"]
+    import datetime as _dt
+    ld = _dt.date.fromisoformat(launch)
+    try:
+        for key, (_shop, st, _col) in salesfeed.SHOPS.items():
+            mine = []
+            for (store_name, sc), ent in cmap.items():
+                if store_name != st or not (ent["codes"] & want):
+                    continue
+                if ent["codes"] - want:
+                    shared.append(f"{st} {sc}")      # ほかの商品と共有。按分しない
+                else:
+                    mine.append(sc)
+            daily = salesfeed.by_codes_daily(key, mine, launch) if mine else {}
+            cps = []
+            for n in CHECKPOINTS:
+                end = (ld + _dt.timedelta(days=n)).isoformat()
+                reached = salesfeed._today().isoformat() >= end
+                rev = sum(v["revenue"] for d, v in daily.items() if d < end)
+                qty = sum(v["qty"] for d, v in daily.items() if d < end)
+                cps.append({"days": n, "until": end, "reached": reached,
+                            "revenue": rev if mine else None, "qty": qty if mine else None})
+            months = {}
+            for d, v in daily.items():
+                m = months.setdefault(d[:7], {"revenue": 0.0, "qty": 0.0})
+                m["revenue"] += v["revenue"]
+                m["qty"] += v["qty"]
+            sites.append({"site": key, "label": st, "store_codes": mine,
+                          "total": sum(v["revenue"] for v in daily.values()) if mine else None,
+                          "qty": sum(v["qty"] for v in daily.values()) if mine else None,
+                          "checkpoints": cps,
+                          "months": [{"month": m, **v} for m, v in sorted(months.items())]})
+    except salesfeed.Unavailable as e:
+        return {**base, "why": f"未計測: {e}"}
+    return {**base, "why": None, "sites": sites, "shared": shared,
+            "tax": "税込", "amazon": "未計測（Amazon は売上フィードに入っていません）"}

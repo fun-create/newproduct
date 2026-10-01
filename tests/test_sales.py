@@ -204,6 +204,35 @@ class Feed(unittest.TestCase):
         o = self.m.overview("goods", "2026-08")
         self.assertIn("版", o["feed_why"])                         # 黙って読まない。理由を出す
 
+    def test_project_sales_uses_registered_codes_and_skips_shared(self):
+        os.environ["NEWPRODUCT_DB"] = str(self.dir / "np.db")
+        from app import store, seed, project
+        store.close()
+        seed.run()
+        pid = project.create("u", expand=False, internal_name="新商品", flow_type="meire",
+                             launch_date="2026-08-01")["id"]
+        o = self.m.project_sales(pid)
+        self.assertIn("seisan への登録", o["why"])
+        with store.tx() as c:
+            c.execute("INSERT INTO seisan_registration (project_id,state,product_code) VALUES (?,?,?)",
+                      (pid, "登録済", "P1"))
+        o = self.m.project_sales(pid)
+        g = next(x for x in o["sites"] if x["site"] == "goods")
+        self.assertEqual(g["store_codes"], ["gd1"])
+        self.assertEqual(g["total"], 2200.0)                 # 8/3 の gd1（取消は除く）
+        self.assertEqual(g["checkpoints"][0]["revenue"], 2200.0)   # 8/1〜8/14
+        self.assertTrue(g["checkpoints"][1]["reached"])
+        r = next(x for x in o["sites"] if x["site"] == "rakuten")
+        self.assertIsNone(r["total"], "紐付けの無いサイトは 0 ではなく —")
+        # 共有の商品番号は数えない
+        self.seisan.store_codes = lambda: {"as_of": "x", "fba": [], "items": [
+            {"store": "グッズ本店", "store_code": "gd1", "product_code": "P1", "cat1": "a", "cat2": "b", "cat3": ""},
+            {"store": "グッズ本店", "store_code": "gd1", "product_code": "P9", "cat1": "a", "cat2": "b", "cat3": ""}]}
+        self.f._MAP.update(at=0.0, map=None)
+        o = self.m.project_sales(pid)
+        self.assertEqual(o["shared"], ["グッズ本店 gd1"])
+        store.close()
+
     def test_months_start_2025_05(self):
         self.assertEqual(self.f.months()[0], "2025-05")
         self.assertNotIn("2025-04", self.m.overview("goods")["months"])
