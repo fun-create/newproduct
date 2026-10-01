@@ -152,6 +152,31 @@ class Cost(unittest.TestCase):
         self.line(v["id"], qty="1")
         self.assertNotIn("cost_v1", {m["key"] for m in gate.missing(self.pid, "G3")})
 
+    def test_board_puts_late_first_and_hides_launched(self):
+        from app import project, store
+        late = project.create("u", expand=False, internal_name="遅い", flow_type="meire",
+                              launch_date="2026-10-10")["id"]
+        c = self.m.save_candidate(late, {"kind": "外注", "supplier": "X", "lead_days": "30"}, "u")
+        self.m.adopt(late, c["id"], True, "", "u")
+        done = project.create("u", expand=False, internal_name="発売済", flow_type="meire",
+                              launch_date="2026-01-01")["id"]
+        with store.tx() as cx:
+            cx.execute("UPDATE project SET stage='発売済' WHERE id=?", (done,))
+        rows = self.m.board()
+        self.assertEqual(rows[0]["id"], late)
+        self.assertEqual(rows[0]["deadline"]["state"], "間に合わない")
+        self.assertNotIn(done, [r["id"] for r in rows])
+
+    def test_warning_before_g3_does_not_block(self):
+        from app import project, gate
+        d = project.detail(self.pid, "u")
+        # 次の関門が G3／G4 でなければ出さない（いまは G0）
+        self.assertEqual(d["warnings"], [])
+        self.assertEqual(project._gate_warnings({"id": self.pid, "launch_date": "2026-12-01"},
+                                                {"gate": "G3"})[0]["state"], "未確定")
+        # **止めない**：G3 の欠落に締切の項目は増えない
+        self.assertNotIn("deadline", {m["key"] for m in gate.missing(self.pid, "G3")})
+
     def test_writes_are_committed(self):
         """**別の接続から見える。**確定しない書き込みは他の書き込みを待たせる。"""
         import sqlite3

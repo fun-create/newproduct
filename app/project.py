@@ -289,6 +289,8 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         "gates": [{**g, "glyph": gate.STATES[g["state"]]["glyph"],
                    "word": gate.STATES[g["state"]]["word"]} for g in b],
         "next_gate": nx,
+        # FR-101。**止めずに知らせる**（必須項目にはしない）。G3／G4 の手前で発注の締切を出す
+        "warnings": _gate_warnings(p, nx),
         # B節。**最上段に置くのがこの画面の設計そのもの**（画面設計 3-8）
         "missing": (nx["missing"] if nx else []),
         "sections": body,
@@ -307,6 +309,20 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
                         if nx and user_id else {}),
         "my_roles": gate.roles_of(user_id) if user_id else [],
     }
+
+
+def _gate_warnings(p: dict, nx: dict | None) -> list[dict]:
+    """次の関門が G3／G4 のとき、本番発注の締切が「間に合う」でなければ知らせる（FR-101）。"""
+    if not nx or nx.get("gate") not in ("G3", "G4"):
+        return []
+    from app import cost
+    d = cost.deadline(p, cost.candidates(p["id"]))
+    if d["state"] == "間に合う":
+        return []
+    return [{"kind": "deadline", "state": d["state"],
+             "text": (f"本番発注の締切に間に合いません。{d['why']}" if d["state"] == "間に合わない"
+                      else f"本番発注の締切が未確定です（{d['why']}）"),
+             "goto": "cost"}]
 
 
 def save_section(project_id: str, key: str, body: str, user_id: str):

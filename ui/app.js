@@ -436,6 +436,12 @@
         }
         b.appendChild(miss);
 
+        // 止めずに知らせる（FR-101）。**通過は止めない**が、判定する人の目に入る場所に置く
+        (d.warnings || []).forEach(function (w) {
+          miss.appendChild(el("p", { "class": "np-warn" }, [txt(w.text + " "),
+            el("a", { href: "#np-sec-" + w.goto, text: "→ 原価・調達へ" })]));
+        });
+
         // C〜F の節
         d.sections.forEach(function (s) {
           var c = el("div", { "class": "np-card", id: "np-sec-" + s.key });
@@ -2268,6 +2274,34 @@
     return el("span", null, [w, " " + pct(v)]);
   }
 
+  /** 原価・調達の一覧（案件をまたぐ）。**締切に間に合わない案件を一番上に。**中身は各案件の画面で入れる */
+  function viewCost() {
+    loading();
+    api("/api/cost").then(function (d) {
+      var b = clear();
+      setTitle("原価・調達");
+      b.appendChild(salesSubnav("#/cost"));
+      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件だけを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は seisan が持ちます。" }));
+      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "発売前の案件はありません。" })); return; }
+      b.appendChild(table(["案件", "発売予定日", "本番発注の締切", "候補（採用／未判断）", "seisan 未登録", "試算", "直接費", "想定粗利"],
+        d.rows.map(function (r) {
+          var dl = r.deadline;
+          return el("tr", null, [
+            el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.id }),
+              txt(" " + (r.internal_name || r.product))]),
+            el("td", { text: dash(r.launch_date) }),
+            el("td", { text: dl.state + (dl.due ? "（" + dl.due + (dl.days_left >= 0 ? "・あと" + dl.days_left + "日" : "・" + (-dl.days_left) + "日超過") + "）" : "") }),
+            el("td", { "class": "np-num", text: r.candidates + "（" + r.adopted + "／" + r.undecided + "）" }),
+            el("td", { "class": "np-num", text: String(r.unregistered) }),
+            el("td", { text: r.version ? "v" + r.version : "なし" }),
+            el("td", { "class": "np-num", text: r.direct ? cyen(r.direct.yen) + (r.direct.unknown ? "＋未確定" + r.direct.unknown + "行" : "") : "—" }),
+            el("td", { "class": "np-num", text: r.gross && r.gross.yen !== null ? cyen(r.gross.yen) + (r.gross.rate !== null ? "（" + r.gross.rate + "%）" : "") + (r.gross.overstated ? "※" : "") : "—" })
+          ]);
+        })));
+      b.appendChild(el("p", { "class": "np-sub", text: "※ 直接費に未確定の行があり、粗利が実際より大きく出ています。" }));
+    }).catch(fail);
+  }
+
   function salesSubnav(cur) {
     var n = el("div", { "class": "np-filters", role: "tablist", "aria-label": "売上・原価" });
     [["#/sales", "売上実績"], ["#/cost", "原価・調達"]].forEach(function (x) {
@@ -2462,6 +2496,7 @@
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }
     if (path === "#/sales") return viewSales();
+    if (path === "#/cost") return viewCost();
     return viewNotYet(path, entry);
   }
 

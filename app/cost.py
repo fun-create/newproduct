@@ -404,6 +404,39 @@ def overview(pid: str, user_id: str | None = None) -> dict:
             "candidates": cands, "deadline": deadline(p, cands), "versions": versions}
 
 
+# ── 案件をまたいだ一覧（#/cost）──────────────────────────────
+DONE_STAGES = ("発売済", "追跡中", "評価完了", "中止")
+_ORDER = {"間に合わない": 0, "間に合う": 1, "未確定": 2}
+
+
+def board() -> list[dict]:
+    """発売前の案件の、締切・候補・試算の状態。**締切に間に合わない案件を一番上に。**"""
+    from app import project as project_m
+    out = []
+    for p in store.q("SELECT * FROM project WHERE stage NOT IN (%s) ORDER BY launch_date"
+                     % ",".join("?" * len(DONE_STAGES)), DONE_STAGES):
+        p = dict(p)
+        cands = candidates(p["id"])
+        d = deadline(p, cands)
+        v = _latest(p["id"])
+        t = None
+        if v is not None:
+            lines = store.rows(store.q("SELECT * FROM cost_line WHERE version_id=?", (v["id"],)))
+            t = totals(dict(v), lines)
+        out.append({"id": p["id"], "product": project_m.product_label(p),
+                    "internal_name": p["internal_name"], "stage": p["stage"],
+                    "launch_date": p["launch_date"], "deadline": d,
+                    "candidates": len(cands), "adopted": sum(1 for c in cands if c["adopted"]),
+                    "undecided": sum(1 for c in cands if not c["adopted"] and not c["not_adopted_reason"]),
+                    "unregistered": sum(1 for c in cands if c["adopted"] and not c["seisan_ref"]),
+                    "version": v["version"] if v else None,
+                    "direct": t["direct"] if t else None, "gross": t["gross"] if t else None,
+                    "price_ex_tax": t["price_ex_tax"] if t else None})
+    out.sort(key=lambda r: (_ORDER.get(r["deadline"]["state"], 9),
+                            r["deadline"].get("due") or "9999", r["launch_date"] or "9999"))
+    return out
+
+
 # ── ゲート（G3「試算原価 v1」）──────────────────────────────
 def gate_state(pid: str) -> tuple[bool, str]:
     v = _latest(pid)

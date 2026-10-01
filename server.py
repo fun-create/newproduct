@@ -428,6 +428,10 @@ class H(BaseHTTPRequestHandler):
         if parts == ["dashboard"]:
             return self.sendj(200, task_m.dashboard(uid))
 
+        # 原価・調達の一覧（案件をまたぐ）。見るだけ
+        if parts == ["cost"] and method == "GET":
+            return self.sendj(200, {"rows": cost_m.board()})
+
         # 売上実績（2026-10-01 決定）。**見るだけ。**利用者全員（十文字さん「利用者全員」）
         if parts == ["sales"] and method == "GET":
             return self.sendj(200, sales_m.overview(qs.get("site") or "all",
