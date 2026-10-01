@@ -146,6 +146,91 @@ def candidates(pid: str) -> list[dict]:
                               "ORDER BY kind, part, adopted DESC, id", (pid,)))
 
 
+# ── 採用した候補を seisan に登録（FR-184）──────────────────────
+# **マスタは seisan。**seisan の規則で seisan が判定する（押した人が CIP の管理者でなければ断る）。
+# ここに残すのは「どこに入れたか」だけ。
+
+def seisan_vocab() -> dict:
+    """登録フォームの選択肢（原材料の種別・分類、外注先）。**開いたときだけ読む。**"""
+    from app import seisan
+    ok, why = seisan.configured()
+    if not ok:
+        return {"configured": False, "why": why}
+    try:
+        m = seisan.materials(q="\u0000")          # 分類と種別だけ欲しい（一覧は要らない）
+        return {"configured": True, "kinds": m["kinds"], "categories": m["categories"],
+                "outsourcers": [o for o in seisan.outsourcers() if o.get("active", 1)],
+                "target_kinds": ["分類", "商品", "工程"]}
+    except (seisan.NotConfigured, seisan.Refused) as e:
+        return {"configured": False, "why": str(e)}
+
+
+def register_candidate(pid: str, cid, f: dict, user_id: str) -> dict:
+    from app import seisan
+    _editable(pid)
+    if not seisan.can_register(user_id):
+        raise PermissionError("seisan への登録は、G5（発売可）を判定できる業務ロールの人だけができます")
+    c = store.one("SELECT * FROM sourcing_candidate WHERE id=? AND project_id=?", (int(cid), pid))
+    if c is None:
+        raise LookupError("その候補はこの案件にありません")
+    c = dict(c)
+    if not c["adopted"]:
+        raise ValueError("採用した候補だけを seisan に登録します")
+    if c["seisan_ref"]:
+        raise ValueError(f"登録済みです（{c['seisan_ref']}）。直すときは seisan の画面で")
+    ref = f"newproduct:{pid}/候補{c['id']}"
+    done, note = None, None
+    try:
+        if c["kind"] == "資材":
+            code = (f.get("code") or "").strip()
+            kind = (f.get("material_kind") or "").strip()
+            if f.get("existing") in ("1", "true", "on"):
+                if not code or not kind:
+                    raise ValueError("既存の材料コードと種別を入れてください")
+            else:
+                seisan.material_create(code, {
+                    "kind": kind, "category": (f.get("category") or "").strip(),
+                    "name": (f.get("name") or "").strip(),
+                    "unit_price": c["unit_price"] if f.get("unit_price") in (None, "") else f.get("unit_price"),
+                    "note": f"NEW PRODUCT 案件 {pid} の相見積から"}, user_id, ref)
+            done = f"material:{code}/{kind}"
+            # 仕入条件。**分からない値は送らない**（seisan は空欄を未設定として扱う）
+            seisan.material_order_params(code, kind, {
+                "supplier": c["supplier"],
+                "lead_days": "" if c["lead_days"] is None else c["lead_days"],
+                "lot_size": "" if c["min_lot"] is None else c["min_lot"],
+                "unit": (f.get("unit") or "").strip()}, user_id, ref)
+        else:
+            oid = f.get("outsourcer_id") or None
+            if not oid:
+                r = seisan.outsourcer_save({"name": c["supplier"],
+                                            "capabilities": (f.get("capabilities") or "").strip(),
+                                            "order_method": (f.get("order_method") or "").strip(),
+                                            "note": f"NEW PRODUCT 案件 {pid} の相見積から"}, user_id, ref)
+                oid = r.get("id")
+            done = f"outsourcer:{oid}"
+            tk, key = (f.get("target_kind") or "").strip(), (f.get("target_key") or "").strip()
+            if tk and key:
+                seisan.outsource_price_save({
+                    "outsourcer_id": oid, "target_kind": tk, "target_key": key,
+                    "unit_price": "" if c["unit_price"] is None else c["unit_price"],
+                    "min_lot": "" if c["min_lot"] is None else c["min_lot"],
+                    "lead_days": "" if c["lead_days"] is None else c["lead_days"],
+                    "unit": (f.get("unit") or "").strip()}, user_id, ref)
+                done += f"+単価({tk}:{key})"
+            else:
+                note = "外注単価は未登録（品目を選ばなかったため）"
+    except seisan.Refused as e:
+        if done is None:
+            raise ValueError("seisan が断りました: " + str(e)) from None
+        note = "途中まで登録: " + str(e)      # 材料・外注先はできたが、条件・単価で断られた
+    with store.tx() as cx:
+        cx.execute("UPDATE sourcing_candidate SET seisan_ref=?,seisan_registered_by=?,"
+                   "seisan_registered_at=?,seisan_note=? WHERE id=?",
+                   (done, user_id, store.now_s(), note, c["id"]))
+    return {"ok": True, "seisan_ref": done, "note": note}
+
+
 # ── 発注の締切（FR-101）────────────────────────────────────
 def deadline(p: dict, cands: list[dict], today: _dt.date | None = None) -> dict:
     """発売日 − 採用した候補の最長リードタイム ＝ 本番発注の締切。
@@ -300,7 +385,7 @@ def totals(v: dict, lines: list[dict]) -> dict:
             }
 
 
-def overview(pid: str) -> dict:
+def overview(pid: str, user_id: str | None = None) -> dict:
     p = _project(pid)
     cands = candidates(pid)
     vs = store.rows(store.q("SELECT * FROM cost_version WHERE project_id=? ORDER BY version DESC",
@@ -311,7 +396,9 @@ def overview(pid: str) -> dict:
                                    (v["id"],)))
         versions.append({**v, "lines": lines, "totals": totals(v, lines),
                          "latest": v is vs[0]})
-    return {"kinds": KINDS, "parts_material": PARTS_MATERIAL, "parts": PARTS,
+    from app import seisan
+    return {"can_register": bool(user_id) and seisan.can_register(user_id),
+            "kinds": KINDS, "parts_material": PARTS_MATERIAL, "parts": PARTS,
             "confidence": CONFIDENCE, "tax_rate": tax_rate(),
             "editable": p["source_of_truth"] == "app",
             "candidates": cands, "deadline": deadline(p, cands), "versions": versions}

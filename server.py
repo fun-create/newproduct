@@ -452,7 +452,9 @@ class H(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("cost"):
             pid, what = parts[1], parts[2]
             if what == "cost" and method == "GET":
-                return self.sendj(200, cost_m.overview(pid))
+                return self.sendj(200, cost_m.overview(pid, uid))
+            if what == "cost-seisan-vocab" and method == "GET":
+                return self.sendj(200, cost_m.seisan_vocab())
             if method != "POST":
                 return self.sendj(404, {"error": "not found"})
             d = self.body()
@@ -467,12 +469,18 @@ class H(BaseHTTPRequestHandler):
                 r = cost_m.update_version(pid, d.get("version_id"), d, uid)
             elif what == "cost-line":
                 r = cost_m.save_line(pid, d.get("version_id"), d, uid)
+            elif what == "cost-seisan":
+                try:
+                    r = cost_m.register_candidate(pid, d.get("id"), d, uid)
+                except seisan_m.NotConfigured as e:
+                    return self.sendj(409, {"error": str(e)})
             elif what == "cost-line-delete":
                 r = cost_m.delete_line(pid, d.get("version_id"), d.get("id"), uid)
             else:
                 return self.sendj(404, {"error": "not found"})
             store.audit(uid, "project." + what, pid,
-                        {k: d.get(k) for k in ("id", "version_id", "kind", "part", "adopted")}, ip)
+                        {k: d.get(k) for k in ("id", "version_id", "kind", "part", "adopted",
+                                               "code", "outsourcer_id", "target_kind")}, ip)
             return self.sendj(200, r)
 
         # ── seisan への商品登録（第3段・FR-103／FR-60・ADR-043）──

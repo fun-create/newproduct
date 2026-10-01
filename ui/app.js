@@ -572,7 +572,7 @@
       // 相見積（FR-98・FR-96）
       box.appendChild(el("h3", { text: "相見積の候補（" + o.candidates.length + "件）" }));
       if (o.candidates.length) {
-        box.appendChild(table(["種類", "仕入先・外注先", "形状・サイズ", "単価", "最低ロット", "リードタイム", "安定供給", "判断"],
+        box.appendChild(table(["種類", "仕入先・外注先", "形状・サイズ", "単価", "最低ロット", "リードタイム", "安定供給", "判断", "seisan"],
           o.candidates.map(function (c) {
             var judge = el("td");
             judge.appendChild(txt(c.adopted ? "採用" : (c.not_adopted_reason ? "不採用：" + c.not_adopted_reason : "未判断")));
@@ -593,7 +593,7 @@
               el("td", null, [c.url && /^https?:\/\//i.test(c.url) ? el("a", { href: c.url, rel: "noopener noreferrer", target: "_blank", text: c.supplier }) : txt(c.supplier)]),
               el("td", { text: dash(c.shape_size) }), el("td", { "class": "np-num", text: cyen(c.unit_price) }),
               el("td", { "class": "np-num", text: cnum(c.min_lot, "個") }), el("td", { "class": "np-num", text: cnum(c.lead_days, "日") }),
-              el("td", { text: dash(c.stability) }), judge]);
+              el("td", { text: dash(c.stability) }), judge, seisanCell(P, o, c)]);
           })));
       } else {
         box.appendChild(el("p", { "class": "np-note", text: "まだ候補がありません。" }));
@@ -614,6 +614,84 @@
         box.appendChild(el("p", null, [nb]));
       }
     }).catch(function (e) { err(box, e); });
+  }
+
+  /** 採用した候補を seisan に登録する（FR-184）。**マスタは seisan。**ここには「どこに入れたか」だけ残る */
+  function seisanCell(P, o, c) {
+    var td = el("td");
+    if (c.seisan_ref) {
+      td.appendChild(txt("登録済 " + c.seisan_ref));
+      if (c.seisan_note) td.appendChild(el("p", { "class": "np-warn", text: c.seisan_note }));
+      return td;
+    }
+    if (!c.adopted) { td.appendChild(txt("—")); return td; }
+    if (!(o.can_register && o.editable)) { td.appendChild(txt("未登録")); return td; }
+    var btn = el("button", { type: "button", text: "seisan に登録" });
+    td.appendChild(btn);
+    btn.addEventListener("click", function () {
+      btn.setAttribute("disabled", "disabled");
+      api(P + "/cost-seisan-vocab").then(function (v) {
+        if (!v.configured) { td.appendChild(el("p", { "class": "np-warn", text: v.why })); return; }
+        td.appendChild(c.kind === "資材" ? materialForm(P, c, v) : outsourceForm(P, c, v));
+      }).catch(function (e) { td.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    });
+    return td;
+  }
+
+  function pickList(name, label, items, first) {
+    var s = el("select", { name: name, "aria-label": label });
+    if (first) s.appendChild(el("option", { value: "", text: first }));
+    items.forEach(function (x) { s.appendChild(el("option", { value: x[0], text: x[1] })); });
+    return el("label", null, [label + " ", s]);
+  }
+
+  function submitTo(P, f, c, fields) {
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var obj = { id: c.id };
+      fields.forEach(function (k) {
+        var e = f.elements[k];
+        if (e) obj[k] = e.type === "checkbox" ? (e.checked ? "1" : "") : e.value;
+      });
+      if (!window.confirm("seisan のマスタに登録します。取り消しや修正は seisan の画面で行います。よろしいですか")) return;
+      post(P + "/cost-seisan", obj).then(function (r) {
+        if (r.note) window.alert(r.note);
+        go();
+      }).catch(function (e) { f.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    });
+  }
+
+  function materialForm(P, c, v) {
+    var f = el("form", { "class": "np-field" });
+    f.appendChild(el("p", { "class": "np-sub", text: "原材料として seisan に入れます。材料コードは登録する人が決めます（seisan は採番しません）。仕入先「" + c.supplier + "」・リードタイム・最低ロットは候補から写します。" }));
+    f.appendChild(el("p", null, [el("label", null, [el("input", { type: "checkbox", name: "existing" }), " seisan に既にある材料に、仕入条件だけ付ける"])]));
+    f.appendChild(el("p", null, [el("label", null, ["材料コード（必須） ", el("input", { name: "code", size: "12" })]), txt(" "),
+      pickList("material_kind", "種別（必須）", v.kinds.map(function (k) { return [k, k]; }), "（選ぶ）")]));
+    var cat = el("input", { name: "category", size: "14", list: "np-mcat-" + c.id });
+    var dl = el("datalist", { id: "np-mcat-" + c.id });
+    v.categories.forEach(function (x) { dl.appendChild(el("option", { value: x })); });
+    f.appendChild(el("p", null, [el("label", null, ["分類（新規のとき必須・既存の分類から選べます） ", cat]), dl]));
+    f.appendChild(el("p", null, [el("label", null, ["名称（新規のとき必須） ", el("input", { name: "name", size: "24" })]), txt(" "),
+      el("label", null, ["単価（空欄なら候補の単価 " + cyen(c.unit_price) + "） ", el("input", { name: "unit_price", size: "7" })]), txt(" "),
+      el("label", null, ["単位 ", el("input", { name: "unit", size: "4" })])]));
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "seisan に登録する" })]));
+    submitTo(P, f, c, ["existing", "code", "material_kind", "category", "name", "unit_price", "unit"]);
+    return f;
+  }
+
+  function outsourceForm(P, c, v) {
+    var f = el("form", { "class": "np-field" });
+    f.appendChild(el("p", { "class": "np-sub", text: "外注先として seisan に入れます。seisan に既にある外注先なら選んでください（同じ相手を二重に作らないため）。単価・最低ロット・リードタイムは候補から写します。" }));
+    f.appendChild(el("p", null, [pickList("outsourcer_id", "外注先", v.outsourcers.map(function (x) { return [String(x.id), x.name]; }),
+      "新しく作る（名前: " + c.supplier + "）")]));
+    f.appendChild(el("p", null, [el("label", null, ["対応できる加工（新規のとき） ", el("input", { name: "capabilities", size: "20" })]), txt(" "),
+      el("label", null, ["発注方法（新規のとき） ", el("input", { name: "order_method", size: "10" })])]));
+    f.appendChild(el("p", null, [pickList("target_kind", "単価の品目", v.target_kinds.map(function (k) { return [k, k]; }), "単価は登録しない"), txt(" "),
+      el("label", null, ["品目（商品コード・分類名・工程） ", el("input", { name: "target_key", size: "14" })]), txt(" "),
+      el("label", null, ["単位 ", el("input", { name: "unit", size: "4" })])]));
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "seisan に登録する" })]));
+    submitTo(P, f, c, ["outsourcer_id", "capabilities", "order_method", "target_kind", "target_key", "unit"]);
+    return f;
   }
 
   function candidateForm(P, o) {

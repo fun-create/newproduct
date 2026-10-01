@@ -162,5 +162,94 @@ class Cost(unittest.TestCase):
         other.close()
 
 
+
+class RegisterToSeisan(Cost):
+    """採用した候補を seisan に登録する（FR-184）。seisan の口は偽物（外へ出さない）。"""
+
+    def setUp(self):
+        super().setUp()
+        from app import seisan, store
+        self.s = seisan
+        self.calls = []
+        self.refuse = {}
+        self._orig = {k: getattr(seisan, k) for k in
+                      ("material_create", "material_order_params", "outsourcer_save",
+                       "outsource_price_save")}
+
+        def fake(name, ret):
+            def f(*a, **k):
+                self.calls.append((name, a))
+                if name in self.refuse:
+                    raise seisan.Refused(self.refuse[name])
+                return ret
+            return f
+        seisan.material_create = fake("material_create", {"ok": True})
+        seisan.material_order_params = fake("material_order_params", {"ok": True})
+        seisan.outsourcer_save = fake("outsourcer_save", {"ok": True, "id": 7})
+        seisan.outsource_price_save = fake("outsource_price_save", {"ok": True})
+        store.ex("INSERT INTO role_member (role_code,user_id,granted_at) VALUES ('admin','kanri',?)",
+                 (store.now_s(),))
+        store.conn().commit()
+
+    def tearDown(self):
+        for k, v in self._orig.items():
+            setattr(self.s, k, v)
+        super().tearDown()
+
+    def adopted(self, **f):
+        c = self.m.save_candidate(self.pid, f, "u")
+        self.m.adopt(self.pid, c["id"], True, "", "u")
+        return c["id"]
+
+    def test_material_is_created_then_conditions(self):
+        cid = self.adopted(kind="資材", part="本体", supplier="A社", unit_price="80",
+                           lead_days="20", min_lot="100")
+        r = self.m.register_candidate(self.pid, cid, {"code": "NP-1", "material_kind": "原材料",
+                                                      "category": "アクリル", "name": "板"}, "kanri")
+        self.assertEqual(r["seisan_ref"], "material:NP-1/原材料")
+        self.assertEqual([c[0] for c in self.calls], ["material_create", "material_order_params"])
+        create = self.calls[0][1]
+        self.assertEqual(create[1]["unit_price"], 80.0, "単価は候補から")
+        self.assertEqual(create[2], "kanri", "押した人を actor で渡す（seisan 側で管理者か確かめる）")
+        params = self.calls[1][1][2]
+        self.assertEqual((params["supplier"], params["lead_days"], params["lot_size"]),
+                         ("A社", 20.0, 100.0))
+        with self.assertRaises(ValueError):
+            self.m.register_candidate(self.pid, cid, {"code": "NP-1"}, "kanri")   # 二度は登録しない
+
+    def test_unknown_values_are_sent_blank_not_zero(self):
+        cid = self.adopted(kind="資材", part="本体", supplier="A社")
+        self.m.register_candidate(self.pid, cid, {"code": "NP-2", "material_kind": "原材料",
+                                                  "category": "x", "name": "x"}, "kanri")
+        params = self.calls[1][1][2]
+        self.assertEqual((params["lead_days"], params["lot_size"]), ("", ""))
+        self.assertIsNone(self.calls[0][1][1]["unit_price"])
+
+    def test_refused_create_records_nothing(self):
+        self.refuse["material_create"] = "材料コード「NP-1」は既に存在します"
+        cid = self.adopted(kind="資材", part="本体", supplier="A社")
+        with self.assertRaises(ValueError):
+            self.m.register_candidate(self.pid, cid, {"code": "NP-1", "material_kind": "原材料",
+                                                      "category": "x", "name": "x"}, "kanri")
+        self.assertIsNone(self.m.candidates(self.pid)[0]["seisan_ref"])
+
+    def test_outsourcer_new_and_price_partial(self):
+        self.refuse["outsource_price_save"] = "商品コード「X」は商品マスタにありません"
+        cid = self.adopted(kind="外注", supplier="B社", unit_price="150", lead_days="14")
+        r = self.m.register_candidate(self.pid, cid, {"target_kind": "商品", "target_key": "X"}, "kanri")
+        self.assertEqual(r["seisan_ref"], "outsourcer:7")
+        self.assertIn("途中まで登録", r["note"])
+        self.assertEqual(self.calls[0][1][0]["name"], "B社")
+
+    def test_only_adopted_and_only_g5_role(self):
+        c = self.m.save_candidate(self.pid, {"kind": "外注", "supplier": "B"}, "u")
+        with self.assertRaises(ValueError):
+            self.m.register_candidate(self.pid, c["id"], {}, "kanri")
+        cid = self.adopted(kind="外注", supplier="C")
+        with self.assertRaises(PermissionError):
+            self.m.register_candidate(self.pid, cid, {}, "u")
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
