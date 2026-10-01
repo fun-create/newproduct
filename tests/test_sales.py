@@ -171,6 +171,7 @@ class Feed(unittest.TestCase):
         self.assertEqual(p["rows"][0]["store_code"], "gd1")
         self.assertIsNone(p["rows"][0]["name"])
         self.assertIn("表示名", p["name_note"])
+        self.assertEqual(p["rows"][0]["name_label"], "未取得")
         self.assertEqual(p["rows"][0]["product_codes"], ["P1"])
         self.assertEqual(p["rows"][1]["path"], "seisan の紐付けに無い")
 

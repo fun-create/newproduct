@@ -136,8 +136,9 @@ FEED_CAVEATS = [
     "分類は生産管理（seisan）の紐付け表で付けています。当たらない商品番号は「分類なし」",
     "期間は 2025-05 から（売上フィードの約束）。前年比は 2026-05 以降の丸1か月だけ",
 ]
-WHY_NAME = ("表示名は準備中です（FutureShop の商品 API を使うかを十文字さんが判断中）。"
-            "いまは店の商品番号と分類で表しています")
+WHY_NAME = ("表示名は未取得です。売上フィードが各店の商品マスタの名前を取るようになったら出します"
+            "（2026-10-01 十文字さん決定・杉浦さんへ API の追加を依頼中）")
+NAME_PENDING = "未取得"
 TOP_N = 30
 
 
@@ -231,7 +232,8 @@ def _overview_feed(site: str, month: str | None, base: dict) -> dict:
         i = info.get(k, {"path": "—", "codes": []})
         proj = next((reg[c] for c in i["codes"] if c in reg), None)
         pv = pcodes.get(k, {}).get("revenue") if pcodes else None
-        prows.append({"store_code": k or "（番号なし）", "name": None, "path": i["path"],
+        prows.append({"store_code": k or "（番号なし）", "name": None, "name_label": NAME_PENDING,
+                      "path": i["path"],
                       "product_codes": i["codes"][:3], "more_codes": max(0, len(i["codes"]) - 3),
                       "revenue": v["revenue"], "qty": v["qty"], "share": _share(v["revenue"], total),
                       "yoy": _yoy(v["revenue"], pv, comp), "project_id": proj})

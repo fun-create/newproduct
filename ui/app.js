@@ -2135,9 +2135,10 @@
           pc.appendChild(el("p", { "class": "np-note", text: pr.why }));
         } else {
           if (pr.name_note) pc.appendChild(el("p", { "class": "np-note", text: pr.name_note }));
-          pc.appendChild(table(["店の商品番号", "分類", "共通商品コード", "売上", "数量", "構成比", "前年比", "案件"],
+          pc.appendChild(table(["店の商品番号", "表示名", "分類", "共通商品コード", "売上", "数量", "構成比", "前年比", "案件"],
             pr.rows.map(function (x) {
-              return el("tr", null, [el("td", { text: x.store_code }), el("td", { text: x.path }),
+              return el("tr", null, [el("td", { text: x.store_code }), el("td", { text: x.name || x.name_label || "—" }),
+                el("td", { text: x.path }),
                 el("td", { text: x.product_codes.length ? x.product_codes.join("、") + (x.more_codes ? " ほか" + x.more_codes : "") : "—" }),
                 el("td", { "class": "np-num", text: yen(x.revenue) }),
                 el("td", { "class": "np-num", text: Math.round(x.qty).toLocaleString("ja-JP") }),
