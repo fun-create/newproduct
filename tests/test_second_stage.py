@@ -360,6 +360,10 @@ class TestPermissions(Base):
                 v = 5.5 if col == "effort_point" else "検査"
                 store.ex(f"UPDATE project SET {col}=? WHERE id=?", (v, self.p["id"]))
                 store.conn().commit()
+            elif m["check"] == "target":
+                from app import target
+                target.save(self.p["id"], {"method": "類似商品法", "annual_yen": "500000",
+                                           "basis": "似ている商品 A の発売1年の実績から"}, "kanri")
             elif m["check"] == "cost":
                 from app import cost
                 v = cost.new_version(self.p["id"], {}, "kanri")

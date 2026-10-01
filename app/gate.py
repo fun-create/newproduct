@@ -86,6 +86,10 @@ def _satisfied(check: str, proj: dict, secs: dict, chks: dict,
         n = store.val("SELECT COUNT(*) FROM project_variant WHERE project_id=?",
                       (project_id,), 0)
         return n >= int(rest or 1), f"バリエーション {n} 件"
+    if kind == "target":
+        # 第4段（FR-109）。方式と根拠つきの年間目標があるか
+        from app import target
+        return target.gate_state(project_id)
     if kind == "cost":
         # 第3段（FR-88）。最新の版に材料か外注の行が1つでもあれば「v1 あり」
         from app import cost
@@ -249,8 +253,35 @@ def review(project_id: str, gate: str, result: str, user_id: str,
                   "what,detail) VALUES (?,?,?,?,?)",
                   (project_id, store.now_s(), user_id, f"{gate} {result}",
                    comment or None))
+    if gate == "G5" and result == "通過":
+        _post_launch_tasks(proj, user_id)
     return {"gate": gate, "result": result,
             "missing_at_review": [m["key"] for m in miss]}
+
+
+# 発売後の確認タスク（F-10-1／F-10-2・FR-104/105）。**G5 通過で起票する**（期限は発売日から）。
+# 担当ロールは要件に無いので仮置き（売上集計＝商品開発部・生産問題点＝生産部）
+POST_LAUNCH_TASKS = (("売上集計（発売+2週）", 14, "devdept"),
+                     ("生産問題点確認（発売+2か月）", 60, "prod"))
+
+
+def _post_launch_tasks(proj: dict, user_id: str) -> int:
+    import datetime as _dt
+    n = 0
+    with store.tx() as c:
+        seq = c.execute("SELECT COALESCE(MAX(seq),0) FROM task WHERE project_id=?",
+                        (proj["id"],)).fetchone()[0]
+        for title, days, role in POST_LAUNCH_TASKS:
+            if c.execute("SELECT 1 FROM task WHERE project_id=? AND title=?",
+                         (proj["id"], title)).fetchone():
+                continue                     # 二度通しても増やさない
+            due = ((_dt.date.fromisoformat(proj["launch_date"]) + _dt.timedelta(days=days)).isoformat()
+                   if proj.get("launch_date") else None)
+            seq += 1
+            c.execute("INSERT INTO task (project_id,seq,title,role,due_on,status,created_at) "
+                      "VALUES (?,?,?,?,?,'未着手',?)", (proj["id"], seq, title, role, due, store.now_s()))
+            n += 1
+    return n
 
 
 def reasons() -> dict:

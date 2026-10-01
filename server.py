@@ -52,6 +52,7 @@ from app import seed as seed_m   # noqa: E402
 from app import sales as sales_m  # noqa: E402
 from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
+from app import target as target_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -471,6 +472,21 @@ class H(BaseHTTPRequestHandler):
                             {k: d.get(k) for k in ("template_id", "id", "result")}, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
+
+        # 年間目標（FR-109/110・FR-106）。**3方式と根拠が必須**。未設定は「目標未設定」
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "target":
+            pid = parts[1]
+            if method == "POST":
+                d = self.body()
+                r = target_m.save(pid, d, uid)
+                store.audit(uid, "project.target", pid, {"method": d.get("method"),
+                                                         "annual_yen": d.get("annual_yen")}, ip)
+                return self.sendj(200, r)
+            ps = sales_m.project_sales(pid)
+            actual = (sum(x["total"] for x in ps.get("sites") or [] if x["total"] is not None)
+                      if not ps.get("why") else None)
+            p = store.one("SELECT launch_date FROM project WHERE id=?", (pid,))
+            return self.sendj(200, target_m.progress(pid, p["launch_date"] if p else None, actual))
 
         # 新商品の発売後の売上（FR-183）。見るだけ
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "sales" and method == "GET":

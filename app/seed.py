@@ -104,6 +104,7 @@ def _item(key, label, check, goto, stage=None, hint=None):
 #   manual              … **このアプリがまだ持っていないデータ。**人が確認した記録を見る
 #   seisan              … seisan への登録が全対象（バリエーション）で済んでいる（第3段）
 #   cost                … 試算原価の最新の版に材料か外注の行がある（第3段）
+#   target              … 方式と根拠つきの年間目標がある（第4段）
 GATES = [
     ("G0", 0, "起票", ["devdept", "admin", "member", "president"], ALL_FLOWS, [
         _item("internal_name", "商品案名（社内呼称）", "project:internal_name", "A"),
@@ -140,8 +141,8 @@ GATES = [
         _item("cost_v1", "試算原価 v1", "cost", "cost", None,
               "案件画面の「原価・調達」で試算原価の版を作り、材料か外注の行を入れると埋まります"),
         _item("price", "販売価格", "section:D.price", "D"),
-        _item("goal", "年間目標（根拠つき）", "manual", "D", "第4段",
-              "発売後評価（第4段）ができたら sales_target の方式と根拠で判定します"),
+        _item("goal", "年間目標（根拠つき）", "target", "target", None,
+              "案件画面の「年間目標」で、3方式のどれかと根拠を入れると埋まります（F-10-8）"),
         _item("material", "資材の調達見通し", "section:D.material", "D"),
         _item("risk", "主要リスクと対策", "section:E.risk", "E"),
     ], "**社長だけ。**枠を取る判断（G2）と中身の判断（G3）を分ける（F-6-1）"),
@@ -158,7 +159,7 @@ GATES = [
         _item("lp", "商品ページ公開確認", "section:F.lp", "F"),
         _item("product_code", "Seisan の商品コード確定", "seisan", "seisan", None,
               "F-6-7。この画面から seisan へ登録するか、seisan で登録したコードを記録すると埋まります"),
-        _item("goal_entered", "年間目標が入力済み", "manual", "D", "第4段"),
+        _item("goal_entered", "年間目標が入力済み", "target", "target", None),
         _item("announce", "全体周知済み", "manual", "F"),
         _item("profc", "PRO FUN-CREATOR 共有済み", "manual", "F"),
     ], None),

@@ -474,6 +474,12 @@
         b.appendChild(cp);
         compatPanel(d.id, cp, h.editable);
 
+        // 年間目標（FR-109/110・FR-106）。**自由入力にしない**（3方式と根拠が必須）
+        var tg = el("div", { "class": "np-card", id: "np-sec-target" });
+        tg.appendChild(el("h2", { text: "年間目標" }));
+        b.appendChild(tg);
+        targetPanel(d.id, tg, h.editable);
+
         // 発売後の売上（FR-183）。seisan に登録したコード → 店の商品番号 → 売上フィード
         var ps = el("div", { "class": "np-card", id: "np-sec-sales" });
         ps.appendChild(el("h2", { text: "発売後の売上" }));
@@ -579,6 +585,50 @@
     });
     w.appendChild(f);
     return w;
+  }
+
+  /** 年間目標（F-10-8）。発売から1年・税込の商品代。**未設定は「目標未設定」**（0 と書かない） */
+  function targetPanel(pid, box, editable) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    api(P + "/target").then(function (t) {
+      if (t.state === "目標未設定") {
+        box.appendChild(el("p", { "class": "np-warn", text: "目標未設定（G3・G5 を通すには、方式と根拠つきの年間目標が要ります）" }));
+      } else {
+        box.appendChild(table(["項目", "値"], [
+          el("tr", null, [el("th", { text: "年間目標（発売から1年・税込の商品代）" }), el("td", { text: yen(t.annual_yen) })]),
+          el("tr", null, [el("th", { text: "方式" }), el("td", { text: t.method })]),
+          el("tr", null, [el("th", { text: "根拠" }), el("td", { text: t.basis })]),
+          el("tr", null, [el("th", { text: "発売からの実績" }), el("td", { text: t.actual === undefined || t.actual === null ? "未計測（seisan 登録と発売の後に出ます）" : yen(t.actual) + "（発売から " + t.days + " 日）" })]),
+          el("tr", null, [el("th", { text: "達成率" }), el("td", { text: t.rate === null || t.rate === undefined ? "—" : t.rate + "%（年間目標に対して）"
+            + (t.pace_rate !== null && t.pace_rate !== undefined ? "／経過日数で按分した目安に対して " + t.pace_rate + "%" : "") })])
+        ]));
+        box.appendChild(el("p", { "class": "np-sub", text: "最終更新 " + dash(t.updated_at) + " " + dash(t.updated_by) + "。Amazon の実績はまだ含みません（売上フィードに無いため）。" }));
+      }
+      if (!editable) return;
+      var f = el("form", { "class": "np-field" });
+      var ms = el("select", { name: "method", "aria-label": "方式" });
+      ms.appendChild(el("option", { value: "", text: "（方式を選ぶ）" }));
+      Object.keys(t.methods).forEach(function (m) { ms.appendChild(el("option", { value: m, text: m })); });
+      if (t.method) ms.value = t.method;
+      var hint = el("span", { "class": "np-sub" });
+      ms.addEventListener("change", function () { hint.textContent = ms.value ? "　根拠に書くこと: " + t.methods[ms.value] : ""; });
+      var yenIn = el("input", { name: "annual_yen", size: "10", "aria-label": "年間目標（円）" });
+      if (t.annual_yen) yenIn.value = Math.round(t.annual_yen);
+      var bs = el("textarea", { name: "basis", rows: "3", "aria-label": "根拠" });
+      bs.value = t.basis || "";
+      f.appendChild(el("p", null, [ms, txt(" 年間目標（円・税込の商品代） "), yenIn, hint]));
+      f.appendChild(el("label", { text: "根拠（必須）" }));
+      f.appendChild(bs);
+      var bar = el("p", null, [el("button", { type: "submit", text: t.state === "目標未設定" ? "目標を決める" : "目標を直す" }),
+        el("span", { "class": "np-sub", text: "　平均で置くとほぼ全商品が未達になります（実績の中央値は約7万円・上位23商品で8割）。似ている商品の実績から置くのが目安です。" })]);
+      f.appendChild(bar);
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        post(P + "/target", { method: ms.value, annual_yen: yenIn.value, basis: bs.value }).then(function () { go(); })
+          .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+      });
+      box.appendChild(f);
+    }).catch(function (e) { box.appendChild(el("p", { "class": "np-err", text: e.message })); });
   }
 
   /** 対応確認（FR-102・2026-10-01「商品開発部に決めてもらう」）。
