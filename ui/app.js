@@ -2041,6 +2041,10 @@
           mf.appendChild(el("a", { href: href(d.site, m), text: m, "aria-current": m === d.month ? "true" : null }));
         });
         b.appendChild(mf);
+        if (d.feed_why) b.appendChild(el("p", { "class": "np-warn",
+          text: "売上フィードが読めないため、Auto GROWTH の月次集計で表示しています（" + d.feed_why + "）。" }));
+        if (d.source_until) b.appendChild(el("p", { "class": "np-note",
+          text: "売上フィードは " + d.source_until + " までの注文を取り込み済みです。" }));
         if (!d.complete) b.appendChild(el("p", { "class": "np-warn",
           text: d.month + " はまだ終わっていない月です。前年比は出しません（丸1か月の前年と比べると必ず低く出るため）。" }));
 
@@ -2124,9 +2128,23 @@
 
         // 4段目: 商品別
         var pc = el("div", { "class": "np-card" });
-        pc.appendChild(el("h2", { text: "商品別" }));
-        pc.appendChild(el("p", { "class": "np-big-unmeasured", text: "未計測" }));
-        pc.appendChild(el("p", { "class": "np-note", text: d.products.why }));
+        var pr = d.products;
+        pc.appendChild(el("h2", { text: "商品別" + (pr.rows ? "（上位 " + pr.rows.length + "／" + pr.count + " 商品番号）" : "") }));
+        if (!pr.rows) {
+          pc.appendChild(el("p", { "class": "np-big-unmeasured", text: "未計測" }));
+          pc.appendChild(el("p", { "class": "np-note", text: pr.why }));
+        } else {
+          if (pr.name_note) pc.appendChild(el("p", { "class": "np-note", text: pr.name_note }));
+          pc.appendChild(table(["店の商品番号", "分類", "共通商品コード", "売上", "数量", "構成比", "前年比", "案件"],
+            pr.rows.map(function (x) {
+              return el("tr", null, [el("td", { text: x.store_code }), el("td", { text: x.path }),
+                el("td", { text: x.product_codes.length ? x.product_codes.join("、") + (x.more_codes ? " ほか" + x.more_codes : "") : "—" }),
+                el("td", { "class": "np-num", text: yen(x.revenue) }),
+                el("td", { "class": "np-num", text: Math.round(x.qty).toLocaleString("ja-JP") }),
+                el("td", null, [shareBar(x.share)]), el("td", { "class": "np-num", text: yoy(x.yoy) }),
+                el("td", null, [x.project_id ? el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: "新商品 " + x.project_id }) : txt("—")])]);
+            })));
+        }
         b.appendChild(pc);
 
         // 数え方

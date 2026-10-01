@@ -130,7 +130,133 @@ def _composition(d: dict) -> dict:
             "classified_share": _share(classified, total)}
 
 
+FEED_SOURCE = "売上フィード（経営管理・各店の API から毎晩）。取消・返金の注文を除く"
+FEED_CAVEATS = [
+    "金額は税込の商品代（単価＋オプション代）×数量。送料・決済手数料・クーポンは含みません",
+    "分類は生産管理（seisan）の紐付け表で付けています。当たらない商品番号は「分類なし」",
+    "期間は 2025-05 から（売上フィードの約束）。前年比は 2026-05 以降の丸1か月だけ",
+]
+WHY_NAME = ("表示名は準備中です（FutureShop の商品 API を使うかを十文字さんが判断中）。"
+            "いまは店の商品番号と分類で表しています")
+TOP_N = 30
+
+
+def _registered() -> dict[str, str]:
+    """NEW PRODUCT から seisan に登録した共通商品コード → 案件ID（新商品の印）。"""
+    try:
+        from app import store
+        return {r["product_code"]: r["project_id"] for r in store.q(
+            "SELECT product_code, project_id FROM seisan_registration "
+            "WHERE state='登録済' AND product_code IS NOT NULL")}
+    except Exception:
+        return {}
+
+
+def _classify(site, codes: dict, cmap: dict | None):
+    """店の商品番号ごとの合計に分類を付ける。(大分類→{revenue, cat2→revenue}, 分類なし, 各番号の分類)。
+    **分類が1つに決まらない番号（seisan で大・中分類が割れる）は分類なしに入れる。**"""
+    from app import salesfeed
+    st = salesfeed.SHOPS[site][1]
+    cat1, unc, info = {}, 0.0, {}
+    for k, v in codes.items():
+        ent = (cmap or {}).get((st, k))
+        pairs = {(a, b) for a, b, _c in ent["cats"]} if ent else set()
+        if len(pairs) == 1:
+            a, b = next(iter(pairs))
+            c1 = cat1.setdefault(a, {"revenue": 0.0, "cat2": {}})
+            c1["revenue"] += v["revenue"]
+            c1["cat2"][b] = c1["cat2"].get(b, 0.0) + v["revenue"]
+            cats = sorted(ent["cats"])
+            info[k] = {"path": " / ".join(x for x in cats[0] if x) if len(cats) == 1
+                       else f"{a} / {b}", "codes": sorted(ent["codes"])}
+        else:
+            unc += v["revenue"]
+            info[k] = {"path": ("複数の分類に分かれる番号" if ent else "seisan の紐付けに無い"),
+                       "codes": sorted(ent["codes"]) if ent else []}
+    return cat1, unc, info
+
+
+def _overview_feed(site: str, month: str | None, base: dict) -> dict:
+    from app import salesfeed
+    ms = salesfeed.months()
+    if month not in ms:
+        # 既定は**直近の丸1か月**（今月は途中なので構成の見方を誤らせる）
+        done = [m for m in ms if salesfeed.complete(m)]
+        month = done[-1] if done else ms[-1]
+    tot, meta = salesfeed.monthly(site)
+    comp = salesfeed.complete(month)
+    py = salesfeed._month_add(month, -12)
+    cur = tot.get(month)
+    prev = tot.get(py) if py in ms else None
+    trend = [{"month": m, "revenue": tot.get(m), "complete": salesfeed.complete(m),
+              "prev_revenue": tot.get(salesfeed._month_add(m, -12))
+              if salesfeed._month_add(m, -12) in ms else None}
+             for m in ms[-13:]]
+    out = {**base, "months": ms, "month": month, "complete": comp,
+           "generated_at": meta.get("generated_at"), "source": FEED_SOURCE,
+           "source_until": meta.get("source_until"), "caveats": FEED_CAVEATS,
+           "prev_year_month": py if py in ms else None,
+           "total": {"revenue": cur, "prev_revenue": prev, "yoy": _yoy(cur, prev, comp),
+                     "why": None if cur is not None else "未計測: この月の明細がありません"},
+           "trend": trend}
+    cmap, why_map = salesfeed.code_map()
+    codes = salesfeed.by_code(site, month)
+    pcodes = salesfeed.by_code(site, py) if (py in ms and comp) else {}
+    total = sum(v["revenue"] for v in codes.values())
+    if cmap is None:
+        out["composition"] = {"rows": None, "why": "未計測: " + (why_map or "")}
+    else:
+        c1, unc, info = _classify(site, codes, cmap)
+        p1, _pu, _pi = _classify(site, pcodes, cmap) if pcodes else ({}, None, {})
+        rows = []
+        for name, v in sorted(c1.items(), key=lambda x: -x[1]["revenue"]):
+            pv = p1.get(name, {}).get("revenue") if pcodes else None
+            rows.append({"name": name, "revenue": v["revenue"], "prev_revenue": pv,
+                         "share": _share(v["revenue"], total), "yoy": _yoy(v["revenue"], pv, comp),
+                         "children": [{"name": k2, "revenue": r2,
+                                       "prev_revenue": (p1.get(name, {}).get("cat2", {}).get(k2)
+                                                        if pcodes else None),
+                                       "share": _share(r2, total),
+                                       "yoy": _yoy(r2, p1.get(name, {}).get("cat2", {}).get(k2)
+                                                   if pcodes else None, comp)}
+                                      for k2, r2 in sorted(v["cat2"].items(), key=lambda x: -x[1])]})
+        out["composition"] = {"rows": rows, "total": total, "classified": total - unc,
+                              "unclassified": unc, "unclassified_share": _share(unc, total),
+                              "classified_share": _share(total - unc, total), "why": None}
+    reg = _registered()
+    top = sorted(codes.items(), key=lambda x: -x[1]["revenue"])[:TOP_N]
+    info = _classify(site, dict(top), cmap)[2] if cmap is not None else {}
+    prows = []
+    for k, v in top:
+        i = info.get(k, {"path": "—", "codes": []})
+        proj = next((reg[c] for c in i["codes"] if c in reg), None)
+        pv = pcodes.get(k, {}).get("revenue") if pcodes else None
+        prows.append({"store_code": k or "（番号なし）", "name": None, "path": i["path"],
+                      "product_codes": i["codes"][:3], "more_codes": max(0, len(i["codes"]) - 3),
+                      "revenue": v["revenue"], "qty": v["qty"], "share": _share(v["revenue"], total),
+                      "yoy": _yoy(v["revenue"], pv, comp), "project_id": proj})
+    out["products"] = {"rows": prows, "count": len(codes), "why": None, "name_note": WHY_NAME}
+    return out
+
+
 def overview(site: str = "all", month: str | None = None) -> dict:
+    if site not in SITE_KEYS:
+        raise ValueError(f"知らないサイト {site!r}")
+    from app import salesfeed
+    if site in salesfeed.SHOPS:
+        base = {"sites": [{"key": k, "label": lb} for k, lb, _ in SITES], "site": site,
+                "site_label": next(lb for k, lb, _ in SITES if k == site),
+                "tax": "税込", "basis": "商品代（受注日・取消と返金を除く）"}
+        try:
+            return _overview_feed(site, month, base)
+        except salesfeed.Unavailable as e:
+            fallback = overview_ag(site, month)
+            fallback["feed_why"] = str(e)
+            return fallback
+    return overview_ag(site, month)
+
+
+def overview_ag(site: str = "all", month: str | None = None) -> dict:
     if site not in SITE_KEYS:
         raise ValueError(f"知らないサイト {site!r}")
     ms = months()

@@ -104,5 +104,94 @@ class Sales(unittest.TestCase):
             self.m.overview("yahoo")
 
 
+
+class Feed(unittest.TestCase):
+    """売上フィード（段階B）。仮の DB と、seisan の紐付け表の偽物で見る。"""
+
+    def setUp(self):
+        import sqlite3
+        self.dir = Path(tempfile.mkdtemp(prefix="np-feed-"))
+        self.db = self.dir / "sales_v1.sqlite"
+        c = sqlite3.connect(self.db)
+        c.executescript("""
+          CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+          CREATE TABLE orders (shop TEXT, order_no TEXT, order_date TEXT, status TEXT,
+                               PRIMARY KEY (shop, order_no));
+          CREATE TABLE order_lines (shop TEXT, order_no TEXT, line_no INTEGER, sku_no TEXT,
+                               item_code TEXT, qty INTEGER, unit_price INTEGER, option_price INTEGER);
+          INSERT INTO meta VALUES ('contract_version','1'), ('generated_at','2026-10-01T02:33');
+        """)
+        def o(shop, no, d, st, lines):
+            c.execute("INSERT INTO orders VALUES (?,?,?,?)", (shop, no, d, st))
+            for i, (sku, item, q, up, op) in enumerate(lines):
+                c.execute("INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?)",
+                          (shop, no, i, sku, item, q, up, op))
+        o("funcreate", "1", "2026-08-03", "COMPLETED", [("gd1", "", 2, 1000, 100), ("gd9", "", 1, 500, 0)])
+        o("funcreate", "2", "2026-08-10", "CANCELLED", [("gd1", "", 5, 1000, 0)])     # 除く
+        o("funcreate", "3", "2025-08-10", "COMPLETED", [("gd1", "", 1, 1000, 0)])
+        o("funcreate", "4", "2026-09-30", None, [("gd2", "", 1, 300, 0)])
+        o("rakuten", "R1", "2026-08-05", "", [("v1", "10001", 1, 800, 0)])
+        c.commit(); c.close()
+        os.environ["NEWPRODUCT_SALESFEED"] = str(self.db)
+        os.environ["NEWPRODUCT_TODAY"] = "2026-10-01"
+        os.environ["NEWPRODUCT_AG_EXPORT"] = str(self.dir / "none")
+        from app import salesfeed, sales, seisan
+        self.f, self.m, self.seisan = salesfeed, sales, seisan
+        salesfeed._MAP.update(at=0.0, map=None)
+        self._orig = seisan.store_codes
+        seisan.store_codes = lambda: {"as_of": "x", "items": [
+            {"store": "グッズ本店", "store_code": "gd1", "product_code": "P1", "cat1": "布製品", "cat2": "タオル", "cat3": "", "pack_qty": 1},
+            {"store": "グッズ本店", "store_code": "gd2", "product_code": "P2", "cat1": "布製品", "cat2": "タオル", "cat3": "", "pack_qty": 1},
+            {"store": "楽天", "store_code": "10001", "product_code": "P3", "cat1": "アクリル製品", "cat2": "アクスタ", "cat3": "", "pack_qty": 1}],
+            "fba": []}
+
+    def tearDown(self):
+        self.seisan.store_codes = self._orig
+        for k in ("NEWPRODUCT_SALESFEED", "NEWPRODUCT_TODAY", "NEWPRODUCT_AG_EXPORT"):
+            os.environ.pop(k, None)
+
+    def test_default_is_last_complete_month_and_cancelled_is_excluded(self):
+        o = self.m.overview("goods")
+        self.assertEqual(o["month"], "2026-09", "今月（10月）は途中なので直近の丸1か月")
+        o = self.m.overview("goods", "2026-08")
+        self.assertEqual(o["total"]["revenue"], 2700.0)            # (1000+100)*2 + 500。取消は除く
+        self.assertEqual(o["total"]["prev_revenue"], 1000.0)
+        self.assertEqual(o["total"]["yoy"], 170.0)
+        self.assertIn("売上フィード", o["source"])
+
+    def test_composition_uses_seisan_map_and_unmatched_is_one_row(self):
+        c = self.m.overview("goods", "2026-08")["composition"]
+        self.assertEqual(c["rows"][0]["name"], "布製品")
+        self.assertEqual(c["rows"][0]["revenue"], 2200.0)
+        self.assertEqual(c["unclassified"], 500.0)                  # gd9 は紐付けに無い
+        self.assertEqual(c["rows"][0]["children"][0]["name"], "タオル")
+
+    def test_products_have_codes_not_names(self):
+        p = self.m.overview("goods", "2026-08")["products"]
+        self.assertEqual(p["rows"][0]["store_code"], "gd1")
+        self.assertIsNone(p["rows"][0]["name"])
+        self.assertIn("表示名", p["name_note"])
+        self.assertEqual(p["rows"][0]["product_codes"], ["P1"])
+        self.assertEqual(p["rows"][1]["path"], "seisan の紐付けに無い")
+
+    def test_rakuten_uses_item_code(self):
+        c = self.m.overview("rakuten", "2026-08")["composition"]
+        self.assertEqual(c["rows"][0]["name"], "アクリル製品")
+        self.assertEqual(c["unclassified"], 0.0)
+
+    def test_other_contract_version_stops(self):
+        import sqlite3
+        c = sqlite3.connect(self.db); c.execute("UPDATE meta SET value='2' WHERE key='contract_version'")
+        c.commit(); c.close()
+        with self.assertRaises(self.f.Unavailable):
+            self.f.monthly("goods")
+        o = self.m.overview("goods", "2026-08")
+        self.assertIn("版", o["feed_why"])                         # 黙って読まない。理由を出す
+
+    def test_months_start_2025_05(self):
+        self.assertEqual(self.f.months()[0], "2025-05")
+        self.assertNotIn("2025-04", self.m.overview("goods")["months"])
+
+
 if __name__ == "__main__":
     unittest.main()
