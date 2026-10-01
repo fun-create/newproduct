@@ -173,6 +173,20 @@ def similar(cat1: str = "", cat2: str = "", cat3: str = "") -> list[dict]:
     return [{k: it.get(k) for k in keep} for it in (j.get("items") or [])][:50]
 
 
+def store_codes() -> dict:
+    """店の商品番号 → 共通商品コード・分類（2026-10-01 吉田さん実装・売上実績の段階B用）。
+
+    **名前が混ざって返ってきても持たない**（決めた列だけを拾う）。
+    1つの店舗商品コードが複数の共通商品コードに割れる行もそのまま返る。
+    """
+    j = _call("GET", "/api/svc/master/store_codes")
+    ik = ("store", "store_code", "product_code", "cat1", "cat2", "cat3", "shape", "size", "pack_qty")
+    fk = ("sku", "product_code", "cat1", "cat2", "cat3", "pack_qty")
+    return {"as_of": j.get("as_of"),
+            "items": [{k: it.get(k) for k in ik} for it in (j.get("items") or [])],
+            "fba": [{k: it.get(k) for k in fk} for it in (j.get("fba") or [])]}
+
+
 # ── 検査（seisan の規則）────────────────────────────────
 def validate(d: dict, voc: dict) -> tuple[list[str], list[str]]:
     """(止める理由, 注意)。**止める理由は seisan が断るものと同じ**にする。"""

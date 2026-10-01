@@ -47,6 +47,11 @@ class FakeSeisan:
             # **名前を混ぜて返す**（seisan 側の実装がずれた場合）。持たないことを見る
             return 200, {"items": [{"code": "OLD-1", "cat1": "うちわ", "name": "山田 花子様用",
                                     "has_recipe": True}]}
+        if path == "/api/svc/master/store_codes":
+            return 200, {"as_of": "x", "items": [
+                {"store": "グッズ本店", "store_code": "gd1", "product_code": "P1", "cat1": "布製品",
+                 "product_name": "山田 花子様用", "name": "x", "pack_qty": 1}],
+                "fba": [{"sku": "F1", "product_code": "P1", "cat1": "布製品", "name": "y"}]}
         if path == "/api/svc/master/product/create":
             if body["code"] in self.products:
                 return 400, {"error": f"商品コード「{body['code']}」は既に存在します"}
@@ -241,6 +246,13 @@ class Register(Base):
         rows = self.m.similar("うちわ")
         self.assertEqual(rows[0]["code"], "OLD-1")
         self.assertNotIn("name", rows[0])
+
+    def test_store_codes_never_keep_names(self):
+        j = self.m.store_codes()
+        self.assertEqual(j["items"][0]["store_code"], "gd1")
+        self.assertNotIn("product_name", j["items"][0])
+        self.assertNotIn("name", j["items"][0])
+        self.assertNotIn("name", j["fba"][0])
 
     def test_same_code_twice_is_refused(self):
         from app import project
