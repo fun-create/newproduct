@@ -175,6 +175,21 @@ class Feed(unittest.TestCase):
         self.assertEqual(p["rows"][0]["product_codes"], ["P1"])
         self.assertEqual(p["rows"][1]["path"], "seisan の紐付けに無い")
 
+    def test_names_come_from_master_table_when_it_exists(self):
+        import sqlite3
+        c = sqlite3.connect(self.db)
+        c.executescript("""CREATE TABLE products (shop TEXT, product_no TEXT, item_code TEXT, sku_no TEXT,
+                              name TEXT, variation_h TEXT, variation_v TEXT, visible INTEGER, updated_at TEXT);
+          INSERT INTO products VALUES ('funcreate','gd1','','gd1','タオル（マスタ名）','','',1,'x');
+          INSERT INTO products VALUES ('rakuten','r-1','10001','v1','アクスタ（マスタ名）','','',1,'x');""")
+        c.commit(); c.close()
+        p = self.m.overview("goods", "2026-08")["products"]
+        self.assertEqual(p["rows"][0]["name"], "タオル（マスタ名）")
+        self.assertIsNone(p["rows"][1]["name"], "表に無い番号は未取得のまま")
+        self.assertIsNone(p["name_note"])
+        r = self.m.overview("rakuten", "2026-08")["products"]
+        self.assertEqual(r["rows"][0]["name"], "アクスタ（マスタ名）", "楽天は item_code で引く")
+
     def test_rakuten_uses_item_code(self):
         c = self.m.overview("rakuten", "2026-08")["composition"]
         self.assertEqual(c["rows"][0]["name"], "アクリル製品")

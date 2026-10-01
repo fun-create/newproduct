@@ -226,18 +226,20 @@ def _overview_feed(site: str, month: str | None, base: dict) -> dict:
                               "classified_share": _share(total - unc, total), "why": None}
     reg = _registered()
     top = sorted(codes.items(), key=lambda x: -x[1]["revenue"])[:TOP_N]
+    nm = salesfeed.names(site, [k for k, _v in top])
     info = _classify(site, dict(top), cmap)[2] if cmap is not None else {}
     prows = []
     for k, v in top:
         i = info.get(k, {"path": "—", "codes": []})
         proj = next((reg[c] for c in i["codes"] if c in reg), None)
         pv = pcodes.get(k, {}).get("revenue") if pcodes else None
-        prows.append({"store_code": k or "（番号なし）", "name": None, "name_label": NAME_PENDING,
+        prows.append({"store_code": k or "（番号なし）", "name": nm.get(k), "name_label": NAME_PENDING,
                       "path": i["path"],
                       "product_codes": i["codes"][:3], "more_codes": max(0, len(i["codes"]) - 3),
                       "revenue": v["revenue"], "qty": v["qty"], "share": _share(v["revenue"], total),
                       "yoy": _yoy(v["revenue"], pv, comp), "project_id": proj})
-    out["products"] = {"rows": prows, "count": len(codes), "why": None, "name_note": WHY_NAME}
+    out["products"] = {"rows": prows, "count": len(codes), "why": None,
+                       "name_note": None if nm else WHY_NAME}
     return out
 
 

@@ -146,3 +146,25 @@ def by_code(site: str, month: str) -> dict[str, dict]:
                          "lines": int(r["n"])} for r in rows}
     finally:
         c.close()
+
+
+def names(site: str, keys: list[str]) -> dict[str, str]:
+    """店の商品番号 → 商品マスタの名前（経営管理 ADR-030・`products` 表）。
+
+    **表がまだ無ければ空**（画面は「未取得」）。FutureShop は sku_no（枝番付きにも親の名前が入る）、
+    楽天は item_code で引く。**商品マスタの名前だけ**で、注文の名前（お客さまの文字が混ざる）ではない。
+    """
+    keys = [k for k in keys if k]
+    if not keys:
+        return {}
+    shop, _st, col = SHOPS[site]
+    c, _meta = _open()
+    try:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(products)")}
+        if not cols or "name" not in cols or col not in cols:
+            return {}
+        q = (f"SELECT {col} k, name FROM products WHERE shop=? AND {col} IN "
+             f"({','.join('?' * len(keys))}) AND COALESCE(name,'')!=''")
+        return {r["k"]: r["name"] for r in c.execute(q, (shop, *keys))}
+    finally:
+        c.close()
