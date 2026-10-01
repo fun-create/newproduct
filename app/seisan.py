@@ -187,6 +187,52 @@ def store_codes() -> dict:
             "fba": [{k: it.get(k) for k in fk} for it in (j.get("fba") or [])]}
 
 
+# ── 外注先・原材料（2026-10-01 吉田さん実装・ADR-047・FR-184）────────────
+# **マスタは seisan。**ここは読むのと、採用した候補を seisan の規則で登録するだけ。
+# 書き込みは seisan 側でも「CIP の管理者か」を確かめる（押した人の共通IDを actor で渡す）
+MATERIAL_KINDS_COPY = ("原材料", "メディア", "梱包材")   # 口が無いときの写し（10-01 吉田さん）
+
+
+def outsourcers() -> list[dict]:
+    keep = ("id", "name", "capabilities", "work_centers", "order_method", "active")
+    j = _call("GET", "/api/svc/master/outsourcers")
+    return [{k: it.get(k) for k in keep} for it in (j.get("items") or [])]
+
+
+def materials(category: str = "", q: str = "") -> dict:
+    j = _call("GET", "/api/svc/master/materials",
+              {k: v for k, v in (("category", category), ("q", q)) if v})
+    keep = ("code", "kind", "category", "name", "unit_price", "supplier", "lead_days",
+            "safety_days", "lot_size", "unit")
+    return {"items": [{k: it.get(k) for k in keep} for it in (j.get("items") or [])],
+            "kinds": list(j.get("kinds") or MATERIAL_KINDS_COPY),
+            "categories": list(j.get("categories") or [])}
+
+
+def _write(path: str, body: dict, actor: str, ref: str) -> dict:
+    return _call("POST", path, body={**body, "actor": actor, "ref": ref})
+
+
+def outsourcer_save(fields: dict, actor: str, ref: str, oid=None) -> dict:
+    body = {"fields": fields}
+    if oid:
+        body["id"] = int(oid)
+    return _write("/api/svc/master/outsourcer/save", body, actor, ref)
+
+
+def outsource_price_save(fields: dict, actor: str, ref: str) -> dict:
+    return _write("/api/svc/master/outsource_price/save", {"fields": fields}, actor, ref)
+
+
+def material_create(code: str, fields: dict, actor: str, ref: str) -> dict:
+    return _write("/api/svc/master/material/create", {"code": code, "fields": fields}, actor, ref)
+
+
+def material_order_params(code: str, kind: str, fields: dict, actor: str, ref: str) -> dict:
+    return _write("/api/svc/master/material/order_params",
+                  {"code": code, "kind": kind, "fields": fields}, actor, ref)
+
+
 # ── 検査（seisan の規則）────────────────────────────────
 def validate(d: dict, voc: dict) -> tuple[list[str], list[str]]:
     """(止める理由, 注意)。**止める理由は seisan が断るものと同じ**にする。"""
