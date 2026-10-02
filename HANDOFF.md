@@ -80,15 +80,10 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 **正本が変わったら写し直す**: Mac の `docs/keiei/departments.json` を VPS へ送り、
 `sudo install -o newproduct -g newproduct -m 644 <file> /opt/newproduct/config/departments.json`。
 
-### 5. `/var/log/newproduct-backup.log` がまだ無い
+### 5. ~~バックアップの初回確認~~ — 2026-10-02 済
 
-`cron.d` は `>> /var/log/newproduct-backup.log` を指定しているが、**ファイルがまだ存在しない**
-（初回の 04:15 を迎えていないため）。**04:15 を過ぎたら、世代が今日の日付で増えているかを
-目で見て確認すること**（共通ルール §3「日次バックアップは、権限で静かに死にます」）。
-
-```bash
-ssh masateru@162.43.43.186 'sudo ls -1 /var/backups/newproduct | tail -3'
-```
+毎朝 04:15 に動いている（13世代・各約170KB）。`/var/log/newproduct-backup.log` あり。
+世代は `root:root 600`（`config/seisan.env`・`svc_token`・`users.json` を含むので、この権限を緩めないこと）。
 
 ---
 
