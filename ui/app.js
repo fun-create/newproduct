@@ -2615,7 +2615,8 @@
         var tr = el("div", { "class": "np-card" });
         tr.appendChild(el("h2", { text: "月ごとの推移" }));
         var maxv = d.trend.reduce(function (a, x) { return Math.max(a, x.revenue || 0, x.prev_revenue || 0); }, 0);
-        tr.appendChild(table(["月", "売上", "", "前年同月", "前年比"], d.trend.map(function (x) {
+        // **最新の月を上に**（2026-10-02 十文字さん）
+        tr.appendChild(table(["月", "売上", "", "前年同月", "前年比"], d.trend.slice().reverse().map(function (x) {
           return el("tr", null, [el("td", { text: x.month + (x.complete ? "" : "（途中）") }),
             el("td", { "class": "np-num", text: yen(x.revenue) }),
             el("td", null, [shareBar(maxv && x.revenue !== null ? x.revenue / maxv * 100 : null)]),
