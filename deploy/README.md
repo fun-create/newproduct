@@ -91,6 +91,17 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
    - `roles/newproduct.json` は消さない（切り替え後はこれが正）
    - 業務ロール（生産部など・ゲートの承認資格）は別軸: `tools/grant_role.py`
 
+7. 月次レポートの timer（FR-116・2026-10-02）
+
+   ```bash
+   sudo cp /opt/newproduct/deploy/newproduct-monthly.{service,timer} /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now newproduct-monthly.timer
+   systemctl list-timers newproduct-monthly.timer      # 次は毎月2日 10:00
+   sudo systemctl start newproduct-monthly.service     # 手で前月分を作る（画面の「作り直す」でも可）
+   ```
+
+   一部の節が作れないと**終了コード1**（`systemctl --failed` に出る）。レポート本文の末尾「作れなかった節」に理由がある
+
 ## 戻す
 
 ```bash
