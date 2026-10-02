@@ -152,4 +152,4 @@ table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted
 @media (max-width: 480px) { .np-share { width: 3rem; } }
 
 /* LP依頼書（FR-118）。読むための欄なので幅いっぱいに */
-#np-sec-lpreq textarea { width: 100%; box-sizing: border-box; font-family: inherit; }
+#np-sec-lpreq textarea { width: 100%; box-sizing: border-box; }
