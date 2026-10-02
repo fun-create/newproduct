@@ -403,6 +403,7 @@
         if (h.flow_note) head.appendChild(el("p", { "class": "np-warn", text: h.flow_note }));
         head.appendChild(gateChips(d.gates));
         if (h.editable) head.appendChild(stageControl(d, meta));
+        if (h.editable) head.appendChild(revenueControl(d));
         b.appendChild(head);
 
         // B. いま欠けているもの（最上段）
@@ -621,6 +622,23 @@
     });
     w.appendChild(f);
     return w;
+  }
+
+  /** 売上計上（F-4-9）。**既定は含めない。**含めるなら全額か増分（同じ商品番号の前年との差） */
+  function revenueControl(d) {
+    var f = el("form", { "class": "np-inline" });
+    var sel = el("select", { "aria-label": "売上計上" });
+    [["0", "新商品売上に含めない"], ["全額", "含める（全額）"], ["増分", "含める（増分＝前年の同じ期間との差）"]].forEach(function (o) {
+      sel.appendChild(el("option", { value: o[0], text: o[1] })); });
+    var cur = d.header.revenue;
+    sel.value = cur.indexOf("全額") >= 0 ? "全額" : cur.indexOf("増分") >= 0 ? "増分" : "0";
+    [txt("売上計上: "), sel, txt(" "), el("button", { type: "submit", text: "変える" })].forEach(function (x) { f.appendChild(x); });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/projects/" + encodeURIComponent(d.id) + "/revenue", { counted: sel.value === "0" ? "0" : "1", basis: sel.value === "0" ? "" : sel.value })
+        .then(function () { go(); }).catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    return f;
   }
 
   /** ステージの遷移（FR-33）。**1本の道。分岐は保留・中止だけ。**関門と対応するステージは関門の通過が要る */
@@ -2914,6 +2932,29 @@
             text: "サイトごとの構成は、売上フィードと seisan の対応表が届いてから、各サイトのタブに出ます。" }));
         }
         b.appendChild(cc);
+
+        // 新商品の売上（FR-112・115）。全体タブだけ
+        if (d.site === "all") {
+          var nc2 = el("div", { "class": "np-card" });
+          nc2.appendChild(el("h2", { text: "新商品（NEW PRODUCT から出した商品）" }));
+          b.appendChild(nc2);
+          api("/api/sales/new-products").then(function (n) {
+            nc2.appendChild(el("p", { "class": "np-sub", text: n.since + "〜" + n.until + "。" + n.note }));
+            var flows = Object.keys(n.by_flow).map(function (k) { return k + " " + n.by_flow[k]; }).join("・");
+            nc2.appendChild(table(["項目", "値"], [
+              el("tr", null, [el("th", { text: "新商品の本数（発売から1年以内）" }), el("td", { text: n.count + " 本" + (flows ? "（" + flows + "）" : "") })]),
+              el("tr", null, [el("th", { text: "売上として数える案件" }), el("td", { text: n.counted + " 件" })]),
+              el("tr", null, [el("th", { text: "全額で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["全額"]) })]),
+              el("tr", null, [el("th", { text: "増分で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["増分"]) })]),
+              el("tr", null, [el("th", { text: "未計測・方式未選択" }), el("td", { text: n.totals["未計測"] + " 件・" + n.totals["方式未選択"] + " 件" })])
+            ]));
+            if (n.rows.length) nc2.appendChild(table(["案件", "発売日", "方式", "金額", "備考"], n.rows.map(function (r) {
+              return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.id }), txt(" " + (r.internal_name || r.product))]),
+                el("td", { text: r.launch_date }), el("td", { text: dash(r.basis) }),
+                el("td", { "class": "np-num", text: r.amount === null ? "未計測" : yen(r.amount) }), el("td", { text: dash(r.why) })]);
+            })));
+          }).catch(function (e) { nc2.appendChild(el("p", { "class": "np-err", text: e.message })); });
+        }
 
         // 4段目: 商品別
         var pc = el("div", { "class": "np-card" });

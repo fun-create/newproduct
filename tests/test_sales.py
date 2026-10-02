@@ -248,6 +248,38 @@ class Feed(unittest.TestCase):
         self.assertEqual(o["shared"], ["グッズ本店 gd1"])
         store.close()
 
+    def test_new_product_summary_full_incremental_and_unmeasured(self):
+        os.environ["NEWPRODUCT_DB"] = str(self.dir / "np2.db")
+        from app import store, seed, project
+        store.close()
+        seed.run()
+        pid = project.create("u", expand=False, internal_name="新商品", flow_type="meire",
+                             launch_date="2026-08-01")["id"]
+        old = project.create("u", expand=False, internal_name="古い", flow_type="meire",
+                             launch_date="2025-10-15")["id"]
+        with store.tx() as c:
+            c.execute("INSERT INTO seisan_registration (project_id,state,product_code) VALUES (?,?,?)", (pid, "登録済", "P1"))
+            c.execute("INSERT INTO seisan_registration (project_id,state,product_code) VALUES (?,?,?)", (old, "登録済", "P2"))
+        n = self.m.new_product_summary()
+        self.assertEqual(n["count"], 2)
+        self.assertEqual(n["counted"], 0, "既定は売上に含めない")
+        with self.assertRaises(ValueError):
+            project.set_revenue(pid, True, "", "u")                       # 方式が要る
+        project.set_revenue(pid, True, "全額", "u")
+        n = self.m.new_product_summary()
+        self.assertEqual(n["totals"]["全額"], 2200.0)
+        project.set_revenue(pid, True, "増分", "u")
+        r = self.m.new_product_summary()["rows"][0]
+        self.assertEqual((r["full"], r["baseline"], r["amount"]), (2200.0, 1000.0, 1200.0))
+        project.set_revenue(old, True, "増分", "u")                      # 前年 2024-10 は売上フィードの外
+        n = self.m.new_product_summary()
+        o = next(x for x in n["rows"] if x["id"] == old)
+        self.assertIsNone(o["amount"])
+        self.assertIn("未計測", o["why"])
+        project.set_revenue(pid, False, "", "u")
+        self.assertEqual(self.m.new_product_summary()["counted"], 1)
+        store.close()
+
     def test_months_start_2025_05(self):
         self.assertEqual(self.f.months()[0], "2025-05")
         self.assertNotIn("2025-04", self.m.overview("goods")["months"])

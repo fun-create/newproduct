@@ -129,7 +129,7 @@ def main() -> int:
         st, d = cl.get("/api/dashboard")
         note(st == 200 and set(d["stuck"]) == {"overdue", "gate_waiting", "today"},
              "/api/dashboard の1段目が「いま詰まっているもの」", str(st))
-        note(all(m["value"] is None and m["state"] == "未計測" for m in d["monthly"]),
+        note(all(m["value"] is None and m["state"] in ("未計測", "対象なし") for m in d["monthly"]),
              "/api/dashboard の2段目が「未計測」（0 ではない）",
              str([m["state"] for m in d["monthly"]]))
 

@@ -355,9 +355,7 @@ def dashboard(user_id: str) -> dict:
             # FR-63。**承認済み版の今月の枠のうち、案件化した数**（F-3）。
             # 策定中の版は数えない（下書きを分母にすると枠を足すほど達成率が下がる）
             _plan.slot_consumption(),
-            {"label": "発売後チェックの未処理", "value": None, "state": "未計測",
-             "why": "発売後評価（post_launch_review・第4段）が未実装です。"
-                    "seisan の商品コード×月×販路のエクスポートが前提で、未依頼です。"},
+            post_launch_pending(),
         ],
         "upcoming": _p.upcoming(4),
         "attention": {
@@ -424,3 +422,24 @@ def accept_work_item(wid: int, user_id: str) -> dict:
         c.execute("UPDATE work_item SET accepted_at=?, status='完了', done_at=? WHERE id=?",
                   (now, now, wid))
     return {"ok": True}
+
+
+def post_launch_pending() -> dict:
+    """FR-63「発売後チェックの未処理」。G5 通過で起票した発売後タスク（FR-104/105）のうち、
+    **期限が来たのに完了していない**もの。
+
+    G5 を通した案件がまだ無いなら「対象なし」（0 とは書かない。積み上がっていないのではなく、
+    数える相手がいない）。移行した発売済の案件はアプリで G5 を通していないので数えない。"""
+    from app import gate
+    titles = [t for t, _d, _r in gate.POST_LAUNCH_TASKS]
+    marks = ",".join("?" * len(titles))
+    base = {"label": "発売後チェックの未処理", "link": "#/tasks?when=overdue"}
+    total = store.val(f"SELECT COUNT(*) FROM task WHERE title IN ({marks})", titles, 0)
+    if not total:
+        return {**base, "value": None, "state": "対象なし",
+                "why": "アプリで G5（発売可）を通した案件がまだありません。G5 を通すと、発売+2週・+2か月の確認タスクが起票され、ここで数えます"}
+    today = store.today_s()
+    n = store.val(f"SELECT COUNT(*) FROM task WHERE title IN ({marks}) AND status NOT IN ('完了','対象外') "
+                  "AND due_on IS NOT NULL AND due_on <= ?", (*titles, today), 0)
+    return {**base, "value": f"{n} 件", "count": n, "state": "未処理あり" if n else "なし",
+            "why": f"発売後の確認タスク {total} 件のうち、期限が来て完了していないもの"}

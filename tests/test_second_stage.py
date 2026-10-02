@@ -613,9 +613,26 @@ class TestDashboard(Base):
         self.assertEqual(labels, ["コンセプト在庫月数", "今月の枠の消化",
                                   "発売後チェックの未処理"])
         for m in d["monthly"]:
-            self.assertIsNone(m["value"])
-            self.assertEqual(m["state"], "未計測")
+            self.assertIsNone(m["value"], m["label"])
+            self.assertIn(m["state"], ("未計測", "対象なし"), m["label"])   # 0 とは書かない
             self.assertTrue(m["why"])
+
+    def test_post_launch_pending_counts_due_and_open(self):
+        from app import gate, project, store, task
+        pid = project.create("tester", expand=False, internal_name="発売後", flow_type="meire",
+                             launch_date="2026-08-01")["id"]
+        gate._post_launch_tasks(dict(store.one("SELECT * FROM project WHERE id=?", (pid,))), "tester")
+        m = task.post_launch_pending()
+        # NEWPRODUCT_TODAY 次第で期限到来の数が変わる。**期限が来ていて未完了のものだけ**を数える
+        due = store.val("SELECT COUNT(*) FROM task WHERE project_id=? AND due_on <= ?", (pid, store.today_s()), 0)
+        self.assertEqual(m["count"], due)
+        store.ex("UPDATE task SET status='完了' WHERE project_id=?", (pid,)); store.conn().commit()
+        self.assertEqual(task.post_launch_pending()["count"], 0)
+        self.assertEqual(task.post_launch_pending()["state"], "なし")
+        # 後の検査（同じDBを使う）に残さない
+        with store.tx() as c:
+            c.execute("DELETE FROM project WHERE id=?", (pid,))
+        self.assertEqual(task.post_launch_pending()["state"], "対象なし")
 
 
 @unittest.skipUnless((BASE / "auth.py").is_file(),

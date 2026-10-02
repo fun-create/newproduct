@@ -511,3 +511,23 @@ def delete_variant(pid: str, vid, user_id: str) -> dict:
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) "
                   "VALUES (?,?,?,?,?)", (pid, store.now_s(), user_id, "バリエーション削除", v["label"]))
     return {"ok": True}
+
+
+# ── 売上計上（F-4-9・FR-112）。**既定は含めない**（ページリニューアルを黙って新商品売上に混ぜない）──
+def set_revenue(pid: str, counted: bool, basis: str, user_id: str) -> dict:
+    p = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+    basis = (basis or "").strip() or None
+    if counted and basis not in REVENUE_BASIS:
+        raise ValueError("含めるときは「全額」か「増分」を選んでください（リニューアルは増分が目安）")
+    if not counted:
+        basis = None
+    with store.tx() as c:
+        c.execute("UPDATE project SET revenue_counted=?, revenue_basis=?, updated_at=?, updated_by=? WHERE id=?",
+                  (1 if counted else 0, basis, store.now_s(), user_id, pid))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                  (pid, store.now_s(), user_id, "売上計上", f"含める（{basis}）" if counted else "含めない"))
+    return {"ok": True}

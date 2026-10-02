@@ -199,7 +199,7 @@ def names(site: str, keys: list[str]) -> dict[str, dict]:
         c.close()
 
 
-def by_codes_daily(site: str, keys: list[str], since: str) -> dict[str, dict]:
+def by_codes_daily(site: str, keys: list[str], since: str, until: str | None = None) -> dict[str, dict]:
     """指定した商品番号だけの、日ごとの {revenue, qty}（since 以降）。新商品の発売後の売上用。"""
     keys = [k for k in keys if k]
     if not keys:
@@ -212,9 +212,9 @@ def by_codes_daily(site: str, keys: list[str], since: str) -> dict[str, dict]:
                        SUM((COALESCE(l.unit_price,0)+COALESCE(l.option_price,0))*COALESCE(l.qty,0)) amt,
                        SUM(COALESCE(l.qty,0)) q
                 FROM order_lines l JOIN orders o USING (shop, order_no)
-                WHERE l.shop=? AND o.order_date>=? AND COALESCE(o.status,'') NOT IN (?,?,?)
+                WHERE l.shop=? AND o.order_date>=? AND o.order_date<? AND COALESCE(o.status,'') NOT IN (?,?,?)
                   AND l.{col} IN ({','.join('?' * len(keys))})
-                GROUP BY d""", (shop, max(since, SINCE), *EXCLUDED, *keys)).fetchall()
+                GROUP BY d""", (shop, max(since, SINCE), until or "9999-12-31", *EXCLUDED, *keys)).fetchall()
         return {r["d"]: {"revenue": float(r["amt"] or 0), "qty": float(r["q"] or 0)} for r in rows}
     finally:
         c.close()

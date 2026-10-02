@@ -377,3 +377,66 @@ def project_sales(pid: str) -> dict:
         return {**base, "why": f"未計測: {e}"}
     return {**base, "why": None, "sites": sites, "shared": shared,
             "tax": "税込", "amazon": "未計測（Amazon は売上フィードに入っていません）"}
+
+
+# ── 新商品の売上の集計（FR-112・FR-115・F-10-11／12）──────────────────────
+# **本数と売上計上の対象は別物**（F-10-12）。本数＝発売から1年以内の案件。
+# 売上として数えるのは**売上計上フラグ（project.revenue_counted）が立つ案件だけ**（F-4-9）。
+# 「全額」はそのまま、「増分」は**同じ商品番号の前年同じ日数との差**。前年の期間に売上フィードの
+# データが無ければ未計測（0 とも全額とも読まない）。
+def _pdate(s: str):
+    import datetime as _dt
+    return _dt.date.fromisoformat(s)
+
+
+def new_product_summary() -> dict:
+    import datetime as _dt
+    from app import project as project_m, salesfeed, store
+    today = salesfeed._today()
+    since = (today - _dt.timedelta(days=365)).isoformat()
+    launched = store.rows(store.q(
+        "SELECT p.*, f.label AS flow_label FROM project p LEFT JOIN flow_type f ON f.code=p.flow_type "
+        "WHERE p.launch_date IS NOT NULL AND p.launch_date <= ? AND p.launch_date >= ? "
+        "AND p.stage != '中止' ORDER BY p.launch_date", (today.isoformat(), since)))
+    by_flow = {}
+    for p in launched:
+        by_flow[p["flow_label"] or "開発タイプ未設定"] = by_flow.get(p["flow_label"] or "開発タイプ未設定", 0) + 1
+    rows, tot = [], {"全額": 0.0, "増分": 0.0, "未計測": 0, "方式未選択": 0}
+    for p in launched:
+        if not p["revenue_counted"]:
+            continue
+        r = {"id": p["id"], "product": project_m.product_label(p), "internal_name": p["internal_name"],
+             "launch_date": p["launch_date"], "basis": p["revenue_basis"], "amount": None, "why": None}
+        if p["revenue_basis"] not in ("全額", "増分"):
+            r["why"] = "全額か増分かが選ばれていません（F-4-9）"
+            tot["方式未選択"] += 1
+            rows.append(r); continue
+        ps = project_sales(p["id"])
+        if ps.get("why"):
+            r["why"] = ps["why"]; tot["未計測"] += 1
+            rows.append(r); continue
+        full = sum(x["total"] or 0 for x in ps["sites"] if x["total"] is not None)
+        if p["revenue_basis"] == "全額":
+            r["amount"] = full
+            tot["全額"] += full
+        else:
+            ld = _pdate(p["launch_date"])
+            base_from = (ld - _dt.timedelta(days=365)).isoformat()
+            base_to = (today - _dt.timedelta(days=365)).isoformat()
+            if base_from < salesfeed.SINCE:
+                r["why"] = f"前年の同じ期間（{base_from}〜）に売上フィードのデータがありません。増分は未計測"
+                tot["未計測"] += 1
+                rows.append(r); continue
+            base = 0.0
+            for x in ps["sites"]:
+                if x["store_codes"]:
+                    d = salesfeed.by_codes_daily(x["site"], x["store_codes"], base_from, base_to)
+                    base += sum(v["revenue"] for v in d.values())
+            r["amount"] = full - base
+            r["full"], r["baseline"] = full, base
+            tot["増分"] += r["amount"]
+        rows.append(r)
+    return {"since": since, "until": today.isoformat(), "count": len(launched), "by_flow": by_flow,
+            "counted": len(rows), "rows": rows, "totals": tot, "tax": "税込",
+            "note": ("本数は発売から1年以内の案件（中止を除く）。売上として数えるのは「売上計上」を立てた案件だけ。"
+                     "Amazon は売上フィードに無いので含まない")}
