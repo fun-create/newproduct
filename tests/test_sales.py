@@ -118,14 +118,15 @@ class Feed(unittest.TestCase):
           CREATE TABLE orders (shop TEXT, order_no TEXT, order_date TEXT, status TEXT,
                                PRIMARY KEY (shop, order_no));
           CREATE TABLE order_lines (shop TEXT, order_no TEXT, line_no INTEGER, sku_no TEXT,
-                               item_code TEXT, qty INTEGER, unit_price INTEGER, option_price INTEGER);
+                               item_code TEXT, qty INTEGER, unit_price INTEGER, option_price INTEGER,
+                               product_url TEXT);
           INSERT INTO meta VALUES ('contract_version','1'), ('generated_at','2026-10-01T02:33');
         """)
         def o(shop, no, d, st, lines):
             c.execute("INSERT INTO orders VALUES (?,?,?,?)", (shop, no, d, st))
             for i, (sku, item, q, up, op) in enumerate(lines):
-                c.execute("INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?)",
-                          (shop, no, i, sku, item, q, up, op))
+                c.execute("INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?,?)",
+                          (shop, no, i, sku, item, q, up, op, "/kan-" + sku + "/" if shop == "rakuten" else ""))
         o("funcreate", "1", "2026-08-03", "COMPLETED", [("gd1", "", 2, 1000, 100), ("gd9", "", 1, 500, 0)])
         o("funcreate", "2", "2026-08-10", "CANCELLED", [("gd1", "", 5, 1000, 0)])     # 除く
         o("funcreate", "3", "2025-08-10", "COMPLETED", [("gd1", "", 1, 1000, 0)])
@@ -183,7 +184,8 @@ class Feed(unittest.TestCase):
                               visible INTEGER, source_updated_at TEXT, fetched_at TEXT);
           INSERT INTO products VALUES ('funcreate','gd1','gd1','','タオル（マスタ名）',0,'','',1,'x','x');
           INSERT INTO products VALUES ('funcreate','gd9','gd9','',NULL,1,'','',1,'x','x');
-          INSERT INTO products VALUES ('rakuten','v1','r-1','10001','アクスタ（マスタ名）',0,'','',1,'x','x');""")
+          INSERT INTO products VALUES ('rakuten','kan-v1','kan-v1','10001','アクスタ（マスタ名）',0,'','',1,'x','x');
+          INSERT INTO products VALUES ('rakuten','kan-zz','kan-zz','10001','別の商品（同じ商品番号）',0,'','',1,'x','x');""")
         c.commit(); c.close()
         p = self.m.overview("goods", "2026-08")["products"]
         self.assertEqual(p["rows"][0]["name"], "タオル（マスタ名）")
@@ -191,7 +193,17 @@ class Feed(unittest.TestCase):
         self.assertEqual(p["rows"][1]["name_label"], "個別の商品")
         self.assertIsNone(p["name_note"])
         r = self.m.overview("rakuten", "2026-08")["products"]
-        self.assertEqual(r["rows"][0]["name"], "アクスタ（マスタ名）", "楽天は item_code で引く")
+        self.assertEqual(r["rows"][0]["name"], "アクスタ（マスタ名）",
+                         "楽天は商品管理番号で引く（同じ item_code の別商品の名前を拾わない）")
+        # 注文に別の商品管理番号が混ざると、名前を決めつけない
+        import sqlite3
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT INTO orders VALUES ('rakuten','R2','2026-08-06','')")
+        c.execute("INSERT INTO order_lines VALUES ('rakuten','R2',0,'zz','10001',1,100,0,'/kan-zz/')")
+        c.commit(); c.close()
+        r = self.m.overview("rakuten", "2026-08")["products"]
+        self.assertIsNone(r["rows"][0]["name"])
+        self.assertEqual(r["rows"][0]["name_label"], "複数の商品（同じ商品番号）")
 
     def test_rakuten_uses_item_code(self):
         c = self.m.overview("rakuten", "2026-08")["composition"]

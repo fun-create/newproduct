@@ -139,6 +139,7 @@ FEED_CAVEATS = [
 WHY_NAME = ("表示名は未取得です。売上フィードが各店の商品マスタの名前を取るようになったら出します"
             "（2026-10-01 十文字さん決定・杉浦さんへ API の追加を依頼中）")
 NAME_PENDING = "未取得"
+NAME_MULTI = "複数の商品（同じ商品番号）"   # 楽天で同じ item_code が別の商品にある
 NAME_WITHHELD = "個別の商品"   # お客さまの名前がマスタ名に入る商品。名前は出さない（経営管理 ADR-030）
 TOP_N = 30
 
@@ -236,7 +237,8 @@ def _overview_feed(site: str, month: str | None, base: dict) -> dict:
         pv = pcodes.get(k, {}).get("revenue") if pcodes else None
         n = nm.get(k) or {}
         prows.append({"store_code": k or "（番号なし）", "name": n.get("name"),
-                      "name_label": NAME_WITHHELD if n.get("withheld") else NAME_PENDING,
+                      "name_label": (NAME_MULTI if n.get("multi") else
+                                     NAME_WITHHELD if n.get("withheld") else NAME_PENDING),
                       "path": i["path"],
                       "product_codes": i["codes"][:3], "more_codes": max(0, len(i["codes"]) - 3),
                       "revenue": v["revenue"], "qty": v["qty"], "share": _share(v["revenue"], total),

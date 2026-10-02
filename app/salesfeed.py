@@ -165,15 +165,31 @@ def names(site: str, keys: list[str]) -> dict[str, dict]:
         cols = {r[1] for r in c.execute("PRAGMA table_info(products)")}
         if not cols or "name" not in cols or col not in cols:
             return {}
-        wh = "COALESCE(name_withheld,0)" if "name_withheld" in cols else "0"
-        q = (f"SELECT {col} k, name, {wh} w FROM products WHERE shop=? AND {col} IN "
-             f"({','.join('?' * len(keys))})")
-        out = {}
+        wh = "COALESCE(p.name_withheld,0)" if "name_withheld" in cols else "0"
+        marks = ",".join("?" * len(keys))
+        if site == "rakuten":
+            # **楽天は同じ item_code が複数の商品にある**（10-02 経営管理: 33件・金額の0.8%）。
+            # 名前は注文の product_url の商品管理番号（一意）＝ products.sku_no で引く
+            q = (f"SELECT l.item_code k, p.name, {wh} w FROM order_lines l JOIN products p "
+                 f"ON p.shop=l.shop AND p.sku_no=trim(l.product_url,'/') "
+                 f"WHERE l.shop=? AND l.item_code IN ({marks}) GROUP BY k, p.name, w")
+        else:
+            q = f"SELECT p.{col} k, p.name, {wh} w FROM products p WHERE p.shop=? AND p.{col} IN ({marks})"
+        got: dict = {}
         for r in c.execute(q, (shop, *keys)):
+            g = got.setdefault(r["k"], {"names": set(), "withheld": False})
             if r["w"]:
-                out[r["k"]] = {"name": None, "withheld": True}       # 名前は持たない
+                g["withheld"] = True                                 # 名前は持たない
             elif r["name"]:
-                out.setdefault(r["k"], {"name": r["name"], "withheld": False})
+                g["names"].add(r["name"])
+        out = {}
+        for k, g in got.items():
+            if len(g["names"]) > 1:
+                out[k] = {"name": None, "withheld": False, "multi": True}   # 決めつけない
+            elif g["names"]:
+                out[k] = {"name": next(iter(g["names"])), "withheld": False}
+            elif g["withheld"]:
+                out[k] = {"name": None, "withheld": True}
         return out
     finally:
         c.close()
