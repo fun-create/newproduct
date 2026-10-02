@@ -2532,6 +2532,32 @@
     return el("span", null, [w, " " + pct(v)]);
   }
 
+  /** 自社側70点（FR-138）。**基準は商品開発部が決める。**4軸がそろうまで合計は出さない */
+  function selfCell(t, axes, canScore) {
+    var td = el("td"), ss = t.self || {};
+    td.appendChild(txt(axes.map(function (a) { return a.label + " " + (ss[a.key] === null || ss[a.key] === undefined ? "未" : ss[a.key]); }).join("・")));
+    if (!canScore) return td;
+    var bt = el("button", { type: "button", text: "点を付ける" });
+    bt.addEventListener("click", function () {
+      var f = el("form", { "class": "np-inline" });
+      axes.forEach(function (a) {
+        var i = el("input", { name: a.key, size: "3", "aria-label": a.label + "（0〜" + a.max + "）" });
+        if (ss[a.key] !== null && ss[a.key] !== undefined) i.value = ss[a.key];
+        f.appendChild(txt(" " + a.label + "（〜" + a.max + "） ")); f.appendChild(i);
+      });
+      f.appendChild(txt(" ")); f.appendChild(el("button", { type: "submit", text: "保存" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var o = { theme_id: t.theme_id };
+        axes.forEach(function (a) { o[a.key] = f.elements[a.key].value; });
+        post("/api/fctr/self", o).then(function () { go(); }).catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+      });
+      td.appendChild(f); bt.setAttribute("disabled", "disabled");
+    });
+    td.appendChild(txt(" ")); td.appendChild(bt);
+    return td;
+  }
+
   /** 機会カレンダー（F-2・FR-78〜81）。**発売の目安はイベントの2か月前。**枠は人が押して作る */
   function viewOpportunities() {
     loading();
@@ -2609,7 +2635,7 @@
       d.segments.forEach(function (sg) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h2", { text: sg.name }));
-        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "素点／上限", "観測週", "連続", "根拠", ""], sg.themes.map(function (t) {
+        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "素点／上限", "観測週", "連続", "根拠", "自社側70点", "合計100", ""], sg.themes.map(function (t) {
           var act = el("td");
           if (t.idea_id) act.appendChild(el("a", { href: "#/ideas/" + encodeURIComponent(t.idea_id), text: "アイデア " + t.idea_id }));
           else {
@@ -2625,7 +2651,7 @@
             el("td", { "class": "np-num", text: String(t.decayed) + (t.age_weeks ? "（" + t.age_weeks + "週前の観測）" : "") }),
             el("td", { "class": "np-num", text: t.raw + "／" + dash(t.score_max) }),
             el("td", { text: t.week_id }), el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
-            el("td", { text: dash(t.evidence) }), act]);
+            el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) }), act]);
         })));
         b.appendChild(c);
       });

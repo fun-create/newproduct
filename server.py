@@ -444,7 +444,14 @@ class H(BaseHTTPRequestHandler):
 
         # FCTR の週次トレンド（FR-135〜137）
         if parts == ["fctr"] and method == "GET":
-            return self.sendj(200, fctr_m.board())
+            r = fctr_m.board()
+            r["can_score"] = fctr_m.can_score(uid)
+            return self.sendj(200, r)
+        if parts == ["fctr", "self"] and method == "POST":
+            d = self.body()
+            r = fctr_m.save_self(d.get("theme_id", ""), d, uid)
+            store.audit(uid, "fctr.self_score", d.get("theme_id"), {k: d.get(k) for k in ("fit", "ops", "speed", "profit")}, ip)
+            return self.sendj(200, r)
         if parts == ["fctr", "idea"] and method == "POST":
             d = self.body()
             r = fctr_m.to_idea(d.get("theme_id", ""), d.get("segment", ""), uid)

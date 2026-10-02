@@ -126,6 +126,12 @@ def board() -> dict:
             "consecutive": r["weeks_present"], "novelty": r["novelty"],
             "evidence": ev.get("signal"), "components": det.get("components") or {},
             "idea_id": ideas.get(tid)})
+    selfs = _self_scores()
+    for sg in segs.values():
+        for t in sg["themes"]:
+            ss = selfs.get(t["theme_id"])
+            t["self"] = ss
+            t["total100"] = round(t["decayed"] + ss["total"], 2) if ss and ss["total"] is not None else None
     out = []
     for s in sorted(segs.values(), key=lambda x: x["segment"] or ""):
         s["themes"].sort(key=lambda x: (-x["decayed"], x["label"]))
@@ -136,6 +142,7 @@ def board() -> dict:
         "SELECT DISTINCT week_id FROM theme_signal WHERE source LIKE ? ORDER BY week_id DESC", (SOURCE + "%",))]
     return {"now_week": now, "latest_week": weeks[0] if weeks else None, "weeks": weeks,
             "decay_weeks": DECAY_WEEKS, "top_n": TOP_N, "segments": out, "why": why,
+            "self_axes": [{"key": k, "label": l, "max": m} for k, l, m in SELF_AXES],
             "meta": info.get("meta") or {}}
 
 
@@ -153,3 +160,51 @@ def to_idea(theme_id: str, segment: str, user_id: str) -> dict:
     summary = (f"FCTR {s['week_id']}・{s['segment_name']}・市場性 {s['market_score']}/{s['score_max']}"
                f"（{s['weeks_present']}週連続）" if s else "FCTR から")
     return idea.create(user_id, title=t["label"], origin="fctr", theme_id=theme_id, summary=summary)
+
+
+# ── 自社側70点（FR-138）。**基準は商品開発部が決める**（ここでは欄と上限だけ）──────────
+SELF_AXES = (("fit", "商品相性", 25), ("ops", "製造運用", 20), ("speed", "発売速度", 15), ("profit", "利益性", 10))
+SELF_EDITORS = ("devdept", "admin", "president")
+
+
+def can_score(user_id: str) -> bool:
+    from app import gate
+    return bool(set(gate.roles_of(user_id)) & set(SELF_EDITORS))
+
+
+def save_self(theme_id: str, f: dict, user_id: str) -> dict:
+    if not can_score(user_id):
+        raise PermissionError("自社側の点を付けられるのは、商品開発部・管理者・社長の業務ロールの人です")
+    if store.one("SELECT 1 FROM theme WHERE id=? AND kind=?", (theme_id, THEME_KIND)) is None:
+        raise LookupError("その FCTR テーマはありません")
+    vals = {}
+    for key, label, mx in SELF_AXES:
+        v = str(f.get(key) or "").strip()
+        if v == "":
+            vals[key] = None                       # 未採点（0 ではない）
+            continue
+        try:
+            x = float(v)
+        except ValueError:
+            raise ValueError(f"{label}は数字で入れてください") from None
+        if not 0 <= x <= mx:
+            raise ValueError(f"{label}は 0〜{mx} で入れてください")
+        vals[key] = x
+    with store.tx() as c:
+        c.execute("INSERT INTO fctr_self_score (theme_id,fit,ops,speed,profit,note,updated_by,updated_at) "
+                  "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(theme_id) DO UPDATE SET fit=excluded.fit,"
+                  "ops=excluded.ops,speed=excluded.speed,profit=excluded.profit,note=excluded.note,"
+                  "updated_by=excluded.updated_by,updated_at=excluded.updated_at",
+                  (theme_id, vals["fit"], vals["ops"], vals["speed"], vals["profit"],
+                   (f.get("note") or "").strip()[:300] or None, user_id, store.now_s()))
+    return {"ok": True}
+
+
+def _self_scores() -> dict:
+    out = {}
+    for r in store.q("SELECT * FROM fctr_self_score"):
+        d = dict(r)
+        parts = [d[k] for k, _l, _m in SELF_AXES]
+        d["total"] = sum(parts) if all(p is not None for p in parts) else None   # そろうまで合計を出さない
+        out[d["theme_id"]] = d
+    return out

@@ -99,5 +99,22 @@ class Fctr(unittest.TestCase):
         self.assertEqual(self.m.board()["segments"][0]["themes"][0]["idea_id"], r["id"])
 
 
+    def test_self_score_70_by_devdept_and_total_only_when_complete(self):
+        self.put("2026-W40", [("結婚式記念", 16.0)])
+        self.m.board()
+        with self.store.tx() as c:
+            c.execute("INSERT INTO role_member (role_code,user_id,granted_at) VALUES ('devdept','dev','x')")
+        with self.assertRaises(PermissionError):
+            self.m.save_self("fctr:結婚式記念", {"fit": "20"}, "u")
+        with self.assertRaises(ValueError):
+            self.m.save_self("fctr:結婚式記念", {"fit": "26"}, "dev")          # 上限25
+        self.m.save_self("fctr:結婚式記念", {"fit": "20", "ops": "15"}, "dev")
+        t = self.m.board()["segments"][0]["themes"][0]
+        self.assertIsNone(t["total100"], "4軸がそろうまで合計を出さない")
+        self.assertIsNone(t["self"]["speed"])
+        self.m.save_self("fctr:結婚式記念", {"fit": "20", "ops": "15", "speed": "10", "profit": "5"}, "dev")
+        self.assertEqual(self.m.board()["segments"][0]["themes"][0]["total100"], 66.0)    # 16 + 50
+
+
 if __name__ == "__main__":
     unittest.main()
