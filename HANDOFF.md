@@ -75,11 +75,10 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 
 ### 3. ~~ステージ遷移UI~~ — 2026-10-02 済（FR-33。関門と対応するステージは関門の通過が要る）
 
-### 4. `config/departments.json` の配置
+### 4. ~~`config/departments.json` の配置~~ — 2026-10-02 済（sha256 fc90e0fe… が正本・keiei・Auto GROWTH と一致）
 
-`server.departments_sha()` は実装済みだが、ファイルが無いので `/api/health` の
-`departments_sha` は **null**（FR-120）。keiei の `docs/keiei/departments.json` を写し、
-sha256 で照合する形にする。**5か所目の独自定義を作らない**（N-12）。
+**正本が変わったら写し直す**: Mac の `docs/keiei/departments.json` を VPS へ送り、
+`sudo install -o newproduct -g newproduct -m 644 <file> /opt/newproduct/config/departments.json`。
 
 ### 5. `/var/log/newproduct-backup.log` がまだ無い
 

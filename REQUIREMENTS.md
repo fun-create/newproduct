@@ -185,7 +185,7 @@
 | FR-117 | 依頼の受け渡しをアプリ内で記録する（依頼日・受領日・完了日） | 実装中 | F-11-1 ／ `work_item` の器のみ |
 | FR-118 | LP依頼書を生成する | 未着手 | F-11 ／ カルテ `F.lp` 節に手入力の場所だけある |
 | FR-119 | 4モール（楽天・Amazon・giftmall・Yahoo!）の出品依頼データを構造化して生成する | 未着手 | F-11-2 |
-| FR-120 | keiei の部門マスタを写し、sha256 で照合する（5か所目の独自定義を作らない） | 実装中 | F-12 ／ `server.departments_sha()` はあるが `config/departments.json` が未配置（いま null） |
+| FR-120 | keiei の部門マスタを写し、sha256 で照合する（5か所目の独自定義を作らない） | 実装済 | F-12 ／ 2026-10-02 正本（fun-create-ec-agents `docs/keiei/departments.json`）を `config/departments.json` に配置（644・newproduct）。sha256 `fc90e0fe…` が正本・keiei・Auto GROWTH の写しと一致。`/api/health` の `departments_sha` で照合できる |
 | FR-121 | calfc へ予定を書く（試作日・サンプル納期・発売日・MTG・社長確認） | 未着手 | F-12 ／ 設計書 §3-5・第11章 ⑧ が未依頼 |
 | FR-122 | AutoGrowth の分類別実績（`insight_products_latest.json`）を読む | 未着手 | 設計書 §3-2 ／ 読取ACLは 2026-09-20 に取得済み |
 | FR-123 | HUB へ指標と「理由」を書く（`hub metric` ／ `insights/selling-products.md`） | 未着手 | 設計書 §3-6 |
@@ -293,8 +293,8 @@
 | 状態 | 件数 |
 |---|---|
 | 検証済 | 2 |
-| 実装済 | 118 |
-| 実装中 | 8 |
+| 実装済 | 119 |
+| 実装中 | 7 |
 | 未着手 | 45 |
 | 見送り | 12 |
 | **合計** | **185** |
