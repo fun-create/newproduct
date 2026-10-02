@@ -178,14 +178,17 @@ class Feed(unittest.TestCase):
     def test_names_come_from_master_table_when_it_exists(self):
         import sqlite3
         c = sqlite3.connect(self.db)
-        c.executescript("""CREATE TABLE products (shop TEXT, product_no TEXT, item_code TEXT, sku_no TEXT,
-                              name TEXT, variation_h TEXT, variation_v TEXT, visible INTEGER, updated_at TEXT);
-          INSERT INTO products VALUES ('funcreate','gd1','','gd1','タオル（マスタ名）','','',1,'x');
-          INSERT INTO products VALUES ('rakuten','r-1','10001','v1','アクスタ（マスタ名）','','',1,'x');""")
+        c.executescript("""CREATE TABLE products (shop TEXT, sku_no TEXT, product_no TEXT, item_code TEXT,
+                              name TEXT, name_withheld INTEGER, variation_h TEXT, variation_v TEXT,
+                              visible INTEGER, source_updated_at TEXT, fetched_at TEXT);
+          INSERT INTO products VALUES ('funcreate','gd1','gd1','','タオル（マスタ名）',0,'','',1,'x','x');
+          INSERT INTO products VALUES ('funcreate','gd9','gd9','',NULL,1,'','',1,'x','x');
+          INSERT INTO products VALUES ('rakuten','v1','r-1','10001','アクスタ（マスタ名）',0,'','',1,'x','x');""")
         c.commit(); c.close()
         p = self.m.overview("goods", "2026-08")["products"]
         self.assertEqual(p["rows"][0]["name"], "タオル（マスタ名）")
-        self.assertIsNone(p["rows"][1]["name"], "表に無い番号は未取得のまま")
+        self.assertIsNone(p["rows"][1]["name"], "個別の商品は名前を出さない")
+        self.assertEqual(p["rows"][1]["name_label"], "個別の商品")
         self.assertIsNone(p["name_note"])
         r = self.m.overview("rakuten", "2026-08")["products"]
         self.assertEqual(r["rows"][0]["name"], "アクスタ（マスタ名）", "楽天は item_code で引く")
