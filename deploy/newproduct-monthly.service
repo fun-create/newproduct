@@ -1,0 +1,23 @@
+# NEW PRODUCT 月次レポート（FR-116）。timer から毎月2日 10:00 に前の月の分を作る。
+# **deploy/ は正本ではない。正本は /etc/systemd/system/。**配る前に diff -u で突き合わせる。
+#   sudo cp /opt/newproduct/deploy/newproduct-monthly.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now newproduct-monthly.timer
+# 一部の節が作れなかったら**終了コード1**（落ちない失敗にしない。systemctl --failed に出る）
+
+[Unit]
+Description=NEW PRODUCT 月次レポート（前月分）
+After=network.target
+
+[Service]
+Type=oneshot
+User=newproduct
+Group=newproduct
+WorkingDirectory=/opt/newproduct
+Environment=HOME=/opt/newproduct
+ExecStart=/usr/bin/python3 -u /opt/newproduct/tools/monthly_report.py
+
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/opt/newproduct/data /opt/newproduct/logs

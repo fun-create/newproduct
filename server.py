@@ -57,6 +57,7 @@ from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
 from app import opportunity as opp_m  # noqa: E402
 from app import lpreq as lpreq_m  # noqa: E402
+from app import report as report_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -528,6 +529,22 @@ class H(BaseHTTPRequestHandler):
                       if not ps.get("why") else None)
             p = store.one("SELECT launch_date FROM project WHERE id=?", (pid,))
             return self.sendj(200, target_m.progress(pid, p["launch_date"] if p else None, actual))
+
+        # 月次レポート（FR-116）。毎月2日に timer が作る。画面からも作り直せる
+        if parts == ["reports"] and method == "GET":
+            return self.sendj(200, {"rows": report_m.listing(), "default": report_m.prev_month()})
+        if len(parts) == 2 and parts[0] == "reports" and method == "GET":
+            r = report_m.get(parts[1])
+            if r is None:
+                return self.sendj(404, {"error": f"{parts[1]} の月次レポートはまだありません"})
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "reports" and parts[2] == "build" and method == "POST":
+            import re as _re
+            if not _re.match(r"^\d{4}-(0[1-9]|1[0-2])$", parts[1]):
+                return self.sendj(400, {"error": "月は YYYY-MM で"})
+            r = report_m.save(parts[1], uid)
+            store.audit(uid, "report.build", parts[1], {"problems": len(r["problems"])}, ip)
+            return self.sendj(200, r)
 
         # LP依頼書（FR-118）。**作るだけ。送らない**
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "lp-request" and method == "GET":

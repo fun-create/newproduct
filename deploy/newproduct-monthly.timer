@@ -1,0 +1,10 @@
+# 毎月2日 10:00（売上フィード 02:30・Auto GROWTH の月次集計 2日 09:30 の後）
+[Unit]
+Description=NEW PRODUCT 月次レポート（毎月2日 10:00）
+
+[Timer]
+OnCalendar=*-*-02 10:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

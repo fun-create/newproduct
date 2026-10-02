@@ -27,7 +27,7 @@
   // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
-                "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas",
+                "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan",
                 "#/automation": "#/tasks" };
 
@@ -189,6 +189,7 @@
       // ── 2段目。**未計測と0を区別する**（§5-9 の7）──
       b.appendChild(el("h2", { text: "月次で見るもの" }));
       var g2 = el("div", { "class": "np-grid np-grid-3" });
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/reports", text: "→ 月次レポート" })]));
       d.monthly.forEach(function (m) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h3", { text: m.label }));
@@ -2598,6 +2599,57 @@
     return td;
   }
 
+  /** 月次レポート（FR-116）。**Markdown を安全に描く**（textContent だけ。HTML を混ぜない） */
+  function mdRender(md) {
+    var box = el("div", { "class": "np-report" }), tbl = null, ul = null;
+    function flush() { tbl = null; ul = null; }
+    md.split("\n").forEach(function (ln) {
+      if (/^\|/.test(ln)) {
+        if (/^\|[-| ]+\|$/.test(ln)) return;                 // 区切り行
+        var cells = ln.replace(/^\||\|$/g, "").split("|").map(function (c) { return c.trim(); });
+        if (!tbl) { tbl = el("table", { "class": "np" }); box.appendChild(tbl);
+          var tr0 = el("tr"); cells.forEach(function (c) { tr0.appendChild(el("th", { text: c })); }); tbl.appendChild(tr0); return; }
+        var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(el("td", { text: c })); }); tbl.appendChild(tr); return;
+      }
+      if (/^- /.test(ln)) { if (!ul) { ul = el("ul"); box.appendChild(ul); } ul.appendChild(el("li", { text: ln.slice(2) })); return; }
+      flush();
+      if (/^### /.test(ln)) box.appendChild(el("h4", { text: ln.slice(4) }));
+      else if (/^## /.test(ln)) box.appendChild(el("h3", { text: ln.slice(3) }));
+      else if (/^# /.test(ln)) box.appendChild(el("h2", { text: ln.slice(2) }));
+      else if (ln.trim()) box.appendChild(el("p", { text: ln }));
+    });
+    return box;
+  }
+
+  function viewReports() {
+    loading();
+    var q = hashQuery();
+    api("/api/reports").then(function (d) {
+      var b = clear();
+      setTitle("月次レポート");
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/", text: "← ダッシュボード" })]));
+      b.appendChild(el("p", { "class": "np-note", text: "毎月2日 10:00 に前の月の分を作ります（売上・商品ABC・新商品・開発の進み・年間プラン・トレンド）。事実の数字だけで、AI の文章は入れていません。送りはしません。" }));
+      var nav = el("div", { "class": "np-filters" });
+      var month = q.get("month") || (d.rows[0] && d.rows[0].month) || d.default;
+      d.rows.forEach(function (r) {
+        nav.appendChild(el("a", { href: "#/reports?month=" + r.month, text: r.month + (r.problems ? "（一部作れず）" : ""), "aria-current": r.month === month ? "true" : null }));
+      });
+      var bt = el("button", { type: "button", text: month + " を作り直す" });
+      bt.addEventListener("click", function () {
+        bt.setAttribute("disabled", "disabled");
+        post("/api/reports/" + month + "/build", {}).then(function () { go(); }).catch(function (e) { alert(e.message); });
+      });
+      nav.appendChild(bt);
+      b.appendChild(nav);
+      var card = el("div", { "class": "np-card" });
+      b.appendChild(card);
+      api("/api/reports/" + encodeURIComponent(month)).then(function (r) {
+        card.appendChild(el("p", { "class": "np-sub", text: "作成 " + r.generated_at + "（" + r.generated_by + "）" }));
+        card.appendChild(mdRender(r.body_md));
+      }).catch(function (e) { card.appendChild(el("p", { "class": "np-note", text: e.message + "。上の「作り直す」で作れます。" })); });
+    }).catch(fail);
+  }
+
   /** 機会カレンダー（F-2・FR-78〜81）。**発売の目安はイベントの2か月前。**枠は人が押して作る */
   function viewOpportunities() {
     loading();
@@ -3055,6 +3107,7 @@
     if (path === "#/abc") return viewAbc();
     if (path === "#/trends") return viewTrends();
     if (path === "#/opportunities") return viewOpportunities();
+    if (path === "#/reports") return viewReports();
     return viewNotYet(path, entry);
   }
 
