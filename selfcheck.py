@@ -482,9 +482,12 @@ def check_stage1_db(cl: Client):
          f"実測 {idea.get('theme_score')} — 名前は元表の8列目12件・10列目7件に"
          "分かれていた。総合＝購買意欲×2＋写真親和性＋発生頻度×2 で検算し、"
          "19件すべて誤差0（ADR-032）")
-    note(OK if idea.get("theme_signal") == 0 else NG,
-         "第1段: FCTR の時限スコアは未取込（0件）",
-         f"実測 {idea.get('theme_signal')} — AutoGrowth からの取込は未実装（F-9）")
+    # FCTR（FR-135〜137）は 2026-10-02 から画面を開くと取り込む。**件数は週で増える**ので
+    # 件数ではなく「FCTR テーマの数と時限スコアの数が食い違っていないか」を見る
+    n_sig, n_ft = idea.get("theme_signal") or 0, bk.get("FCTRテーマ") or 0
+    note(OK if (n_sig == 0 and n_ft == 0) or (n_sig >= n_ft > 0) else NG,
+         "FCTR: 時限スコアがテーマの数以上ある（取込が途中で止まっていない）",
+         f"時限スコア {n_sig} 件／FCTR テーマ {n_ft} 件")
 
     n_idea = idea.get("idea") or 0
     by_sheet = idea.get("idea_by_sheet") or {}

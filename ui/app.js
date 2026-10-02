@@ -27,7 +27,7 @@
   // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
-                "#/cost": "#/sales", "#/abc": "#/sales",
+                "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas",
                 "#/opportunities": "#/plan",
                 "#/automation": "#/tasks" };
 
@@ -1539,6 +1539,7 @@
       var d = r[0], meta = r[1];
       var b = clear();
       setTitle("アイデア", d.rubric ? "（" + d.rubric + "）" : "");
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/trends", text: "→ 今週のトレンド（FCTR）から起票する" })]));
 
       // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
       var f = el("form", { "class": "np-filters", id: "np-ifilter" });
@@ -2530,6 +2531,48 @@
     return el("span", null, [w, " " + pct(v)]);
   }
 
+  /** FCTR の週次トレンド（FR-135〜137）。**市場性（30点）だけ**を Auto GROWTH から受け取る。
+   *  時限スコアなので恒久の採点とは足さない。最後に観測された週から8週で 0 まで減らす。 */
+  function viewTrends() {
+    loading();
+    api("/api/fctr").then(function (d) {
+      var b = clear();
+      setTitle("トレンド（FCTR）", d.latest_week ? "／ " + d.latest_week : "");
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/ideas", text: "← アイデア" })]));
+      if (d.why) b.appendChild(el("p", { "class": "np-warn", text: d.why }));
+      var m = d.meta || {};
+      b.appendChild(el("p", { "class": "np-note", text: "Auto GROWTH が毎週月曜に出す需要テーマの「市場性」（30点満点）です。最新 " + dash(d.latest_week)
+        + "（今週 " + d.now_week + "）。点は最後に観測された週から " + d.decay_weeks + " 週で 0 まで減らしています（一過性の高得点を恒久の採点と混ぜないため）。客層ごとに上位 " + d.top_n + " つに印を付けています。" }));
+      if (m.sources_ok) b.appendChild(el("p", { "class": "np-note", text: "今週使えた出どころ: " + (m.sources_ok.join("、") || "なし")
+        + (m.sources_disabled && m.sources_disabled.length ? "／止めている出どころ: " + m.sources_disabled.join("、") : "") }));
+      (m.notes || []).concat(m.not_produced || []).forEach(function (n) { b.appendChild(el("p", { "class": "np-sub", text: "・" + n })); });
+      if (!d.segments.length) { b.appendChild(el("p", { "class": "np-note", text: "表示できるテーマがありません。" })); return; }
+      d.segments.forEach(function (sg) {
+        var c = el("div", { "class": "np-card" });
+        c.appendChild(el("h2", { text: sg.name }));
+        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "素点／上限", "観測週", "連続", "根拠", ""], sg.themes.map(function (t) {
+          var act = el("td");
+          if (t.idea_id) act.appendChild(el("a", { href: "#/ideas/" + encodeURIComponent(t.idea_id), text: "アイデア " + t.idea_id }));
+          else {
+            var bt = el("button", { type: "button", text: "アイデアにする" });
+            bt.addEventListener("click", function () {
+              post("/api/fctr/idea", { theme_id: t.theme_id, segment: sg.segment }).then(function (r) {
+                location.hash = "#/ideas/" + encodeURIComponent(r.id);
+              }).catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            act.appendChild(bt);
+          }
+          return el("tr", null, [el("td", { text: t.top ? "上位" + d.top_n : "" }), el("td", { text: t.label }),
+            el("td", { "class": "np-num", text: String(t.decayed) + (t.age_weeks ? "（" + t.age_weeks + "週前の観測）" : "") }),
+            el("td", { "class": "np-num", text: t.raw + "／" + dash(t.score_max) }),
+            el("td", { text: t.week_id }), el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
+            el("td", { text: dash(t.evidence) }), act]);
+        })));
+        b.appendChild(c);
+      });
+    }).catch(fail);
+  }
+
   /** 商品ABC分析と比較ABC分析（ADR-050）。A 70%・B 90%・C 残り。サイトごとに店の商品番号で数える。
    *  比較は 増加・減少・同額・消滅・新規。**比べる期間にデータが無ければ比較しない。** */
   function viewAbc() {
@@ -2862,6 +2905,7 @@
     if (path === "#/sales") return viewSales();
     if (path === "#/cost") return viewCost();
     if (path === "#/abc") return viewAbc();
+    if (path === "#/trends") return viewTrends();
     return viewNotYet(path, entry);
   }
 

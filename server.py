@@ -54,6 +54,7 @@ from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
+from app import fctr as fctr_m     # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -430,6 +431,15 @@ class H(BaseHTTPRequestHandler):
 
         if parts == ["dashboard"]:
             return self.sendj(200, task_m.dashboard(uid))
+
+        # FCTR の週次トレンド（FR-135〜137）
+        if parts == ["fctr"] and method == "GET":
+            return self.sendj(200, fctr_m.board())
+        if parts == ["fctr", "idea"] and method == "POST":
+            d = self.body()
+            r = fctr_m.to_idea(d.get("theme_id", ""), d.get("segment", ""), uid)
+            store.audit(uid, "fctr.to_idea", r["id"], {"theme_id": d.get("theme_id")}, ip)
+            return self.sendj(200, r)
 
         # 商品ABC分析（2026-10-02・ADR-050）。見るだけ
         if parts == ["abc"] and method == "GET":
