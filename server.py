@@ -53,6 +53,7 @@ from app import sales as sales_m  # noqa: E402
 from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
 from app import target as target_m  # noqa: E402
+from app import abc as abc_m       # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -429,6 +430,16 @@ class H(BaseHTTPRequestHandler):
 
         if parts == ["dashboard"]:
             return self.sendj(200, task_m.dashboard(uid))
+
+        # 商品ABC分析（2026-10-02・ADR-050）。見るだけ
+        if parts == ["abc"] and method == "GET":
+            from app import salesfeed as sf
+            try:
+                return self.sendj(200, abc_m.analyze(
+                    qs.get("site") or "goods", qs.get("from") or "", qs.get("to") or "",
+                    qs.get("compare") or "yoy", qs.get("cfrom") or "", qs.get("cto") or ""))
+            except sf.Unavailable as e:
+                return self.sendj(409, {"error": str(e)})
 
         # 原価・調達の一覧（案件をまたぐ）。見るだけ
         if parts == ["cost"] and method == "GET":

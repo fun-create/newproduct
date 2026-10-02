@@ -27,7 +27,7 @@
   // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
-                "#/cost": "#/sales",
+                "#/cost": "#/sales", "#/abc": "#/sales",
                 "#/opportunities": "#/plan",
                 "#/automation": "#/tasks" };
 
@@ -2420,6 +2420,113 @@
     return el("span", null, [w, " " + pct(v)]);
   }
 
+  /** 商品ABC分析と比較ABC分析（ADR-050）。A 70%・B 90%・C 残り。サイトごとに店の商品番号で数える。
+   *  比較は 増加・減少・同額・消滅・新規。**比べる期間にデータが無ければ比較しない。** */
+  function viewAbc() {
+    loading();
+    var q = hashQuery();
+    var params = ["site", "from", "to", "compare", "cfrom", "cto"].map(function (k) {
+      return q.get(k) ? k + "=" + encodeURIComponent(q.get(k)) : null; }).filter(Boolean);
+    api("/api/abc" + (params.length ? "?" + params.join("&") : "")).then(function (d) {
+      var b = clear();
+      setTitle("商品ABC", "／ " + d.site_label + " " + d.period.from + "〜" + d.period.to);
+      b.appendChild(salesSubnav("#/abc"));
+
+      // 条件
+      var f = el("form", { "class": "np-filters" });
+      function sel(name, label, opts, cur) {
+        var s2 = el("select", { name: name, "aria-label": label });
+        opts.forEach(function (o) { s2.appendChild(el("option", { value: o[0], text: o[1] })); });
+        s2.value = cur || "";
+        return el("label", null, [label + " ", s2]);
+      }
+      var mo = d.months.map(function (m) { return [m, m]; });
+      f.appendChild(sel("site", "サイト", d.sites.map(function (x) { return [x.key, x.label]; }), d.site));
+      f.appendChild(sel("from", "はじめ", mo, d.period.from.slice(0, 7)));
+      f.appendChild(sel("to", "おわり", mo, d.period.to.slice(0, 7)));
+      f.appendChild(sel("compare", "比べる", [["yoy", "前年の同じ期間"], ["custom", "期間を選ぶ"], ["none", "比べない"]], d.compare_mode));
+      f.appendChild(sel("cfrom", "比べる期間のはじめ", [["", "—"]].concat(mo), q.get("cfrom") || ""));
+      f.appendChild(sel("cto", "比べる期間のおわり", [["", "—"]].concat(mo), q.get("cto") || ""));
+      f.appendChild(el("button", { type: "submit", text: "表示" }));
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var o = ["site", "from", "to", "compare", "cfrom", "cto"].map(function (k) {
+          var v = f.elements[k].value; return v ? k + "=" + encodeURIComponent(v) : null; }).filter(Boolean);
+        location.hash = "#/abc?" + o.join("&");
+      });
+      b.appendChild(f);
+      d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-warn", text: n })); });
+      b.appendChild(el("p", { "class": "np-note", text: "金額は" + d.tax + "の商品代（取消・返金を除く・売上フィード）。区切りは A " + d.limits.A + "%・B " + d.limits.B
+        + "%・C 残り（その商品の手前までの累計で決めます）。商品はサイトごとの店の商品番号です。" }));
+
+      // ABC の集計
+      function abcSummary(title, x) {
+        var c = el("div", { "class": "np-card" });
+        c.appendChild(el("h2", { text: title }));
+        c.appendChild(table(["区分", "商品数", "売上", "構成比"], ["A", "B", "C"].map(function (k) {
+          var v = x.classes[k];
+          return el("tr", null, [el("td", { text: k }), el("td", { "class": "np-num", text: String(v.count) }),
+            el("td", { "class": "np-num", text: yen(v.revenue) }), el("td", null, [shareBar(v.share)])]);
+        }).concat([el("tr", null, [el("th", { text: "合計" }), el("td", { "class": "np-num", text: String(x.count) }),
+          el("td", { "class": "np-num", text: yen(x.total) }), el("td", { text: "" })])])));
+        return c;
+      }
+      var g = el("div", { "class": "np-grid np-grid-2" });
+      g.appendChild(abcSummary("選んだ期間 " + d.period.from + "〜" + d.period.to, d.current));
+      if (d.compare) g.appendChild(abcSummary("比べる期間 " + d.compare.period.from + "〜" + d.compare.period.to, d.compare));
+      b.appendChild(g);
+      if (d.why_compare) b.appendChild(el("p", { "class": "np-warn", text: d.why_compare }));
+
+      function nameCell(x) { return el("td", { text: x.name || x.name_label || "—" }); }
+
+      // 比較（増加・減少・同額・消滅・新規）
+      if (d.changes) {
+        var cc = el("div", { "class": "np-card" });
+        cc.appendChild(el("h2", { text: "比較（増加・減少・消滅・新規）" }));
+        var kinds = ["増加", "減少", "消滅", "新規", "同額"];
+        cc.appendChild(table(["区分", "商品数", "選んだ期間の売上", "比べる期間の売上", "差額"], kinds.map(function (k) {
+          var v = d.changes[k];
+          return el("tr", null, [el("td", { text: k }), el("td", { "class": "np-num", text: String(v.count) }),
+            el("td", { "class": "np-num", text: yen(v.current) }), el("td", { "class": "np-num", text: yen(v.previous) }),
+            el("td", { "class": "np-num", text: (v.diff > 0 ? "+" : v.diff < 0 ? "−" : "±") + yen(Math.abs(v.diff)) })]);
+        })));
+        kinds.forEach(function (k) {
+          var v = d.changes[k];
+          if (!v.count) return;
+          var det = el("details");
+          det.appendChild(el("summary", { text: k + "の商品（" + v.count + "）— 差額の大きい順" }));
+          det.appendChild(table(["店の商品番号", "表示名", "分類", "選んだ期間", "比べる期間", "差額", "ABC（前→今）"], v.rows.map(function (x) {
+            return el("tr", null, [el("td", { text: x.key }), nameCell(x), el("td", { text: x.path }),
+              el("td", { "class": "np-num", text: yen(x.current) }), el("td", { "class": "np-num", text: yen(x.previous) }),
+              el("td", { "class": "np-num", text: (x.diff > 0 ? "+" : x.diff < 0 ? "−" : "±") + yen(Math.abs(x.diff)) }),
+              el("td", { text: (x.class_before || "—") + " → " + (x.class_now || "—") })]);
+          })));
+          cc.appendChild(det);
+        });
+        b.appendChild(cc);
+      }
+
+      // ABC の一覧
+      var lc = el("div", { "class": "np-card" });
+      lc.appendChild(el("h2", { text: "ABC の一覧（" + d.rows.length + " 商品番号）" }));
+      ["A", "B", "C"].forEach(function (k) {
+        var rs = d.rows.filter(function (x) { return x.class === k; });
+        if (!rs.length) return;
+        var det = el("details", k === "A" ? { open: "open" } : null);
+        det.appendChild(el("summary", { text: k + "（" + rs.length + " 商品番号・" + yen(d.current.classes[k].revenue) + "）" }));
+        det.appendChild(table(["順位", "店の商品番号", "表示名", "分類", "売上", "数量", "構成比", "累計", "比べる期間のABC"], rs.map(function (x) {
+          return el("tr", null, [el("td", { "class": "np-num", text: String(x.rank) }), el("td", { text: x.key }), nameCell(x),
+            el("td", { text: x.path }), el("td", { "class": "np-num", text: yen(x.revenue) }),
+            el("td", { "class": "np-num", text: Math.round(x.qty).toLocaleString("ja-JP") }),
+            el("td", { "class": "np-num", text: pct(x.share) }), el("td", { "class": "np-num", text: pct(x.cum) }),
+            el("td", { text: d.compare ? (x.prev_class || "なし") : "—" })]);
+        })));
+        lc.appendChild(det);
+      });
+      b.appendChild(lc);
+    }).catch(fail);
+  }
+
   /** 原価・調達の一覧（案件をまたぐ）。**締切に間に合わない案件を一番上に。**中身は各案件の画面で入れる */
   function viewCost() {
     loading();
@@ -2450,7 +2557,7 @@
 
   function salesSubnav(cur) {
     var n = el("div", { "class": "np-filters", role: "tablist", "aria-label": "売上・原価" });
-    [["#/sales", "売上実績"], ["#/cost", "原価・調達"]].forEach(function (x) {
+    [["#/sales", "売上実績"], ["#/abc", "商品ABC"], ["#/cost", "原価・調達"]].forEach(function (x) {
       n.appendChild(el("a", { href: x[0], text: x[1], "aria-current": x[0] === cur ? "true" : null }));
     });
     return n;
@@ -2643,6 +2750,7 @@
     if (path === "#/gates") { return viewGates(); }
     if (path === "#/sales") return viewSales();
     if (path === "#/cost") return viewCost();
+    if (path === "#/abc") return viewAbc();
     return viewNotYet(path, entry);
   }
 

@@ -130,8 +130,12 @@ def monthly(site: str) -> tuple[dict, dict]:
 
 def by_code(site: str, month: str) -> dict[str, dict]:
     """その月の、店の商品番号ごとの {revenue, qty, lines}。"""
+    return by_code_range(site, month + "-01", _month_add(month, 1) + "-01")
+
+
+def by_code_range(site: str, lo: str, hi: str) -> dict[str, dict]:
+    """[lo, hi) の注文日の、店の商品番号ごとの {revenue, qty, lines}（商品ABC 用にも使う）。"""
     shop, _st, col = SHOPS[site]
-    lo, hi = month + "-01", _month_add(month, 1) + "-01"
     c, _meta = _open()
     try:
         rows = c.execute(

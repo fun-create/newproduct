@@ -216,6 +216,10 @@ def main() -> int:
         st, d = cl.get("/api/sales?site=goods")
         note(st == 200 and len(d["sites"]) == 6 and (d["month"] is None and "ありません" in d.get("why", "")
              or d["month"]), "/api/sales が6サイトを返し、集計が無ければ理由を言う", f"{st}")
+        st, d = cl.get("/api/abc?site=goods")
+        note(st in (200, 409), "/api/abc が応える（売上フィードが無い環境では 409 と理由）", f"{st} {d.get('error','')[:40]}")
+        st, d = cl.get("/api/abc?site=goods&from=2026-13")
+        note(st in (400, 409), "/api/abc は月の形が違えば断る", f"{st}")
         st, d = cl.get("/api/sales?site=yahoo")
         note(st == 400, "/api/sales は知らないサイトを断る", f"{st}")
 
