@@ -55,6 +55,7 @@ from app import compat as compat_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
+from app import opportunity as opp_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -431,6 +432,15 @@ class H(BaseHTTPRequestHandler):
 
         if parts == ["dashboard"]:
             return self.sendj(200, task_m.dashboard(uid))
+
+        # 機会カレンダー（FR-78〜81）
+        if parts == ["opportunities"] and method == "GET":
+            return self.sendj(200, opp_m.calendar())
+        if parts == ["opportunities", "slot"] and method == "POST":
+            d = self.body()
+            r = opp_m.to_slot(d.get("theme_id", ""), uid)
+            store.audit(uid, "plan.slot.from_opportunity", r["id"], {"theme_id": d.get("theme_id")}, ip)
+            return self.sendj(200, r)
 
         # FCTR の週次トレンド（FR-135〜137）
         if parts == ["fctr"] and method == "GET":

@@ -2043,6 +2043,7 @@
         return;
       }
       setTitle("プラン", d.current.version.label);
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/opportunities", text: "→ 機会カレンダー（イベントの2か月前を発売の目安に、枠を足す）" })]));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
       if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
@@ -2531,6 +2532,64 @@
     return el("span", null, [w, " " + pct(v)]);
   }
 
+  /** 機会カレンダー（F-2・FR-78〜81）。**発売の目安はイベントの2か月前。**枠は人が押して作る */
+  function viewOpportunities() {
+    loading();
+    api("/api/opportunities").then(function (d) {
+      var b = clear();
+      setTitle("機会カレンダー");
+      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/plan", text: "← プラン" })]));
+      b.appendChild(el("p", { "class": "np-note", text: "発売の目安は、イベントの " + d.lead_months + " か月前です。「枠にする」で、策定中の年間プラン"
+        + (d.version ? "（" + d.version.fiscal_year + "年度）" : "") + "にその月の枠を足します（自動では足しません）。日付は元表の書き方のままです。" }));
+      if (!d.version) b.appendChild(el("p", { "class": "np-warn", text: "策定中の年間プランがありません。枠を足すには、プランの画面で版を作ってください。" }));
+      function slotBtn(x, cell) {
+        if (x.in_plan) { cell.appendChild(txt("枠あり")); return; }
+        if (!d.version) { cell.appendChild(txt("—")); return; }
+        var bt = el("button", { type: "button", text: "枠にする" });
+        bt.addEventListener("click", function () {
+          post("/api/opportunities/slot", { theme_id: x.id }).then(function () { go(); })
+            .catch(function (e) { cell.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        cell.appendChild(bt);
+      }
+
+      // 今週のトレンド（FR-81）
+      var tc = el("div", { "class": "np-card" });
+      tc.appendChild(el("h2", { text: "今週のトレンド上位（FCTR・" + dash(d.trends.week) + "）" }));
+      if (d.trends.why) tc.appendChild(el("p", { "class": "np-warn", text: d.trends.why }));
+      d.trends.segments.forEach(function (sg) {
+        tc.appendChild(el("p", null, [el("strong", { text: sg.name + "：" }),
+          txt(sg.top.map(function (t) { return t.label + "（" + t.decayed + "）"; }).join("、") || "なし")]));
+      });
+      tc.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/trends", text: "→ トレンドの一覧・アイデアにする" })]));
+      b.appendChild(tc);
+
+      // 年間イベント（FR-78・FR-80）
+      var ac = el("div", { "class": "np-card" });
+      ac.appendChild(el("h2", { text: "年間イベント（" + d.annual.length + "件）" }));
+      ac.appendChild(table(["月", "日", "イベント", "販売可能性が高い", "次の回", "発売の目安", "年間プラン"], d.annual.map(function (x) {
+        var c = el("td"); slotBtn(x, c);
+        return el("tr", null, [el("td", { "class": "np-num", text: x.month ? x.month + "月" : "—" }), el("td", { text: dash(x.day) }),
+          el("td", { text: x.label }), el("td", { text: x.sellable ? "印あり" : "" }),
+          el("td", { text: dash(x.event_month) }), el("td", { text: dash(x.launch_month) }), c]);
+      })));
+      b.appendChild(ac);
+
+      // ライフイベント（FR-79）
+      var lc = el("div", { "class": "np-card" });
+      lc.appendChild(el("h2", { text: "ライフイベント（" + d.life.length + "件）" }));
+      lc.appendChild(el("p", { "class": "np-sub", text: "総合＝購買意欲×2＋写真親和性＋発生頻度×2（満点40）。月が決まっていないので、枠はプランの画面で発売月を決めて作ってください。" }));
+      lc.appendChild(table(["ライフイベント", "総合", "購買意欲", "写真親和性", "発生頻度", "優先", "商品が作れていない", "商品例", "年間プラン"], d.life.map(function (x) {
+        return el("tr", null, [el("td", { text: x.label }), el("td", { "class": "np-num", text: dash(x.total) }),
+          el("td", { "class": "np-num", text: dash(x.gift_intent) }), el("td", { "class": "np-num", text: dash(x.photo_fit) }),
+          el("td", { "class": "np-num", text: dash(x.frequency) }), el("td", { "class": "np-num", text: dash(x.priority) }),
+          el("td", { text: x.product_gap ? "印あり" : "" }), el("td", { text: dash(x.product_ideas) }),
+          el("td", { text: x.in_plan ? "枠あり" : "—" })]);
+      })));
+      b.appendChild(lc);
+    }).catch(fail);
+  }
+
   /** FCTR の週次トレンド（FR-135〜137）。**市場性（30点）だけ**を Auto GROWTH から受け取る。
    *  時限スコアなので恒久の採点とは足さない。最後に観測された週から8週で 0 まで減らす。 */
   function viewTrends() {
@@ -2906,6 +2965,7 @@
     if (path === "#/cost") return viewCost();
     if (path === "#/abc") return viewAbc();
     if (path === "#/trends") return viewTrends();
+    if (path === "#/opportunities") return viewOpportunities();
     return viewNotYet(path, entry);
   }
 
