@@ -291,6 +291,8 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         "next_gate": nx,
         # FR-101。**止めずに知らせる**（必須項目にはしない）。G3／G4 の手前で発注の締切を出す
         "warnings": _gate_warnings(p, nx),
+        "stage_options": stage_options(p),
+        "variant_states": VARIANT_STATES,
         # B節。**最上段に置くのがこの画面の設計そのもの**（画面設計 3-8）
         "missing": (nx["missing"] if nx else []),
         "sections": body,
@@ -368,3 +370,144 @@ def upcoming(weeks: int = 4) -> list[dict]:
                  "ORDER BY launch_date", (t.isoformat(), end))
     return [{"id": r["id"], "launch_date": r["launch_date"],
              "product": product_label(dict(r)), "stage": r["stage"]} for r in rs]
+
+
+# ── ステージの遷移（FR-33・F-4-7）──────────────────────────────
+# **1本の道。分岐は保留・中止の2つだけ。**関門と対応するステージは、その関門を通していなければ進めない
+# （進んだのに関門が未通過、という食い違いを作らない）。開発タイプで対象外の関門は止めない。
+MAIN_PATH = ["起票", "評価済", "候補", "年間プラン採択", "コンセプト承認",
+             "開発中", "生産確定", "発売済", "追跡中", "評価完了"]
+STAGE_GATE = {"評価済": "G1", "年間プラン採択": "G2", "コンセプト承認": "G3",
+              "生産確定": "G4", "発売済": "G5", "評価完了": "G6"}
+
+
+def stage_options(p: dict) -> dict:
+    """いまのステージから行ける先と、行けない理由。"""
+    from app import gate
+    st = p["stage"]
+    out = {"stage": st, "next": None, "next_why": None, "can_hold": False, "can_abort": False,
+           "can_resume": False, "resume_to": p.get("stage_before_hold")}
+    if st == "中止":
+        return out
+    if st == "保留":
+        out["can_resume"] = bool(p.get("stage_before_hold"))
+        out["can_abort"] = True
+        return out
+    out["can_hold"] = out["can_abort"] = True
+    if st in MAIN_PATH and MAIN_PATH.index(st) + 1 < len(MAIN_PATH):
+        nxt = MAIN_PATH[MAIN_PATH.index(st) + 1]
+        out["next"] = nxt
+        g = STAGE_GATE.get(nxt)
+        if g:
+            gd = next((x for x in gate.defs() if x["gate"] == g), None)
+            if gd and gate.applies(gd, p.get("flow_type")):
+                state, _r = gate.state_of(p["id"], g)
+                if state != "通過":
+                    out["next_why"] = f"{g}（{gd['name']}）を通してから進めます（いま: {state}）"
+    return out
+
+
+def move_stage(pid: str, action: str, user_id: str, reason_code: str = "", note: str = "") -> dict:
+    p = store.one("SELECT * FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    p = dict(p)
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+    o = stage_options(p)
+    hold_from = p.get("stage_before_hold")
+    if action == "next":
+        if not o["next"]:
+            raise ValueError("この先のステージはありません")
+        if o["next_why"]:
+            raise ValueError(o["next_why"])
+        to = o["next"]
+    elif action in ("hold", "abort"):
+        if not (o["can_hold"] if action == "hold" else o["can_abort"]):
+            raise ValueError("いまのステージからは選べません")
+        table = "hold_reason" if action == "hold" else "abort_reason"
+        if not reason_code or store.one(f"SELECT 1 FROM {table} WHERE code=?", (reason_code,)) is None:
+            raise ValueError(("保留" if action == "hold" else "中止") + "の理由を選んでください（選択式・F-6-5）")
+        to = "保留" if action == "hold" else "中止"
+        if action == "hold":
+            hold_from = p["stage"]
+    elif action == "resume":
+        if not o["can_resume"]:
+            raise ValueError("保留中ではありません")
+        to, hold_from = p["stage_before_hold"], None
+    else:
+        raise ValueError(f"知らない操作 {action!r}")
+    with store.tx() as c:
+        c.execute("UPDATE project SET stage=?,stage_before_hold=?,updated_at=?,updated_by=? WHERE id=?",
+                  (to, hold_from, store.now_s(), user_id, pid))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) "
+                  "VALUES (?,?,?,?,?)", (pid, store.now_s(), user_id, f"ステージ {p['stage']} → {to}",
+                                         " ".join(x for x in (reason_code, (note or "").strip()) if x) or None))
+    return {"ok": True, "stage": to}
+
+
+# ── バリエーション（FR-37・F-4-5）。**40本の複製を作らない**（案件に内包する）──────
+VARIANT_STATES = ("未対応", "対応中", "対応済", "見送り")
+
+
+def save_variant(pid: str, f: dict, user_id: str) -> dict:
+    p = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+    label = (f.get("label") or "").strip()[:80]
+    if not label:
+        raise ValueError("本体モデル（バリエーション名）を入れてください")
+    state = (f.get("state") or "未対応").strip()
+    if state not in VARIANT_STATES:
+        raise ValueError("状態は " + "／".join(VARIANT_STATES) + " から選んでください")
+    ld = (f.get("launch_date") or "").strip() or None
+    if ld:
+        try:
+            _dt.date.fromisoformat(ld)
+        except ValueError:
+            raise ValueError("発売日は YYYY-MM-DD で入れてください") from None
+    spec = (f.get("spec") or "").strip()[:500] or None
+    vid = f.get("id")
+    with store.tx() as c:
+        if vid:
+            n = c.execute("UPDATE project_variant SET label=?,spec=?,state=?,launch_date=? "
+                          "WHERE id=? AND project_id=?", (label, spec, state, ld, int(vid), pid)).rowcount
+            if not n:
+                raise LookupError("そのバリエーションはこの案件にありません")
+        else:
+            # 案件そのもので seisan に登録済みなら、バリエーションを後から足すと登録の単位が変わる
+            reg = c.execute("SELECT product_code FROM seisan_registration WHERE project_id=? "
+                            "AND variant_id IS NULL AND state='登録済'", (pid,)).fetchone()
+            if reg and not c.execute("SELECT 1 FROM project_variant WHERE project_id=?", (pid,)).fetchone():
+                raise ValueError(f"この案件は案件そのものとして seisan に登録済みです（{reg['product_code']}）。"
+                                 "バリエーションを足すと、seisan への登録をバリエーションごとにやり直すことになります。"
+                                 "先に seisan への登録の記録を取り消してください")
+            if c.execute("SELECT 1 FROM project_variant WHERE project_id=? AND label=?", (pid, label)).fetchone():
+                raise ValueError(f"「{label}」は既にあります")
+            vid = c.execute("INSERT INTO project_variant (project_id,label,spec,state,launch_date) "
+                            "VALUES (?,?,?,?,?)", (pid, label, spec, state, ld)).lastrowid
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) "
+                  "VALUES (?,?,?,?,?)", (pid, store.now_s(), user_id, "バリエーション", f"{label} {state}"))
+    return {"ok": True, "id": int(vid)}
+
+
+def delete_variant(pid: str, vid, user_id: str) -> dict:
+    """**seisan に登録済みのバリエーションは消さない**（「見送り」にする）。"""
+    p = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+    with store.tx() as c:
+        v = c.execute("SELECT * FROM project_variant WHERE id=? AND project_id=?", (int(vid), pid)).fetchone()
+        if v is None:
+            raise LookupError("そのバリエーションはこの案件にありません")
+        if c.execute("SELECT 1 FROM seisan_registration WHERE variant_id=? AND state='登録済'",
+                     (int(vid),)).fetchone() or v["product_code"]:
+            raise ValueError("seisan に登録済みのバリエーションは消せません。やめるときは状態を「見送り」にしてください")
+        c.execute("DELETE FROM project_variant WHERE id=?", (int(vid),))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) "
+                  "VALUES (?,?,?,?,?)", (pid, store.now_s(), user_id, "バリエーション削除", v["label"]))
+    return {"ok": True}

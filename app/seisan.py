@@ -89,9 +89,9 @@ def _conf() -> tuple[str, str]:
     p = env_path()
     if not p.is_file():
         raise NotConfigured(
-            "seisan への登録口がまだありません。seisan 側のサーバ間API を吉田さん（seisan の担当）"
-            "に作っていただく必要があります（依頼書 docs/product-dev/contracts/2026-09-28_seisan_商品登録API.md）。"
-            "できるまでは、seisan の画面で登録して「seisan で登録した」でコードを記録してください")
+            f"seisan への接続設定（{p}）がありません。seisan の口は 2026-09-28 から開通しています。"
+            "設定ファイル（SEISAN_SVC_TOKEN=…・権限600・所有者 newproduct）を置くまでは、"
+            "seisan の画面で登録して「seisan で登録した」でコードを記録してください")
     vals = {}
     for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()

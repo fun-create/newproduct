@@ -402,6 +402,7 @@
           head.appendChild(el("p", { "class": "np-warn", text: "工数ポイント: " + h.effort_point_note }));
         if (h.flow_note) head.appendChild(el("p", { "class": "np-warn", text: h.flow_note }));
         head.appendChild(gateChips(d.gates));
+        if (h.editable) head.appendChild(stageControl(d, meta));
         b.appendChild(head);
 
         // B. いま欠けているもの（最上段）
@@ -458,14 +459,49 @@
         });
 
         // バリエーション展開（F-4-5）。**40本の複製を作らない**
-        var v = el("div", { "class": "np-card" });
+        var v = el("div", { "class": "np-card", id: "np-sec-variant" });
         v.appendChild(el("h2", { text: "バリエーション展開" }));
+        v.appendChild(el("p", { "class": "np-sub", text: "本体モデル（機種など）ごとに1行。案件を複製しません。seisan への登録はバリエーションごとに行います。" }));
         if (!d.variants.length) v.appendChild(el("p", { "class": "np-note", text: "ありません。" }));
-        else v.appendChild(table(["本体モデル", "対応状況", "発売日", "Seisan商品コード"],
+        else v.appendChild(table(["本体モデル", "仕様", "対応状況", "発売日", "seisan 商品コード", ""],
           d.variants.map(function (x) {
-            return el("tr", null, [el("td", { text: x.label }), el("td", { text: x.state }),
-              el("td", { text: dash(x.launch_date) }), el("td", { text: dash(x.product_code) })]);
+            var st = el("td", { text: x.state }), act = el("td");
+            if (h.editable) {
+              var sel = el("select", { "aria-label": "対応状況" });
+              d.variant_states.forEach(function (k) { sel.appendChild(el("option", { value: k, text: k })); });
+              sel.value = x.state;
+              sel.addEventListener("change", function () {
+                post("/api/projects/" + d.id + "/variant", { id: x.id, label: x.label, spec: x.spec || "", state: sel.value, launch_date: x.launch_date || "" })
+                  .then(function () { go(); }).catch(function (e) { alert(e.message); });
+              });
+              st = el("td", null, [sel]);
+              if (!x.product_code) {
+                var del = el("button", { type: "button", text: "消す" });
+                del.addEventListener("click", function () {
+                  if (!window.confirm("「" + x.label + "」を消します。よろしいですか")) return;
+                  post("/api/projects/" + d.id + "/variant-delete", { id: x.id }).then(function () { go(); })
+                    .catch(function (e) { alert(e.message); });
+                });
+                act.appendChild(del);
+              }
+            }
+            return el("tr", null, [el("td", { text: x.label }), el("td", { text: dash(x.spec) }), st,
+              el("td", { text: dash(x.launch_date) }), el("td", { text: dash(x.product_code) }), act]);
           })));
+        if (h.editable) {
+          var vf = el("form", { "class": "np-inline" });
+          var vl = el("input", { name: "label", size: "16", "aria-label": "本体モデル" });
+          var vs = el("input", { name: "spec", size: "20", "aria-label": "仕様" });
+          var vd = el("input", { name: "launch_date", type: "date", "aria-label": "発売日" });
+          [txt("足す：本体モデル "), vl, txt(" 仕様 "), vs, txt(" 発売日 "), vd, txt(" "), el("button", { type: "submit", text: "足す" })]
+            .forEach(function (x2) { vf.appendChild(x2); });
+          vf.addEventListener("submit", function (ev) {
+            ev.preventDefault();
+            post("/api/projects/" + d.id + "/variant", { label: vl.value, spec: vs.value, launch_date: vd.value })
+              .then(function () { go(); }).catch(function (e) { vf.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          v.appendChild(vf);
+        }
         b.appendChild(v);
 
         // 対応確認（FR-102）。**ひな形は商品開発部が作る**（項目の中身は発明しない）
@@ -584,6 +620,40 @@
         .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
     });
     w.appendChild(f);
+    return w;
+  }
+
+  /** ステージの遷移（FR-33）。**1本の道。分岐は保留・中止だけ。**関門と対応するステージは関門の通過が要る */
+  function stageControl(d, meta) {
+    var o = d.stage_options, w = el("div", { "class": "np-inline" });
+    var P = "/api/projects/" + encodeURIComponent(d.id) + "/stage";
+    function go2(body) { post(P, body).then(function () { go(); }).catch(function (e) { w.appendChild(el("span", { "class": "np-err", text: " " + e.message })); }); }
+    w.appendChild(txt("ステージ: " + o.stage + "　"));
+    if (o.next) {
+      var nb = el("button", { type: "button", text: "次へ: " + o.next });
+      if (o.next_why) nb.setAttribute("disabled", "disabled");
+      nb.addEventListener("click", function () { go2({ action: "next" }); });
+      w.appendChild(nb);
+      if (o.next_why) w.appendChild(el("span", { "class": "np-sub", text: " " + o.next_why }));
+    }
+    if (o.can_resume) {
+      var rb = el("button", { type: "button", text: "再開（" + o.resume_to + " に戻す）" });
+      rb.addEventListener("click", function () { go2({ action: "resume" }); });
+      w.appendChild(rb);
+    }
+    function reasonPick(action, label, list) {
+      var sel = el("select", { "aria-label": label + "の理由" });
+      sel.appendChild(el("option", { value: "", text: label + "の理由を選ぶ" }));
+      list.forEach(function (r) { sel.appendChild(el("option", { value: r.code, text: r.label })); });
+      var bt = el("button", { type: "button", text: label });
+      bt.addEventListener("click", function () {
+        if (action === "abort" && !window.confirm("中止にします。中止の後はステージを動かせません。よろしいですか")) return;
+        go2({ action: action, reason_code: sel.value });
+      });
+      w.appendChild(txt("　")); w.appendChild(sel); w.appendChild(bt);
+    }
+    if (o.can_hold) reasonPick("hold", "保留", meta.reasons.hold);
+    if (o.can_abort) reasonPick("abort", "中止", meta.reasons.abort);
     return w;
   }
 
@@ -1243,7 +1313,7 @@
                 el("td", { colspan: "9", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
             }
             rows.push(el("tr", null, [
-              el("td", null, [statusForm(t)]),
+              el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t)]),
               el("td", { text: dash(t.due_on) }),
               el("td", null, [t.project_id
                 ? el("a", { href: "#/projects/" + t.project_id, text: t.project })
@@ -1261,6 +1331,7 @@
           b.appendChild(table(["進捗", "期限", "案件（分類）", "タスク名", "ロール",
             "担当", "標準h", "AI適用", "削減見込"], rows));
         }
+        if (tab === "work" || tab === "request") b.appendChild(workItemForm(tab));
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
 
         // **帯に出していない画面への入口**（帯は7つまで）。
@@ -1334,6 +1405,45 @@
         b.appendChild(el("p", { "class": "np-note",
           text: "⑦ページリニューアルはこの表に出ません。**標準タスクが1行も定義されていない**ためです。" }));
       }).catch(fail);
+  }
+
+  /** 他部署への依頼。**受け側の完了をもって完了**（FR-48）。送った側の進捗だけでは閉じない */
+  function requestCell(t) {
+    var w = el("span");
+    if (t.accepted_at) { w.appendChild(txt("完了（受け側 " + t.accepted_at + "）")); return w; }
+    w.appendChild(statusForm(t));
+    var bt = el("button", { type: "button", text: "受け側が完了" });
+    bt.addEventListener("click", function () {
+      if (!window.confirm("依頼先（" + (t.dept || "—") + "）が完了したことを記録して閉じます。よろしいですか")) return;
+      post("/api/work-items/" + t.id + "/accept", {}).then(function () { go(); }).catch(function (e) { alert(e.message); });
+    });
+    w.appendChild(txt(" ")); w.appendChild(bt);
+    w.appendChild(el("span", { "class": "np-sub", text: " 依頼先: " + (t.dept || "—") }));
+    return w;
+  }
+
+  /** 案件外の仕事・他部署への依頼を起票する（FR-47・FR-48）。同じ工数勘定に載る */
+  function workItemForm(tab) {
+    var f = el("form", { "class": "np-field" });
+    var kind = tab === "request" ? "他部署依頼" : "案件外";
+    f.appendChild(el("p", { "class": "np-sub", text: (kind === "他部署依頼" ? "他部署への依頼を起票（受け側の完了をもって完了）" : "案件に紐づかない仕事を起票（FBA納品・BtoB整備・旧商品修正・仕組み化など）") }));
+    var title = el("input", { name: "title", size: "28", "aria-label": "何をするか" });
+    var cat = el("input", { name: "category", size: "10", "aria-label": "区分" });
+    var dept = el("input", { name: "dept", size: "10", "aria-label": "依頼先の部署" });
+    var due = el("input", { name: "due_on", type: "date", "aria-label": "期限" });
+    var hours = el("input", { name: "hours", size: "4", "aria-label": "時間" });
+    var who = el("input", { name: "assignee", size: "8", "aria-label": "担当" });
+    var p1 = el("p", null, [txt("何をするか "), title, txt(" 区分 "), cat]);
+    if (kind === "他部署依頼") { p1.appendChild(txt(" 依頼先（必須） ")); p1.appendChild(dept); }
+    var bar = el("p", null, [txt("期限 "), due, txt(" 時間 "), hours, txt(" 担当 "), who, txt(" "), el("button", { type: "submit", text: "起票" })]);
+    f.appendChild(p1); f.appendChild(bar);
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/work-items", { kind: kind, title: title.value, category: cat.value, dept: dept.value,
+        due_on: due.value, hours: hours.value, assignee: who.value })
+        .then(function () { go(); }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    return f;
   }
 
   function statusForm(t) {

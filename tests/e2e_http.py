@@ -198,6 +198,25 @@ def main() -> int:
                         {"result": "保留", "reason_code": "effort_over"})
         note(st == 200, "保留を理由つきで記録できる", f"{st} {d}")
 
+        # ── ステージ・バリエーション・案件外の仕事（FR-33/37/47/48）──
+        st, d = cl.post(f"/api/projects/{pid}/stage", {"action": "next"})
+        note(st == 200 and d.get("stage") == "評価済", "G1 を通した案件は「評価済」へ進める", f"{st} {d}")
+        st, d = cl.post(f"/api/projects/{pid}/stage", {"action": "next"})
+        st, d = cl.post(f"/api/projects/{pid}/stage", {"action": "next"})
+        note(st == 400 and "G2" in d.get("error", ""), "関門を通していないステージへは進めない", f"{st} {d}")
+        # バリエーションは**別の案件で**（バリエーションのある案件は seisan 登録が機種ごとになるため）
+        # 標準タスクの無い開発タイプで作る（後ろの「期限なし34件」の検査を崩さない）
+        st, d = cl.post("/api/projects", {"internal_name": "E2E機種別", "flow_type": "pagerenew",
+                                          "launch_date": "2026-12-01"})
+        st, d = cl.post(f"/api/projects/{d['id']}/variant", {"label": "E2E機種"})
+        note(st == 200, "バリエーションを足せる", f"{st} {d}")
+        st, d = cl.post("/api/work-items", {"kind": "他部署依頼", "title": "撮影", "dept": "Webマーケ"})
+        wid = d.get("id")
+        st, d = cl.post(f"/api/tasks/work_item/{wid}/status", {"status": "完了"})
+        note(st == 400 and "受け側" in d.get("error", ""), "他部署依頼は送った側だけでは閉じない", f"{st} {d}")
+        st, d = cl.post(f"/api/work-items/{wid}/accept", {})
+        note(st == 200, "受け側の完了で閉じる", f"{st} {d}")
+
         # ── 原価・調達（第3段・ADR-047）──
         st, d = cl.post(f"/api/projects/{pid}/cost-candidate",
                         {"kind": "資材", "part": "本体", "supplier": "E2E社", "lead_days": "10"})
@@ -233,7 +252,7 @@ def main() -> int:
                          "cat1": "うちわ"})
         note(st == 200, "seisan 下書きの保存", f"{st} {d}")
         st, d = cl.post(f"/api/projects/{pid}/seisan-register", {})
-        note(st == 409 and "吉田さん" in d.get("error", ""),
+        note(st == 409 and "接続設定" in d.get("error", ""),
              "登録口が無いと登録を断り、理由を言う", f"{st} {d}")
         st, d = cl.post(f"/api/projects/{pid}/seisan-code", {"code": "E2E-1"})
         note(st == 200 and d.get("verified") is False,

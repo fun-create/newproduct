@@ -115,7 +115,7 @@ class NotConfiguredYet(Base):
     def test_overview_says_why_and_uses_sales_type_copy(self):
         o = self.m.overview(self.pid, "kanri")
         self.assertFalse(o["configured"])
-        self.assertIn("吉田さん", o["why"])
+        self.assertIn("接続設定", o["why"])
         self.assertEqual(o["vocab"]["source"], "copy")
         self.assertEqual(len(o["vocab"]["sales_types"]), 10)
         self.assertIsNone(o["vocab"]["cat1"])       # 分類は出せない。**空リストにしない**

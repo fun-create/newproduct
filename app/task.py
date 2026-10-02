@@ -161,6 +161,11 @@ def set_status(kind: str, task_id: int, status: str, user_id: str,
     if status not in STATUSES:
         raise ValueError(f"知らない進捗 {status!r}")
     table = "task" if kind == "task" else "work_item"
+    if table == "work_item" and status == "完了":
+        r = store.one("SELECT kind, accepted_at FROM work_item WHERE id=?", (task_id,))
+        if r is not None and r["kind"] == "他部署依頼" and not r["accepted_at"]:
+            # **受け側の完了をもって完了**（F-11-3・FR-48）。送った側の操作だけで閉じない
+            raise ValueError("他部署への依頼は、受け側の完了を記録して閉じます（「受け側が完了」）")
     done = store.now_s() if status == "完了" else None
     with store.tx() as c:
         if table == "task" and ai_used is not None:
@@ -366,3 +371,56 @@ def dashboard(user_id: str) -> dict:
         },
         "my_roles": sorted(my_roles),
     }
+
+
+# ── 案件外の仕事・他部署への依頼の起票（FR-47・FR-48）────────────────────
+WORK_KINDS = ("案件外", "他部署依頼")
+
+
+def create_work_item(f: dict, user_id: str) -> dict:
+    kind = (f.get("kind") or "案件外").strip()
+    if kind not in WORK_KINDS:
+        raise ValueError("種類は 案件外／他部署依頼 から選んでください")
+    title = (f.get("title") or "").strip()[:200]
+    if not title:
+        raise ValueError("何をするかを入れてください")
+    dept = (f.get("dept") or "").strip()[:60] or None
+    if kind == "他部署依頼" and not dept:
+        raise ValueError("依頼先の部署を入れてください")
+    role = (f.get("role") or "").strip() or None
+    if role and store.one("SELECT 1 FROM role WHERE code=?", (role,)) is None:
+        raise ValueError("知らないロールです")
+    due = (f.get("due_on") or "").strip() or None
+    if due:
+        try:
+            _dt.date.fromisoformat(due)
+        except ValueError:
+            raise ValueError("期限は YYYY-MM-DD で入れてください") from None
+    hours = (f.get("hours") or "").strip()
+    try:
+        hours = float(hours) if hours else None
+    except ValueError:
+        raise ValueError("時間は数字で入れてください") from None
+    if hours is not None and hours < 0:
+        raise ValueError("時間は0以上で入れてください")
+    with store.tx() as c:
+        wid = c.execute("INSERT INTO work_item (kind,title,category,dept,role,assignee,due_on,hours,"
+                        "status,created_at) VALUES (?,?,?,?,?,?,?,?,'未着手',?)",
+                        (kind, title, (f.get("category") or "").strip()[:60] or None, dept, role,
+                         (f.get("assignee") or "").strip()[:60] or None, due, hours,
+                         store.now_s())).lastrowid
+    return {"ok": True, "id": wid}
+
+
+def accept_work_item(wid: int, user_id: str) -> dict:
+    """他部署への依頼を、**受け側が完了した**と記録して閉じる（FR-48）。"""
+    r = store.one("SELECT kind FROM work_item WHERE id=?", (wid,))
+    if r is None:
+        raise LookupError("その仕事はありません")
+    if r["kind"] != "他部署依頼":
+        raise ValueError("他部署への依頼だけに使います")
+    now = store.now_s()
+    with store.tx() as c:
+        c.execute("UPDATE work_item SET accepted_at=?, status='完了', done_at=? WHERE id=?",
+                  (now, now, wid))
+    return {"ok": True}

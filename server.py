@@ -578,6 +578,18 @@ class H(BaseHTTPRequestHandler):
                 project_m.save_section(pid, d.get("key", ""), d.get("body", ""), uid)
                 store.audit(uid, "project.section", pid, {"key": d.get("key")}, ip)
                 return self.sendj(200, {"ok": True})
+            if what == "stage":
+                r = project_m.move_stage(pid, d.get("action", ""), uid, d.get("reason_code", ""), d.get("note", ""))
+                store.audit(uid, "project.stage", pid, {k: d.get(k) for k in ("action", "reason_code")}, ip)
+                return self.sendj(200, r)
+            if what == "variant":
+                r = project_m.save_variant(pid, d, uid)
+                store.audit(uid, "project.variant", pid, {k: d.get(k) for k in ("id", "label", "state")}, ip)
+                return self.sendj(200, r)
+            if what == "variant-delete":
+                r = project_m.delete_variant(pid, d.get("id"), uid)
+                store.audit(uid, "project.variant_delete", pid, {"id": d.get("id")}, ip)
+                return self.sendj(200, r)
             if what == "check":
                 project_m.save_check(pid, d.get("item_key", ""),
                                      d.get("done") in ("1", "true", "on"),
@@ -585,6 +597,17 @@ class H(BaseHTTPRequestHandler):
                 store.audit(uid, "project.check", pid, d, ip)
                 return self.sendj(200, {"ok": True})
             return self.sendj(404, {"error": "not found"})
+
+        # 案件外の仕事・他部署への依頼（FR-47・FR-48）
+        if parts == ["work-items"] and method == "POST":
+            d = self.body()
+            r = task_m.create_work_item(d, uid)
+            store.audit(uid, "work_item.create", str(r["id"]), {k: d.get(k) for k in ("kind", "title", "dept")}, ip)
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "work-items" and parts[2] == "accept" and method == "POST":
+            r = task_m.accept_work_item(int(parts[1]), uid)
+            store.audit(uid, "work_item.accept", parts[1], None, ip)
+            return self.sendj(200, r)
 
         # /api/tasks
         if parts == ["tasks"] and method == "GET":
