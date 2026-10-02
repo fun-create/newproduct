@@ -56,6 +56,7 @@ from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
 from app import opportunity as opp_m  # noqa: E402
+from app import lpreq as lpreq_m  # noqa: E402
 from app import seisan as seisan_m  # noqa: E402
 from app import store            # noqa: E402
 from app import task as task_m   # noqa: E402
@@ -527,6 +528,10 @@ class H(BaseHTTPRequestHandler):
                       if not ps.get("why") else None)
             p = store.one("SELECT launch_date FROM project WHERE id=?", (pid,))
             return self.sendj(200, target_m.progress(pid, p["launch_date"] if p else None, actual))
+
+        # LP依頼書（FR-118）。**作るだけ。送らない**
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "lp-request" and method == "GET":
+            return self.sendj(200, lpreq_m.build(parts[1]))
 
         # 新商品の発売後の売上（FR-183）。見るだけ
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "sales" and method == "GET":

@@ -459,6 +459,28 @@
           b.appendChild(c);
         });
 
+        // LP依頼書（FR-118）。カルテの項目から作る。**送らない**（人が見て貼る）
+        var lp = el("div", { "class": "np-card", id: "np-sec-lpreq" });
+        lp.appendChild(el("h2", { text: "LP依頼書" }));
+        var lpb = el("button", { type: "button", text: "カルテから LP依頼書を作る" });
+        lp.appendChild(el("p", null, [lpb, el("span", { "class": "np-sub", text: "　送りはしません。文面を確かめてから貼り付けて渡してください。" })]));
+        lpb.addEventListener("click", function () {
+          api("/api/projects/" + encodeURIComponent(d.id) + "/lp-request").then(function (r) {
+            while (lp.childNodes.length > 2) lp.removeChild(lp.lastChild);
+            if (r.missing.length) lp.appendChild(el("p", { "class": "np-warn", text: "埋まっていない項目が " + r.missing.length + " 件あります（依頼書には「未記入」と出ます）: " + r.missing.join("、") }));
+            var ta = el("textarea", { rows: "20", readonly: "readonly", "aria-label": "LP依頼書" });
+            ta.value = r.text;
+            lp.appendChild(ta);
+            var cp = el("button", { type: "button", text: "写す" });
+            cp.addEventListener("click", function () {
+              ta.select();
+              if (navigator.clipboard) navigator.clipboard.writeText(r.text).then(function () { cp.textContent = "写しました"; });
+            });
+            lp.appendChild(el("p", null, [cp]));
+          }).catch(function (e) { lp.appendChild(el("p", { "class": "np-err", text: e.message })); });
+        });
+        b.appendChild(lp);
+
         // バリエーション展開（F-4-5）。**40本の複製を作らない**
         var v = el("div", { "class": "np-card", id: "np-sec-variant" });
         v.appendChild(el("h2", { text: "バリエーション展開" }));
