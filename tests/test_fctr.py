@@ -21,7 +21,9 @@ def weekly(week, themes, version=1):
                           "segment_name": "ライフイベント", "themes": [
                 {"theme": t, "theme_key": t, "market_score": sc, "market_score_max": 25.0,
                  "consecutive_weeks": 1, "novelty": "new", "cycle": 1,
-                 "evidence": [{"signal": "競合3社"}], "components": {}} for t, sc in themes]}]}
+                 "weeks_present": [obs or week], "observed_this_week": (obs or week) == week,
+                 "evidence": [{"signal": "競合3社"}] if (obs or week) == week else [],
+                 "components": {}} for t, sc, obs in [(x + (None,))[:3] for x in themes]]}]}
 
 
 class Fctr(unittest.TestCase):
@@ -62,24 +64,32 @@ class Fctr(unittest.TestCase):
         self.assertEqual(ts[0]["decayed"], 16.17)
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM theme WHERE kind='FCTRテーマ'"), 4)
 
-    def test_decay_over_8_weeks(self):
-        self.assertEqual(self.m.decay(16.0, "2026-W40", "2026-W40"), 16.0)
-        self.assertEqual(self.m.decay(16.0, "2026-W40", "2026-W44"), 8.0)
-        self.assertEqual(self.m.decay(16.0, "2026-W40", "2026-W48"), 0.0)
-        # 2026年は ISO で53週まである。W52 → W53 → 2027-W01 → W02 で3週（番号の引き算だと2週と誤る）
-        self.assertEqual(self.m.decay(16.0, "2026-W52", "2027-W02"), 10.0, "年をまたいでも実際の週の差で数える")
+    def test_upstream_decayed_score_used_as_is(self):
+        """**上流が減衰をかけ済み。**今週観測されなかった行の点をこちらで重ねて下げない（ADR-055）。"""
+        self.put("2026-W40", [("痛バ", 7.30)])
+        self.m.board()
+        os.environ["NEWPRODUCT_TODAY"] = "2026-10-05"          # W41
+        self.put("2026-W41", [("痛バ", 6.69, "2026-W40"), ("ハロウィン", 8.0)])
+        ts = {t["label"]: t for t in self.m.board()["segments"][0]["themes"]}
+        self.assertEqual(ts["痛バ"]["decayed"], 6.69, "上流の値をそのまま")
+        self.assertEqual((ts["痛バ"]["observed_week"], ts["痛バ"]["age_weeks"]), ("2026-W40", 1))
+        self.assertEqual(ts["ハロウィン"]["age_weeks"], 0)
 
-    def test_old_themes_fade_and_disappear(self):
+    def test_theme_dropped_upstream_disappears(self):
         self.put("2026-W40", [("結婚式記念", 16.0)])
         self.m.board()
         os.environ["NEWPRODUCT_TODAY"] = "2026-10-26"          # W44
         self.put("2026-W44", [("ハロウィン", 8.0)])
-        ts = {t["label"]: t for t in self.m.board()["segments"][0]["themes"]}
-        self.assertEqual(ts["結婚式記念"]["decayed"], 8.0)
-        self.assertEqual(ts["結婚式記念"]["age_weeks"], 4)
-        os.environ["NEWPRODUCT_TODAY"] = "2026-11-23"          # W48
         labels = [t["label"] for t in self.m.board()["segments"][0]["themes"]]
-        self.assertNotIn("結婚式記念", labels, "8週たったら出さない")
+        self.assertEqual(labels, ["ハロウィン"], "上流の一覧から消えたテーマは出さない（古い週の行を引きずらない）")
+
+    def test_stale_upstream_is_said(self):
+        self.put("2026-W40", [("結婚式記念", 16.0)])
+        self.assertIsNone(self.m.board()["stale"])
+        os.environ["NEWPRODUCT_TODAY"] = "2026-10-19"          # W43・上流が W40 のまま
+        b = self.m.board()
+        self.assertIn("2026-W40", b["stale"])
+        self.assertEqual(b["segments"][0]["themes"][0]["decayed"], 16.0, "止まっていても点を勝手に作らない")
 
     def test_other_version_stops_with_reason(self):
         self.put("2026-W40", [("結婚式記念", 16.0)], version=2)

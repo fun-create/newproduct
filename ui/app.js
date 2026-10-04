@@ -2709,7 +2709,7 @@
   }
 
   /** FCTR の週次トレンド（FR-135〜137）。**市場性（30点）だけ**を Auto GROWTH から受け取る。
-   *  時限スコアなので恒久の採点とは足さない。最後に観測された週から8週で 0 まで減らす。 */
+   *  時限スコアなので恒久の採点とは足さない。**減衰は上流がかけ済み**（こちらでは下げない・ADR-055）。 */
   function viewTrends() {
     loading();
     api("/api/fctr").then(function (d) {
@@ -2719,7 +2719,8 @@
       if (d.why) b.appendChild(el("p", { "class": "np-warn", text: d.why }));
       var m = d.meta || {};
       b.appendChild(el("p", { "class": "np-note", text: "Auto GROWTH が毎週月曜に出す需要テーマの「市場性」（30点満点）です。最新 " + dash(d.latest_week)
-        + "（今週 " + d.now_week + "）。点は最後に観測された週から " + d.decay_weeks + " 週で 0 まで減らしています（一過性の高得点を恒久の採点と混ぜないため）。客層ごとに上位 " + d.top_n + " つに印を付けています。" }));
+        + "（今週 " + d.now_week + "）。今週観測されなかったテーマは、Auto GROWTH が最後に観測した週から半減期8週で下げた点で届きます（一過性の高得点を恒久の採点と混ぜないため。こちらでは重ねて下げていません）。客層ごとに上位 " + d.top_n + " つに印を付けています。" }));
+      if (d.stale) b.appendChild(el("p", { "class": "np-warn", text: d.stale }));
       if (m.sources_ok) b.appendChild(el("p", { "class": "np-note", text: "今週使えた出どころ: " + (m.sources_ok.join("、") || "なし")
         + (m.sources_disabled && m.sources_disabled.length ? "／止めている出どころ: " + m.sources_disabled.join("、") : "") }));
       (m.notes || []).concat(m.not_produced || []).forEach(function (n) { b.appendChild(el("p", { "class": "np-sub", text: "・" + n })); });
@@ -2727,7 +2728,7 @@
       d.segments.forEach(function (sg) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h2", { text: sg.name }));
-        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "素点／上限", "観測週", "連続", "根拠", "自社側70点", "合計100", ""], sg.themes.map(function (t) {
+        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "点／上限", "週", "連続", "根拠", "自社側70点", "合計100", ""], sg.themes.map(function (t) {
           var act = el("td");
           if (t.idea_id) act.appendChild(el("a", { href: "#/ideas/" + encodeURIComponent(t.idea_id), text: "アイデア " + t.idea_id }));
           else {
@@ -2740,7 +2741,7 @@
             act.appendChild(bt);
           }
           return el("tr", null, [el("td", { text: t.top ? "上位" + d.top_n : "" }), el("td", { text: t.label }),
-            el("td", { "class": "np-num", text: String(t.decayed) + (t.age_weeks ? "（" + t.age_weeks + "週前の観測）" : "") }),
+            el("td", { "class": "np-num", text: String(t.decayed) + (t.age_weeks ? "（最後の観測 " + t.observed_week + "・" + t.age_weeks + "週前）" : "") }),
             el("td", { "class": "np-num", text: t.raw + "／" + dash(t.score_max) }),
             el("td", { text: t.week_id }), el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
             el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) }), act]);

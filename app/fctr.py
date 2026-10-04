@@ -4,8 +4,13 @@ FCTR（Auto GROWTH の週次トレンド）の受け取り（F-9-1〜3・FR-135�
 
 - 上流が出すのは**市場性（30点）だけ**。自社側70点（商品相性・製造運用・発売速度・利益性）は
   本アプリの担当（FR-138・未着手）。**上流が出さない「月商予測」は作らない**
-- **時限スコア。恒久スコアと合算しない。**最後に観測された週から **8週で 0 まで直線で減らす**（FR-137）
-- TOP3 は上流に無い。**客層ごとに減衰後の点の上位3つ**をここで決める
+- **時限スコア。恒久スコアと合算しない。****減衰は上流がかける**（FR-137・F-9-12）。
+  観測されなかった週の行は、上流が最後の観測週から半減期8週で下げた値で出してくる
+  （1.0 未満か26週で上流の一覧から消える）。**こちらでは下げない**。
+  2026-10-05 までは「最後に観測された週から8週直線」と説明していたが、実際は行の週から数えていた。
+  上流が載せ続ける間は重ならなかった一方、**上流が一覧から外したテーマを最大8週出し続けていた**（ADR-055）
+- 表示は**最新の週の一覧だけ**。上流の一覧から消えたテーマは出さない
+- TOP3 は上流に無い。**客層ごとの点の上位3つ**をここで決める
 - 1操作でアイデアへ起票（起票経路＝FCTR・FR-136）。**同じテーマを二重に起票しない**
 - 取り込みは**画面を開いたときに新しい週があれば**行う（上流は毎週月曜 02:10）
 """
@@ -19,7 +24,6 @@ from app import store
 
 PATH = "/opt/autogrowth/data/export/fctr_weekly.json"
 CONTRACT = 1
-DECAY_WEEKS = 8
 TOP_N = 3
 THEME_KIND = "FCTRテーマ"
 SOURCE = "AutoGrowth fctr_weekly"
@@ -69,7 +73,8 @@ def ingest() -> dict:
                           (tid, t.get("theme") or key, THEME_KIND, 0, "Auto GROWTH の FCTR から"))
                 detail = {k: t.get(k) for k in ("components", "evidence", "market_score_max_possible",
                                                  "weeks_present", "first_seen_week", "novelty_penalty",
-                                                 "novelty_penalty_basis", "sources_used")}
+                                                 "novelty_penalty_basis", "sources_used",
+                                                 "observed_this_week")}
                 n += c.execute(
                     "INSERT OR IGNORE INTO theme_signal (theme_id,week_id,market_score,weeks_present,novelty,"
                     "cycle,source,fetched_at,segment,segment_name,score_max,detail_json) "
@@ -89,43 +94,47 @@ def _meta(d: dict) -> dict:
             "notes": d.get("notes") or [], "not_produced": (d.get("scope") or {}).get("not_produced") or []}
 
 
-def decay(score, obs_week: str, now_week: str):
-    if score is None:
-        return None
-    age = _week_index(now_week) - _week_index(obs_week)
-    f = max(0.0, 1.0 - max(0, age) / DECAY_WEEKS)
-    return round(score * f, 2)
+def _last_observed(det: dict, week_id: str) -> str:
+    """最後に観測された週。上流の weeks_present の最後（無ければその行の週）。"""
+    wp = det.get("weeks_present") or []
+    return wp[-1] if wp else week_id
 
 
 def board() -> dict:
-    """客層ごとに、最後に観測された週の素点を減衰させて並べる。0 になったテーマは出さない。"""
+    """客層ごとに、**最新の週の点をそのまま**並べる（減衰は上流がかけ済み・ADR-055）。"""
     try:
         info = ingest()
         why = None
     except Unavailable as e:
         info, why = {"meta": {}}, str(e)
     now = current_week()
+    weeks = [r["week_id"] for r in store.q(
+        "SELECT DISTINCT week_id FROM theme_signal WHERE source LIKE ? ORDER BY week_id DESC", (SOURCE + "%",))]
+    latest_week = weeks[0] if weeks else None
+    stale = None
+    if latest_week and _week_index(now) > _week_index(latest_week):
+        stale = (f"いちばん新しい週次結果は {latest_week} です（今週は {now}）。Auto GROWTH は毎週月曜 02:10 に"
+                 f"出します。月曜の朝以外でこの表示が出ていれば、上流が止まっている可能性があります")
     rows = store.q("SELECT s.*, t.label FROM theme_signal s JOIN theme t ON t.id=s.theme_id "
-                   "WHERE s.source LIKE ? ORDER BY s.week_id", (SOURCE + "%",))
-    latest = {}
-    for r in rows:
-        latest[(r["segment"], r["theme_id"])] = dict(r)        # 週の昇順なので最後が最新
+                   "WHERE s.source LIKE ? AND s.week_id=?", (SOURCE + "%", latest_week)) if latest_week else []
     ideas = {r["theme_id"]: r["id"] for r in store.q(
         "SELECT id, theme_id FROM idea WHERE origin='fctr' AND theme_id LIKE 'fctr:%'")}
     segs = {}
-    for (seg, tid), r in latest.items():
-        dv = decay(r["market_score"], r["week_id"], now)
-        if not dv:
+    for r in rows:
+        sc = r["market_score"]
+        if not sc:
             continue
         det = json.loads(r["detail_json"] or "{}")
         ev = (det.get("evidence") or [{}])[0]
-        segs.setdefault(seg, {"segment": seg, "name": r["segment_name"], "themes": []})["themes"].append({
-            "theme_id": tid, "label": r["label"], "week_id": r["week_id"],
-            "raw": r["market_score"], "score_max": r["score_max"], "decayed": dv,
-            "age_weeks": _week_index(now) - _week_index(r["week_id"]),
+        obs = _last_observed(det, r["week_id"])
+        segs.setdefault(r["segment"], {"segment": r["segment"], "name": r["segment_name"], "themes": []})["themes"].append({
+            "theme_id": r["theme_id"], "label": r["label"], "week_id": r["week_id"],
+            "raw": sc, "score_max": r["score_max"], "decayed": sc,
+            "observed_week": obs, "age_weeks": max(0, _week_index(r["week_id"]) - _week_index(obs)),
+            "decay_basis": ((det.get("components") or {}).get("decay") or {}).get("basis"),
             "consecutive": r["weeks_present"], "novelty": r["novelty"],
             "evidence": ev.get("signal"), "components": det.get("components") or {},
-            "idea_id": ideas.get(tid)})
+            "idea_id": ideas.get(r["theme_id"])})
     selfs = _self_scores()
     for sg in segs.values():
         for t in sg["themes"]:
@@ -138,10 +147,8 @@ def board() -> dict:
         for i, t in enumerate(s["themes"]):
             t["top"] = i < TOP_N
         out.append(s)
-    weeks = [r["week_id"] for r in store.q(
-        "SELECT DISTINCT week_id FROM theme_signal WHERE source LIKE ? ORDER BY week_id DESC", (SOURCE + "%",))]
-    return {"now_week": now, "latest_week": weeks[0] if weeks else None, "weeks": weeks,
-            "decay_weeks": DECAY_WEEKS, "top_n": TOP_N, "segments": out, "why": why,
+    return {"now_week": now, "latest_week": latest_week, "weeks": weeks, "stale": stale,
+            "top_n": TOP_N, "segments": out, "why": why,
             "self_axes": [{"key": k, "label": l, "max": m} for k, l, m in SELF_AXES],
             "meta": info.get("meta") or {}}
 
