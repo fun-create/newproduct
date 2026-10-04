@@ -112,7 +112,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 | keiei `keiei-ingest-newproduct` | keiei セッション | **未依頼** | FR-124（第4段） |
 | **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。枠 `newproduct-*: 5.0` は入った（**image と text で分け合う**・ADR-037）。契約は確定（超過は断る／`request_id` で冪等／`remaining` を返す）。**Auto GROWTH は十文字さんの返事待ち**（夜間に新しい経路を開けてよいか）。**口ができるまで着手しない。**`newproduct-` で始まらない job 名は枠に入らないので、呼ぶ前に弾くこと |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。減衰は**こちら側**でかける（FR-137） |
-| **旧ダッシュボード `fun-create.co.jp/fctr/` の撤去** | 十文字さん | **2026-09-24 から** | FR-81。**乱数由来の「月商見込」（最大 ¥1.6億）が、担当者名つきの実行計画の体裁で載ったまま**配信されている。実測 401（Basic認証）だが、パスワードは ChatWork 2部屋へ配布済。消す実体は `index.html` と `dashboard.html` の2本。**承認が出れば Auto GROWTH が差し替える** |
+| ~~旧ダッシュボード `fun-create.co.jp/fctr/` の撤去~~ | — | **2026-10-05 解消** | FR-81。十文字さんの判断で Auto GROWTH が `index.html`・`dashboard.html` を撤去（VPS に退避。パスワード保護と `history/` は残置）。**こちらでは確かめられていない**（外からは全部 401、サイトは newproduct の VPS 上に無い）。Auto GROWTH ADR-025 |
 | **ChatWork のトークンと部屋ID** | 十文字さん | **2026-09-24 から** | FR-171。`config/chatwork.env`（`CHATWORK_API_TOKEN=…`・600・所有者 newproduct）と 設定 `automation.chatwork_room_id`。**他アプリのトークンは写さない**（どのアプリが投げたか分からなくなり、片方を止めると両方止まる）。置くまで送信は断り、理由を画面に出す |
 | **利用者の登録** | 済（2026-09-27） | — | 共通台帳の13名を全員登録。`admin` は masateru・tsubasa、残り11名 `user`（十文字さん「tsubasa以外はuserで」。masateru は元から admin なので据え置き）。**いまの正は `config/users.json`**、足し外しは `tools/add_user.py`。`roles/` への一本化は ①LP SCOPE ②keiei ③NEW PRODUCT の順で、**上流に入ってから写す**（`deploy/README.md` 6） |
 
