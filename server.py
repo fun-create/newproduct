@@ -52,6 +52,7 @@ from app import seed as seed_m   # noqa: E402
 from app import sales as sales_m  # noqa: E402
 from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
+from app import competitor as comp_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -514,6 +515,23 @@ class H(BaseHTTPRequestHandler):
                             {k: d.get(k) for k in ("template_id", "id", "result")}, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
+
+        # 競合調査（FR-141〜143）。**出典と確認日が必須**。推計はレビュー率が決まるまで出さない
+        if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("competitor"):
+            pid, what = parts[1], parts[2]
+            if what == "competitor" and method == "GET":
+                return self.sendj(200, comp_m.overview(pid, uid))
+            if method == "POST" and what in ("competitor", "competitor-delete"):
+                d = self.body()
+                r = comp_m.save(pid, d, uid) if what == "competitor" else comp_m.delete(pid, d.get("id"), uid)
+                store.audit(uid, "project." + what, pid, {k: d.get(k) for k in ("id", "shop", "url", "checked_on")}, ip)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
+        if parts == ["settings", "competitor-review-rate"] and method == "POST":
+            d = self.body()
+            r = comp_m.set_rate(d.get("value"), uid)
+            store.audit(uid, "setting.competitor_review_rate", "", {"value": r["review_rate"]}, ip)
+            return self.sendj(200, r)
 
         # 年間目標（FR-109/110・FR-106）。**3方式と根拠が必須**。未設定は「目標未設定」
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "target":

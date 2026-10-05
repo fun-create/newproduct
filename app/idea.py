@@ -280,6 +280,9 @@ SETTINGS = [
      "で決める設計になっています。決まるまで「コンセプト在庫月数」は計算しません"),
     ("concept_stock_floor", "コンセプト在庫月数の下限", "number", "か月", None),
     ("cost_tax_rate", "消費税率（試算原価の税込表示）", "number", "%", None),
+    ("competitor_review_rate", "競合の売上推計に使うレビュー率", "number", "%",
+     "**未設定です。**買った人のうちレビューを書く人の割合。商品開発部が決めます。"
+     "決まるまで競合調査の売上推計（レビュー件数 ÷ レビュー率 × 価格）は出しません（F-9-7）"),
     ("ai_scoring_enabled", "AI採点を使う", "bool", None,
      "**既定は off。**`newproduct-*` のAI予算枠（AutoGrowth の ai_budget.json）が"
      "未取得のため（全体設計書 第11章 ⑩）"),

@@ -482,6 +482,13 @@
         });
         b.appendChild(lp);
 
+        // 競合調査（FR-141〜143）。**出典と確認日が必須**。カルテ C の自由記述はメモとして残す
+        var cm = el("div", { "class": "np-card", id: "np-sec-competitor" });
+        cm.appendChild(el("h2", { text: "競合調査" }));
+        cm.appendChild(el("p", { "class": "np-note", text: "読み込んでいます。" }));
+        b.appendChild(cm);
+        competitorPanel(d.id, cm);
+
         // バリエーション展開（F-4-5）。**40本の複製を作らない**
         var v = el("div", { "class": "np-card", id: "np-sec-variant" });
         v.appendChild(el("h2", { text: "バリエーション展開" }));
@@ -736,6 +743,82 @@
       f.addEventListener("submit", function (ev) {
         ev.preventDefault();
         post(P + "/target", { method: ms.value, annual_yen: yenIn.value, basis: bs.value }).then(function () { go(); })
+          .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+      });
+      box.appendChild(f);
+    }).catch(function (e) { box.appendChild(el("p", { "class": "np-err", text: e.message })); });
+  }
+
+  /** 競合調査（FR-141〜143）。価格・仕様・デザイン傾向・レビューを表で比べる。**出典と確認日が必須。**
+   *  売上の推計（累計）＝ レビュー件数 ÷ レビュー率 × 価格。**レビュー率が決まるまで推計は出さない。** */
+  function competitorPanel(pid, box) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    function u(v, unit) { return (v === null || v === undefined) ? "未確認" : Number(v).toLocaleString("ja-JP") + (unit || ""); }
+    api(P + "/competitor").then(function (o) {
+      while (box.childNodes.length > 1) box.removeChild(box.lastChild);
+      box.appendChild(el("p", { "class": "np-sub", text: "比べた競合商品を1行ずつ。値は確認日の時点のものです。調べ直したら確認日も直してください。分からない値は空欄のまま（未確認。0 にはしません）。" }));
+      var rate = el("p", { "class": o.review_rate === null ? "np-warn" : "np-note",
+        text: o.review_rate === null
+          ? "レビュー率が未設定のため、売上の推計は出していません（決めるのは商品開発部）。"
+          : "売上の推計（累計）＝ レビュー件数 ÷ レビュー率 " + o.review_rate + "% × 販売価格。仮定の率で出した目安で、実績ではありません。" });
+      box.appendChild(rate);
+      if (o.can_set_rate) {
+        var rf = el("form", { "class": "np-inline" });
+        var ri = el("input", { name: "value", size: "5", "aria-label": "レビュー率（%）", value: o.review_rate === null ? "" : String(o.review_rate) });
+        [txt("レビュー率（%・買った人のうちレビューを書く人の割合。空欄で未設定に戻す） "), ri, txt(" "), el("button", { type: "submit", text: "決める" })]
+          .forEach(function (x) { rf.appendChild(x); });
+        rf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          post("/api/settings/competitor-review-rate", { value: ri.value }).then(function () { competitorPanel(pid, box); })
+            .catch(function (e) { rf.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        box.appendChild(rf);
+      }
+      if (o.price_range) box.appendChild(el("p", { "class": "np-note",
+        text: "価格の幅: " + u(o.price_range[0], "円") + " 〜 " + u(o.price_range[1], "円") + "（価格が分かっている " + o.price_known + " 件・税込）" }));
+      if (!o.rows.length) box.appendChild(el("p", { "class": "np-note", text: "まだ競合がありません。" }));
+      else box.appendChild(table(["店・メーカー／商品", "販路", "価格（税込）", "仕様", "デザイン傾向", "レビュー", "目立つ声", "売上の推計（累計）", "確認日", ""],
+        o.rows.map(function (r) {
+          var est = r.estimate.revenue === null ? "—（" + r.estimate.missing.join("・") + "が無い）"
+            : u(r.estimate.revenue, "円") + "（" + u(r.estimate.qty, "個") + "）";
+          var act = el("td");
+          if (o.editable) {
+            var del = el("button", { type: "button", text: "消す" });
+            del.addEventListener("click", function () {
+              if (!window.confirm("「" + r.shop + "／" + r.item + "」を消します。よろしいですか")) return;
+              post(P + "/competitor-delete", { id: r.id }).then(function () { competitorPanel(pid, box); })
+                .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            act.appendChild(del);
+          }
+          return el("tr", null, [
+            el("td", null, [txt(r.shop + "／"), /^https?:\/\//i.test(r.url) ? el("a", { href: r.url, rel: "noopener noreferrer", target: "_blank", text: r.item }) : txt(r.item)]),
+            el("td", { text: dash(r.channel) }), el("td", { "class": "np-num", text: u(r.price_yen, "円") }),
+            el("td", { text: dash(r.spec) }), el("td", { text: dash(r.design) }),
+            el("td", { "class": "np-num", text: u(r.review_count, "件") + (r.review_avg === null ? "" : "・評価 " + r.review_avg) }),
+            el("td", { text: dash(r.review_note) }), el("td", { "class": "np-num", text: est }),
+            el("td", { text: r.checked_on + (r.age_days > 90 ? "（" + r.age_days + "日前・古い）" : "") }), act]);
+        })));
+      if (!o.editable) return;
+      var f = el("form", { "class": "np-field" });
+      f.appendChild(el("p", { "class": "np-sub", text: "競合を足す（店・商品・出典 URL・確認日は必須）" }));
+      function inp(name, label, size, type) { return el("label", null, [label + " ", el("input", { name: name, size: size || "10", type: type || "text" })]); }
+      var ch = el("select", { name: "channel", "aria-label": "販路" });
+      [""].concat(o.channels).forEach(function (k) { ch.appendChild(el("option", { value: k, text: k || "—" })); });
+      [el("p", null, [inp("shop", "店・メーカー", 14), txt(" "), inp("item", "商品", 20), txt(" "), el("label", null, ["販路 ", ch])]),
+       el("p", null, [inp("url", "出典 URL", 28), txt(" "), inp("checked_on", "確認日", 10, "date")]),
+       el("p", null, [inp("price_yen", "価格（円・税込）", 7), txt(" "), inp("review_count", "レビュー件数", 5), txt(" "), inp("review_avg", "平均評価（0〜5）", 3)]),
+       el("p", null, [inp("spec", "仕様", 18), txt(" "), inp("design", "デザイン傾向", 18)]),
+       el("p", null, [inp("review_note", "レビューで目立つ声", 28), txt(" "), inp("note", "備考", 18)])
+      ].forEach(function (x) { f.appendChild(x); });
+      var bar = el("p", null, [el("button", { type: "submit", text: "足す" })]);
+      f.appendChild(bar);
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var obj = {};
+        ["shop", "item", "channel", "url", "checked_on", "price_yen", "review_count", "review_avg", "spec", "design", "review_note", "note"]
+          .forEach(function (k) { obj[k] = f.elements[k].value; });
+        post(P + "/competitor", obj).then(function () { competitorPanel(pid, box); })
           .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
       });
       box.appendChild(f);
