@@ -53,6 +53,7 @@ from app import sales as sales_m  # noqa: E402
 from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
 from app import competitor as comp_m  # noqa: E402
+from app import prefs as prefs_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -143,6 +144,23 @@ def _page(name: str, **subs) -> bytes:
     for k, v in subs.items():
         s = s.replace("{" + k + "}", v)
     return s.encode("utf-8")
+
+
+def _root_attrs(user: dict) -> str:
+    """`<html>` に付ける表示の属性（ADR-057）。**最初の描画から**その人の見え方にする（後から JS で替えるとちらつく）。
+
+    値は許可リストのものだけ（prefs.get と auth.theme_of が倒す）。`auto` は属性を付けない
+    （端末の設定に従う。app-shell.css の約束）。念のため escape もする。"""
+    uid = str(user.get("user_id") or "")
+    pf = prefs_m.get(uid)
+    out = []
+    t = auth.theme_of(user)
+    if t in ("light", "dark"):
+        out.append(f' data-theme="{t}"')
+    out.append(f' data-np-font="{html.escape(pf["font"])}"')
+    out.append(f' data-np-density="{html.escape(pf["density"])}"')
+    out.append(f' data-np-start="{html.escape(pf["start"])}"')
+    return "".join(out)
 
 
 class H(BaseHTTPRequestHandler):
@@ -344,7 +362,8 @@ class H(BaseHTTPRequestHandler):
             # SPA の外枠。画面の切り替えは app.js の hash routing（§5-1）
             return self.send(200, _page(
                 "index.html", USER=html.escape(str(user.get("name") or
-                                                   user.get("user_id") or ""))))
+                                                   user.get("user_id") or "")),
+                ROOTATTR=_root_attrs(user)))
         return self.not_found()
 
     # ── ログイン ────────────────────────────────────────
@@ -392,7 +411,35 @@ class H(BaseHTTPRequestHandler):
                 "app_role": user.get("role"),
                 # **アプリ権限と業務ロールは別軸**（§10-2 ②）
                 "business_roles": gate_m.roles_of(uid),
+                # 表示（ADR-057）。配色は共通部品、ほかはこのアプリの設定
+                "theme": auth.theme_of(user), "themes": [["auto", "端末に合わせる"], ["light", "ライト"], ["dark", "ダーク"]],
+                "prefs": prefs_m.get(uid), "pref_options": prefs_m.options(),
             })
+        # 自分の表示を変える。**本人の見た目だけ**なので誰でも変えられる（管理者専用にしない）
+        if parts == ["me", "display"] and method == "POST":
+            d = self.body()
+            out = {"ok": True}
+            if "theme" in d:
+                if d["theme"] not in auth.THEMES:
+                    return self.sendj(400, {"error": "配色の指定が不正です"})
+                rec, err = auth.set_theme(uid, d["theme"])
+                if err:
+                    return self.sendj(409, {"error": err})
+                out["theme"] = d["theme"]
+            rest = {k: v for k, v in d.items() if k in prefs_m.PREFS}
+            if rest:
+                out["prefs"] = prefs_m.save(uid, rest)["prefs"]
+            elif "theme" not in d:
+                return self.sendj(400, {"error": "変える項目がありません"})
+            store.audit(uid, "me.display", uid, {k: d.get(k) for k in ["theme", *prefs_m.PREFS] if k in d}, ip)
+            return self.sendj(200, out)
+        # 操作マニュアル（docs/操作マニュアル.md）。**画面と同じ場所で直す**ため、文書はリポジトリに置く
+        if parts == ["manual"] and method == "GET":
+            mp = BASE / "docs" / "操作マニュアル.md"
+            try:
+                return self.sendj(200, {"body_md": mp.read_text(encoding="utf-8")})
+            except OSError:
+                return self.sendj(404, {"error": "操作マニュアルがまだありません"})
 
         # /api/meta — 画面が使うマスタ
         if parts == ["meta"]:
@@ -447,7 +494,9 @@ class H(BaseHTTPRequestHandler):
 
         # FCTR の週次トレンド（FR-135〜137）
         if parts == ["fctr"] and method == "GET":
-            r = fctr_m.board()
+            pf = prefs_m.get(uid)                         # 見せ方は利用者ごと（ADR-057）
+            r = fctr_m.board(top_n=int(pf["trend_top"]), order=pf["trend_order"],
+                             faded=pf["trend_faded"] == "show")
             r["can_score"] = fctr_m.can_score(uid)
             return self.sendj(200, r)
         if parts == ["fctr", "self"] and method == "POST":

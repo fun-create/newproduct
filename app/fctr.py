@@ -100,8 +100,11 @@ def _last_observed(det: dict, week_id: str) -> str:
     return wp[-1] if wp else week_id
 
 
-def board() -> dict:
-    """客層ごとに、**最新の週の点をそのまま**並べる（減衰は上流がかけ済み・ADR-055）。"""
+def board(top_n: int = TOP_N, order: str = "segment", faded: bool = True) -> dict:
+    """客層ごとに、**最新の週の点をそのまま**並べる（減衰は上流がかけ済み・ADR-055）。
+
+    見せ方は利用者ごとに変えられる（ADR-057）: 印を付ける数・客層の並び・減衰中を出すか。
+    **既定は今までの見え方**（月次レポート・機会カレンダーは既定のまま呼ぶ）。"""
     try:
         info = ingest()
         why = None
@@ -127,6 +130,8 @@ def board() -> dict:
         det = json.loads(r["detail_json"] or "{}")
         ev = (det.get("evidence") or [{}])[0]
         obs = _last_observed(det, r["week_id"])
+        if not faded and obs != r["week_id"]:
+            continue                                   # 今週観測されなかったテーマを出さない
         segs.setdefault(r["segment"], {"segment": r["segment"], "name": r["segment_name"], "themes": []})["themes"].append({
             "theme_id": r["theme_id"], "label": r["label"], "week_id": r["week_id"],
             "raw": sc, "score_max": r["score_max"], "decayed": sc,
@@ -142,13 +147,17 @@ def board() -> dict:
             t["self"] = ss
             t["total100"] = round(t["decayed"] + ss["total"], 2) if ss and ss["total"] is not None else None
     out = []
-    for s in sorted(segs.values(), key=lambda x: x["segment"] or ""):
+    for s in segs.values():
         s["themes"].sort(key=lambda x: (-x["decayed"], x["label"]))
         for i, t in enumerate(s["themes"]):
-            t["top"] = i < TOP_N
+            t["top"] = i < top_n
         out.append(s)
+    if order == "score":
+        out.sort(key=lambda x: (-(x["themes"][0]["decayed"] if x["themes"] else 0), x["segment"] or ""))
+    else:
+        out.sort(key=lambda x: x["segment"] or "")
     return {"now_week": now, "latest_week": latest_week, "weeks": weeks, "stale": stale,
-            "top_n": TOP_N, "segments": out, "why": why,
+            "top_n": top_n, "order": order, "faded": faded, "segments": out, "why": why,
             "self_axes": [{"key": k, "label": l, "max": m} for k, l, m in SELF_AXES],
             "meta": info.get("meta") or {}}
 

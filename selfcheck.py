@@ -215,7 +215,8 @@ def check_screens(cl: Client):
     idx = (UI / "index.html").read_text(encoding="utf-8")
 
     musts = [
-        ('<html class="fca-shell" lang="ja" data-app="new-product">', "帯の土台"),
+        # 表示の属性（配色・文字・表の詰め具合・最初の画面）はサーバーが {ROOTATTR} に差し込む（ADR-057）
+        ('<html class="fca-shell" lang="ja" data-app="new-product"{ROOTATTR}>', "帯の土台"),
         ('<a class="fca-skip" href="#main">', "本文へ飛ぶリンク"),
         ('<header class="fca-bar">', "帯"),
         ('class="fca-brand-logo"', "帯のロゴ"),

@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan",
+                "#/opportunities": "#/plan", "#/manual": "#/settings",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -48,6 +48,12 @@
     return n;
   }
   function txt(s) { return document.createTextNode(s === null || s === undefined ? "" : String(s)); }
+  /** 導線はボタンにする（2026-10-06 十文字さん「テキストリンクがわかりにくい」・ADR-057）。
+   *  kind: "back"（戻る・控えめ）／ "sm"（節の中の小さな導線）。行き先は語で書く */
+  function navBtn(href, label, kind) {
+    return el("a", { href: href, "class": "np-btn" + (kind ? " np-btn-" + kind : ""), text: label });
+  }
+  function btnRow(kids) { return el("p", { "class": "np-btnrow" }, kids); }
   function dash(v) { return (v === null || v === undefined || v === "") ? "—" : String(v); }
 
   function hashPath() { return (location.hash || "#/").split("?")[0]; }
@@ -189,7 +195,7 @@
       // ── 2段目。**未計測と0を区別する**（§5-9 の7）──
       b.appendChild(el("h2", { text: "月次で見るもの" }));
       var g2 = el("div", { "class": "np-grid np-grid-3" });
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/reports", text: "→ 月次レポート" })]));
+      b.appendChild(btnRow([navBtn("#/reports", "月次レポートを見る")]));
       d.monthly.forEach(function (m) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h3", { text: m.label }));
@@ -297,11 +303,9 @@
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
           text: "案件がまだありません。" }));
-        b.appendChild(el("p", { "class": "np-note" }, [
-          "本来は ",
-          el("a", { href: "#/plan", text: "年間プラン" }),
-          " の枠から「案件にする」で起こします（発売の2か月前のタスク設定期限が出ます）。"
-          + "枠に無いものは、下のフォームから直接起こせます。" ]));
+        b.appendChild(el("p", { "class": "np-note", text: "本来は年間プランの枠から「案件にする」で起こします（発売の2か月前のタスク設定期限が出ます）。"
+          + "枠に無いものは、下のフォームから直接起こせます。" }));
+        b.appendChild(btnRow([navBtn("#/plan", "年間プランを開く")]));
       } else {
         b.appendChild(table(
           ["ステージ", "ゲート", "次のゲート", "発売予定日", "商品（分類・サイズ）",
@@ -423,7 +427,7 @@
           d.missing.forEach(function (m) {
             var li = el("li", null, [
               m.label + " — " + m.why + " ",
-              el("a", { href: "#np-sec-" + m.goto, text: "→ " + m.goto + "節へ" })
+              navBtn("#np-sec-" + m.goto, m.goto + "節へ", "sm")
             ]);
             if (m.stage) li.appendChild(el("span", { "class": "np-stage",
               text: "（" + m.stage + "で自動化。いまは人が確認した記録で判定します）" }));
@@ -442,7 +446,7 @@
         // 止めずに知らせる（FR-101）。**通過は止めない**が、判定する人の目に入る場所に置く
         (d.warnings || []).forEach(function (w) {
           miss.appendChild(el("p", { "class": "np-warn" }, [txt(w.text + " "),
-            el("a", { href: "#np-sec-" + w.goto, text: "→ 原価・調達へ" })]));
+            navBtn("#np-sec-" + w.goto, "原価・調達へ", "sm")]));
         });
 
         // C〜F の節
@@ -1460,10 +1464,8 @@
 
         // **帯に出していない画面への入口**（帯は7つまで）。
         // 自動化依頼は「この作業をやらなくて済ませたい」なので、タスクの下に置く
-        b.appendChild(el("p", { "class": "np-note" }, [
-          "手でやっている作業を自動化したいときは ",
-          el("a", { href: "#/automation", text: "自動化依頼" }),
-          " へ。作業名だけで出せます（そのあと8つの質問で要件にします）。" ]));
+        b.appendChild(el("p", { "class": "np-note", text: "手でやっている作業を自動化したいときは、自動化依頼へ。作業名だけで出せます（そのあと8つの質問で要件にします）。" }));
+        b.appendChild(btnRow([navBtn("#/automation", "自動化依頼を開く")]));
 
         // ロール別の負荷（F-5-5）
         b.appendChild(el("h2", { text: "ロール別の負荷（月 × ロール）" }));
@@ -1663,7 +1665,7 @@
       var d = r[0], meta = r[1];
       var b = clear();
       setTitle("アイデア", d.rubric ? "（" + d.rubric + "）" : "");
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/trends", text: "→ 今週のトレンド（FCTR）から起票する" })]));
+      b.appendChild(btnRow([navBtn("#/trends", "今週のトレンド（FCTR）から起票する")]));
 
       // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
       var f = el("form", { "class": "np-filters", id: "np-ifilter" });
@@ -2167,7 +2169,7 @@
         return;
       }
       setTitle("プラン", d.current.version.label);
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/opportunities", text: "→ 機会カレンダー（イベントの2か月前を発売の目安に、枠を足す）" })]));
+      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く（イベントの2か月前を発売の目安に、枠を足す）")]));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
       if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
@@ -2710,7 +2712,7 @@
     api("/api/reports").then(function (d) {
       var b = clear();
       setTitle("月次レポート");
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/", text: "← ダッシュボード" })]));
+      b.appendChild(btnRow([navBtn("#/", "← ダッシュボードへ戻る", "back")]));
       b.appendChild(el("p", { "class": "np-note", text: "毎月2日 10:00 に前の月の分を作ります（売上・商品ABC・新商品・開発の進み・年間プラン・トレンド）。事実の数字だけで、AI の文章は入れていません。送りはしません。" }));
       var nav = el("div", { "class": "np-filters" });
       var month = q.get("month") || (d.rows[0] && d.rows[0].month) || d.default;
@@ -2739,7 +2741,7 @@
     api("/api/opportunities").then(function (d) {
       var b = clear();
       setTitle("機会カレンダー");
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/plan", text: "← プラン" })]));
+      b.appendChild(btnRow([navBtn("#/plan", "← プランへ戻る", "back")]));
       b.appendChild(el("p", { "class": "np-note", text: "発売の目安は、イベントの " + d.lead_months + " か月前です。「枠にする」で、策定中の年間プラン"
         + (d.version ? "（" + d.version.fiscal_year + "年度）" : "") + "にその月の枠を足します（自動では足しません）。日付は元表の書き方のままです。" }));
       if (!d.version) b.appendChild(el("p", { "class": "np-warn", text: "策定中の年間プランがありません。枠を足すには、プランの画面で版を作ってください。" }));
@@ -2762,7 +2764,7 @@
         tc.appendChild(el("p", null, [el("strong", { text: sg.name + "：" }),
           txt(sg.top.map(function (t) { return t.label + "（" + t.decayed + "）"; }).join("、") || "なし")]));
       });
-      tc.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/trends", text: "→ トレンドの一覧・アイデアにする" })]));
+      tc.appendChild(btnRow([navBtn("#/trends", "トレンドの一覧を開く・アイデアにする")]));
       b.appendChild(tc);
 
       // 年間イベント（FR-78・FR-80）
@@ -2798,7 +2800,7 @@
     api("/api/fctr").then(function (d) {
       var b = clear();
       setTitle("トレンド（FCTR）", d.latest_week ? "／ " + d.latest_week : "");
-      b.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/ideas", text: "← アイデア" })]));
+      b.appendChild(btnRow([navBtn("#/ideas", "← アイデアへ戻る", "back"), navBtn("#/settings", "見せ方を変える（設定）", "back")]));
       if (d.why) b.appendChild(el("p", { "class": "np-warn", text: d.why }));
       var m = d.meta || {};
       b.appendChild(el("p", { "class": "np-note", text: "Auto GROWTH が毎週月曜に出す需要テーマの「市場性」（30点満点）です。最新 " + dash(d.latest_week)
@@ -3149,11 +3151,111 @@
   }
 
   // ══════════════════════════════════════════════════════
+  // 設定（2026-10-06 十文字さん指示・ADR-057）。**自分の見え方**はここで誰でも変えられる。
+  // 変えたら画面にすぐ当てる（読み込み直さなくてよい）。サーバーにも保存し、別の端末でも同じにする
+  // ══════════════════════════════════════════════════════
+  function viewSettings() {
+    loading();
+    Promise.all([api("/api/me"), api("/api/settings")]).then(function (r) {
+      var me = r[0], st = r[1], b = clear();
+      setTitle("設定");
+      var root = document.documentElement;
+
+      function choice(cur, opts, onPick) {
+        var row = el("div", { "class": "np-choice", role: "group" });
+        opts.forEach(function (o) {
+          var bt = el("button", { type: "button", text: o.label, "aria-pressed": String(o.value === cur) });
+          bt.addEventListener("click", function () {
+            onPick(o.value).then(function () {
+              Array.prototype.forEach.call(row.children, function (x) { x.setAttribute("aria-pressed", String(x === bt)); });
+            }).catch(function (e) { row.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          row.appendChild(bt);
+        });
+        return row;
+      }
+      function section(card, title, note, row) {
+        var w = el("div", { "class": "np-setting" });
+        w.appendChild(el("h3", { text: title }));
+        if (note) w.appendChild(el("p", { "class": "np-sub", text: note }));
+        w.appendChild(row);
+        card.appendChild(w);
+      }
+      function savePref(key) {
+        return function (v) {
+          var o = {}; o[key] = v;
+          return post("/api/me/display", o).then(function () {
+            if (key === "font") root.setAttribute("data-np-font", v);
+            if (key === "density") root.setAttribute("data-np-density", v);
+            if (key === "start") root.setAttribute("data-np-start", v);
+          });
+        };
+      }
+      var opt = {};
+      me.pref_options.forEach(function (o) { opt[o.key] = o; });
+
+      // 表示
+      var disp = el("div", { "class": "np-card" });
+      disp.appendChild(el("h2", { text: "表示（" + (me.name || me.user_id) + " さんの画面だけ）" }));
+      disp.appendChild(el("p", { "class": "np-sub", text: "ほかの人の画面は変わりません。別の端末で開いても同じ見え方になります。" }));
+      section(disp, "配色", "「端末に合わせる」は、パソコンやスマホの明るさの設定に従います。",
+        choice(me.theme, me.themes.map(function (t) { return { value: t[0], label: t[1] }; }), function (v) {
+          return post("/api/me/display", { theme: v }).then(function () {
+            if (v === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", v);
+          });
+        }));
+      ["font", "density"].forEach(function (k) {
+        section(disp, opt[k].label, null, choice(me.prefs[k], opt[k].options, savePref(k)));
+      });
+      section(disp, opt.start.label, "アプリを開いたとき（アドレスに画面の指定が無いとき）に出す画面です。",
+        choice(me.prefs.start, opt.start.options, savePref("start")));
+      b.appendChild(disp);
+
+      // トレンドの見せ方
+      var tr = el("div", { "class": "np-card" });
+      tr.appendChild(el("h2", { text: "トレンド（FCTR）の見せ方" }));
+      tr.appendChild(el("p", { "class": "np-sub", text: "トレンド画面の表示だけが変わります。月次レポートと機会カレンダーは、いつもの見せ方（上位3）のままです。" }));
+      ["trend_top", "trend_order", "trend_faded"].forEach(function (k) {
+        section(tr, opt[k].label, null, choice(me.prefs[k], opt[k].options, savePref(k)));
+      });
+      tr.appendChild(btnRow([navBtn("#/trends", "トレンド画面を開く")]));
+      b.appendChild(tr);
+
+      // 操作マニュアル
+      var mc = el("div", { "class": "np-card" });
+      mc.appendChild(el("h2", { text: "操作マニュアル" }));
+      mc.appendChild(el("p", { "class": "np-sub", text: "画面ごとに、何をするところか・よく使う操作を書いています。" }));
+      mc.appendChild(btnRow([navBtn("#/manual", "操作マニュアルを開く")]));
+      b.appendChild(mc);
+
+      // アプリ全体の設定（見るだけ）
+      var ac = el("div", { "class": "np-card" });
+      ac.appendChild(el("h2", { text: "アプリ全体の設定（全員に効くもの）" }));
+      ac.appendChild(el("p", { "class": "np-sub", text: "いまの値を見るだけの欄です。空欄は「未設定」で、0 として扱ってはいません。" }));
+      ac.appendChild(table(["項目", "値", "説明"], st.rows.map(function (x) {
+        var v = (x.value === null || x.value === "") ? "未設定" : x.value + (x.unit ? " " + x.unit : "");
+        if (x.kind === "bool" && x.value !== null) v = x.value === "1" ? "使う" : "使わない";
+        return el("tr", null, [el("td", { text: x.label }), el("td", { text: v }), el("td", { text: (x.why || "").replace(/\*\*/g, "") })]);
+      })));
+      b.appendChild(ac);
+    }).catch(fail);
+  }
+
+  function viewManual() {
+    loading();
+    api("/api/manual").then(function (d) {
+      var b = clear();
+      setTitle("操作マニュアル");
+      b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back")]));
+      b.appendChild(mdRender(d.body_md));
+    }).catch(fail);
+  }
+
+  // ══════════════════════════════════════════════════════
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/cost": ["原価・調達（案件をまたいだ一覧）", "第3段の後半", "相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。ここに案件をまたいだ一覧（締切が近い順など）を作る予定です。外注先・仕入先・原材料の一覧は seisan が持ちます。"],
-    "#/settings": ["設定", "—", "マスタ・利用者・データの出どころ・監査ログ。第2段では監査の記録だけ取っています。"]
+    "#/cost": ["原価・調達（案件をまたいだ一覧）", "第3段の後半", "相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。ここに案件をまたいだ一覧（締切が近い順など）を作る予定です。外注先・仕入先・原材料の一覧は seisan が持ちます。"]
   };
 
   function viewNotYet(path, entry) {
@@ -3192,11 +3294,16 @@
     if (path === "#/trends") return viewTrends();
     if (path === "#/opportunities") return viewOpportunities();
     if (path === "#/reports") return viewReports();
+    if (path === "#/settings") return viewSettings();
+    if (path === "#/manual") return viewManual();
     return viewNotYet(path, entry);
   }
 
   window.addEventListener("hashchange", go);
 
-  // 初回。**hash が無いときは書き換えない**（履歴に余計な1件を残さない）
-  go();
+  // 初回。**hash が無いときは**、その人の「最初に開く画面」へ（設定・ADR-057）。
+  // location.replace なので履歴に余計な1件を残さない。値はサーバーが許可リストで倒したもの
+  var START = document.documentElement.getAttribute("data-np-start") || "#/";
+  if (!location.hash && /^#\/[a-z]*$/.test(START) && START !== "#/") location.replace(START);
+  else go();
 })();

@@ -153,3 +153,41 @@ table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted
 
 /* LP依頼書（FR-118）。読むための欄なので幅いっぱいに */
 #np-sec-lpreq textarea { width: 100%; box-sizing: border-box; }
+
+/* ── 画面の見直し（2026-10-06・ADR-057）──────────────────────────
+ * **導線はボタンにする。**「→ ○○」の文字リンクは本文に紛れて押せると気づかれない
+ * （十文字さん「テキストリンクがわかりにくい」）。表の中の名前（案件名・アイデア名）はリンクのまま。
+ * 色に意味を持たせない（N-11）。枠と太さで「押せる」を見せ、行き先は語で書く。 */
+.np-btnrow { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
+a.np-btn, button.np-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  min-height: 2.5rem; padding: .4rem .95rem;
+  border: 1px solid var(--fca-navy); border-radius: 6px;
+  background: var(--fca-card); color: var(--fca-ink);
+  font: inherit; font-size: .9rem; font-weight: 600; line-height: 1.3;
+  text-decoration: none; cursor: pointer;
+}
+a.np-btn:hover, button.np-btn:hover { background: var(--fca-bg); text-decoration: underline; }
+a.np-btn-back { border-color: var(--fca-line); font-weight: 400; }
+a.np-btn-sm { min-height: 2rem; padding: .2rem .6rem; font-size: .8rem; }
+
+/* 文字の大きさ（利用者ごと）。帯の 14px と rem の両方を上げる */
+html[data-np-font="large"] { font-size: 112.5%; }
+html[data-np-font="large"] body { font-size: 16px; }
+html[data-np-font="xlarge"] { font-size: 125%; }
+html[data-np-font="xlarge"] body { font-size: 17.5px; }
+
+/* 表の詰め具合（利用者ごと） */
+html[data-np-density="compact"] table.np th, html[data-np-density="compact"] table.np td { padding: .2rem .4rem; }
+html[data-np-density="roomy"] table.np th, html[data-np-density="roomy"] table.np td { padding: .65rem .7rem; }
+
+/* 設定ページ。選択肢は押せる大きさで並べる（スマホでも） */
+.np-choice { display: flex; flex-wrap: wrap; gap: .4rem; margin: .3rem 0 .8rem; }
+.np-choice button {
+  min-height: 2.5rem; padding: .35rem .85rem; font: inherit; font-size: .9rem;
+  border: 1px solid var(--fca-line); border-radius: 6px;
+  background: var(--fca-card); color: inherit; cursor: pointer;
+}
+.np-choice button[aria-pressed="true"] { border: 2px solid var(--fca-navy); font-weight: 700; }
+.np-setting { border-top: 1px solid var(--fca-line); padding-top: .6rem; margin-top: .6rem; }
+.np-setting > h3 { margin: 0 0 .2rem; font-size: 1rem; }
