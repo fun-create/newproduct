@@ -223,3 +223,5 @@ form.np-inline select, form.np-inline input, form.np-inline button,
 form.np-form input, form.np-form select, form.np-form textarea, form.np-form button,
 p.np-actions button, .np-field textarea, .np-filters a, .np-filters button { border-radius: 6px; }
 form.np-inline button, form.np-form button, p.np-actions button { border-color: var(--fca-navy); font-weight: 600; }
+/* 表の中のボタンは1行に収める（縦に1文字ずつ折れないように） */
+table.np td button, table.np td a.np-btn { white-space: nowrap; }

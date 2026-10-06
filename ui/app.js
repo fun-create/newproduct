@@ -845,18 +845,7 @@
           ? "レビュー率が未設定のため、売上の推計は出していません（決めるのは商品開発部）。"
           : "売上の推計（累計）＝ レビュー件数 ÷ レビュー率 " + o.review_rate + "% × 販売価格。仮定の率で出した目安で、実績ではありません。" });
       box.appendChild(rate);
-      if (o.can_set_rate) {
-        var rf = el("form", { "class": "np-inline" });
-        var ri = el("input", { name: "value", size: "5", "aria-label": "レビュー率（%）", value: o.review_rate === null ? "" : String(o.review_rate) });
-        [txt("レビュー率（%・買った人のうちレビューを書く人の割合。空欄で未設定に戻す） "), ri, txt(" "), el("button", { type: "submit", text: "決める" })]
-          .forEach(function (x) { rf.appendChild(x); });
-        rf.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          post("/api/settings/competitor-review-rate", { value: ri.value }).then(function () { competitorPanel(pid, box); })
-            .catch(function (e) { rf.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
-        });
-        box.appendChild(rf);
-      }
+      if (o.can_set_rate) box.appendChild(btnRow([navBtn("#/settings", "レビュー率を決める・変える（設定）", "back")]));
       if (o.price_range) box.appendChild(el("p", { "class": "np-note",
         text: "価格の幅: " + u(o.price_range[0], "円") + " 〜 " + u(o.price_range[1], "円") + "（価格が分かっている " + o.price_known + " 件・税込）" }));
       if (!o.rows.length) box.appendChild(el("p", { "class": "np-note", text: "まだ競合がありません。" }));
@@ -3309,16 +3298,89 @@
       mc.appendChild(btnRow([navBtn("#/manual", "操作マニュアルを開く")]));
       b.appendChild(mc);
 
-      // アプリ全体の設定（見るだけ）
-      var ac = el("div", { "class": "np-card" });
+      // アプリ全体の設定（ADR-059）。変えられる人にだけ「変える」を出す。**根拠が必須**、空欄は未設定に戻す
+      var ac = el("div", { "class": "np-card", id: "np-set-app" });
       ac.appendChild(el("h2", { text: "アプリ全体の設定（全員に効くもの）" }));
-      ac.appendChild(el("p", { "class": "np-sub", text: "いまの値を見るだけの欄です。空欄は「未設定」で、0 として扱ってはいません。" }));
-      ac.appendChild(table(["項目", "値", "説明"], st.rows.map(function (x) {
-        var v = (x.value === null || x.value === "") ? "未設定" : x.value + (x.unit ? " " + x.unit : "");
-        if (x.kind === "bool" && x.value !== null) v = x.value === "1" ? "使う" : "使わない";
-        return el("tr", null, [el("td", { text: x.label }), el("td", { text: v }), el("td", { text: (x.why || "").replace(/\*\*/g, "") })]);
-      })));
+      ac.appendChild(el("p", { "class": "np-sub", text: "数え方の基準になる値です。全員が見られます。「未設定」は 0 ではなく、まだ決まっていないという意味です。変えた記録は下の「変更の記録」に残ります。" }));
+      var groups = {};
+      st.rows.forEach(function (x) { (groups[x.group] = groups[x.group] || []).push(x); });
+      var setRows = [];
+      Object.keys(groups).forEach(function (gname) {
+        setRows.push(el("tr", { "class": "np-sep" }, [el("td", { colspan: "5", text: gname })]));
+        setRows = setRows.concat(groups[gname].map(function (x) {
+          var v = (x.value === null || x.value === "") ? "未設定" : x.value + (x.unit ? " " + x.unit : "");
+          if (x.kind === "bool" && x.value !== null) v = x.value === "1" ? "使う" : "使わない";
+          var act = el("td");
+          if (x.editable) {
+            var bt = el("button", { type: "button", text: "変える" });
+            bt.addEventListener("click", function () {
+              if (act.querySelector("form")) return;
+              var f = el("form", { "class": "np-inline" });
+              var vi = el("input", { name: "value", size: "8", "aria-label": x.label, value: x.value === null ? "" : String(x.value) });
+              var ri = el("input", { name: "reason", size: "24", "aria-label": "根拠", placeholder: "根拠（必須）" });
+              [vi, ri, el("button", { type: "submit", text: "保存" })].forEach(function (n) { f.appendChild(n); });
+              f.appendChild(el("span", { "class": "np-sub", text: " 空欄で保存すると未設定に戻ります" }));
+              f.addEventListener("submit", function (ev) {
+                ev.preventDefault();
+                post("/api/settings/value", { key: x.key, value: vi.value, reason: ri.value })
+                  .then(function () { viewSettings(); })
+                  .catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+              });
+              act.appendChild(f);
+            });
+            act.appendChild(bt);
+          } else {
+            act.appendChild(el("span", { "class": "np-sub", text: x.locked_why || x.who }));
+          }
+          return el("tr", null, [el("td", { text: x.label }), el("td", { text: v }),
+            el("td", { text: x.updated_at ? x.updated_at + " " + dash(x.updated_by) : "—" }),
+            el("td", { text: x.why || "" }), act]);
+        }));
+      });
+      ac.appendChild(table(["項目", "いまの値", "最終更新", "説明", ""], setRows));
       b.appendChild(ac);
+
+      // 業務ロール（ADR-059）。全員に見せる。付け外しはアプリ権限 admin（十文字さんの選択）
+      var rc = el("div", { "class": "np-card", id: "np-set-roles" });
+      var R = st.roles;
+      rc.appendChild(el("h2", { text: "業務ロール（誰が何を判定するか）" }));
+      rc.appendChild(el("p", { "class": "np-sub", text: "ゲートや年間プランを承認できる資格は、ここの業務ロールで決まります（アプリの管理者かどうかとは別です）。"
+        + (R.can_edit ? "印を押すと付け外しできます。" : "付け外しできるのは、アプリ権限が管理者（admin）の人です。")
+        + "利用者そのものの追加は、カレンダーの ☰ →「人とアプリ」で行います。" }));
+      var roleCols = R.roles;                       // 他部署のロール（生産部など）も G4 の承認に使うので全部出す
+      rc.appendChild(table(["利用者"].concat(roleCols.map(function (r) { return r.label; })), R.people.map(function (p) {
+        var mine = R.members[p.user_id] || [];
+        return el("tr", null, [el("td", { text: p.name + "（" + p.user_id + "）" })].concat(roleCols.map(function (r) {
+          var has = mine.indexOf(r.code) >= 0, td = el("td");
+          if (!R.can_edit) { td.appendChild(txt(has ? "あり" : "—")); return td; }
+          var bt = el("button", { type: "button", text: has ? "あり" : "—", "aria-pressed": String(has),
+            "aria-label": p.name + " の " + r.label + (has ? "を外す" : "を付ける") });
+          bt.addEventListener("click", function () {
+            if (!window.confirm(p.name + " さんの「" + r.label + "」を" + (has ? "外します" : "付けます") + "。よろしいですか")) return;
+            post("/api/settings/role", { user_id: p.user_id, role: r.code, on: has ? "0" : "1" })
+              .then(function () { viewSettings(); })
+              .catch(function (e) { td.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          td.appendChild(bt);
+          return td;
+        })));
+      })));
+      b.appendChild(rc);
+
+      // 変更の記録（全員に見せる）
+      var lc = el("div", { "class": "np-card", id: "np-set-log" });
+      lc.appendChild(el("h2", { text: "変更の記録（全員に効くもの・新しい順）" }));
+      if (!st.log.length) lc.appendChild(el("p", { "class": "np-note", text: "まだありません。" }));
+      else lc.appendChild(table(["いつ", "誰が", "何を", "前 → 後", "根拠"], st.log.map(function (x) {
+        var what = { "role.grant": "業務ロールを付けた", "role.revoke": "業務ロールを外した", "plan.version.approve": "年間プランを承認" }[x.action]
+          || (x.label ? x.label : x.action);
+        var ba = x.before !== undefined && x.before !== null || x.after !== undefined && x.after !== null
+          ? (x.before === null || x.before === undefined ? "未設定" : x.before) + " → " + (x.after === null || x.after === undefined ? "未設定" : x.after)
+          : (x.detail && x.detail.role ? x.target + " / " + x.detail.role : dash(x.target));
+        return el("tr", null, [el("td", { text: x.at }), el("td", { text: dash(x.user_id) }), el("td", { text: what }),
+          el("td", { text: ba }), el("td", { text: dash(x.reason) })]);
+      })));
+      b.appendChild(lc);
     }).catch(fail);
   }
 

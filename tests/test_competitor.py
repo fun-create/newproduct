@@ -6,7 +6,7 @@
   - **出典 URL と確認日が無ければ断る**（F-9-8）。先の日付・javascript: も断る
   - 分からない値は未確認のまま（0 にしない）
   - **レビュー率が未設定なら推計を出さない**（何が欠けたかを言う）。決めたら「件数 ÷ 率 × 価格」
-  - レビュー率を決められるのは 商品開発部・管理者・社長 だけ
+  - レビュー率を決められるのは 商品開発部・管理者・社長 だけ（設定ページ・admin.set_value）
 """
 from __future__ import annotations
 
@@ -65,18 +65,19 @@ class Competitor(unittest.TestCase):
         self.assertEqual(r["estimate"]["missing"], ["レビュー率（未設定）", "レビュー件数", "販売価格"])
 
     def test_estimate_after_rate_is_decided(self):
+        from app import admin
         self.m.save(self.pid, OK, "u")
         self.assertIsNone(self.m.overview(self.pid, "u")["review_rate"], "既定は未設定（仮の率で埋めない）")
         with self.assertRaises(PermissionError):
-            self.m.set_rate("2", "u")
-        self.m.set_rate("2", "dev")
+            admin.set_value("competitor_review_rate", "2", "社内の実績", "u", "admin")   # 業務ロールが無い
+        admin.set_value("competitor_review_rate", "2", "社内の実績", "dev", "user")
         o = self.m.overview(self.pid, "dev")
         self.assertTrue(o["can_set_rate"])
         self.assertEqual(o["rows"][0]["estimate"], {"qty": 6000, "revenue": 11880000, "missing": []})
-        self.m.set_rate("", "dev")
+        admin.set_value("competitor_review_rate", "", "いったん外す", "dev", "user")
         self.assertIsNone(self.m.overview(self.pid, "u")["rows"][0]["estimate"]["revenue"], "空欄で未設定に戻せる")
         with self.assertRaises(ValueError):
-            self.m.set_rate("150", "dev")
+            admin.set_value("competitor_review_rate", "150", "x", "dev", "user")
 
     def test_edit_delete_and_price_range(self):
         a = self.m.save(self.pid, OK, "u")["id"]

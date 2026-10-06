@@ -6,7 +6,8 @@
 - **出典（URL）と確認日は必須**（F-9-8）。値は確認日の時点のもの。調べ直したら確認日も変える
 - 分からない値は空欄（未確認）。**0 で埋めない**（N-10）
 - **売上の推計**（F-9-7）＝ レビュー件数 ÷ レビュー率 × 価格。保存せず、表示のたびに出す。
-  **レビュー率は設定 `competitor_review_rate` で、決めるのは商品開発部。**未設定のあいだは推計を出さない
+  **レビュー率は設定 `competitor_review_rate` で、決めるのは商品開発部。**未設定のあいだは推計を出さない。
+  変えるのは設定ページ（admin.set_value・根拠が必須・前後の値を残す。ADR-059）
   （現行のスプレッドシートは `#DIV/0!` のまま止まっていた。仮の率で埋めない）
 - レビュー件数は掲載からの**累計**なので、推計も累計（月あたりではない）
 """
@@ -38,21 +39,6 @@ def review_rate() -> float | None:
 def can_set_rate(user_id: str) -> bool:
     from app import gate
     return bool(set(gate.roles_of(user_id)) & set(RATE_EDITORS))
-
-
-def set_rate(value, user_id: str) -> dict:
-    if not can_set_rate(user_id):
-        raise PermissionError("レビュー率を決められるのは、商品開発部・管理者・社長の業務ロールの人です")
-    v = str(value or "").strip()
-    if v == "":
-        x = None                                   # 未設定に戻す（推計を止める）
-    else:
-        x = _num(v, "レビュー率", positive=True)
-        if x > 100:
-            raise ValueError("レビュー率は 0 より大きく 100 以下の % で入れてください")
-    with store.tx() as c:
-        c.execute("UPDATE setting SET value=? WHERE key=?", (None if x is None else str(x), RATE_KEY))
-    return {"ok": True, "review_rate": x}
 
 
 def _values(f: dict) -> dict:

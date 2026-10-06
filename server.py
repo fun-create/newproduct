@@ -54,6 +54,7 @@ from app import cost as cost_m    # noqa: E402
 from app import compat as compat_m  # noqa: E402
 from app import competitor as comp_m  # noqa: E402
 from app import prefs as prefs_m  # noqa: E402
+from app import admin as admin_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -579,11 +580,16 @@ class H(BaseHTTPRequestHandler):
                 store.audit(uid, "project." + what, pid, {k: d.get(k) for k in ("id", "shop", "url", "checked_on")}, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
-        if parts == ["settings", "competitor-review-rate"] and method == "POST":
+        # アプリ全体の設定（ADR-059）。**根拠が必須**・前後の値を監査に残す（admin.set_value の中で）
+        if parts == ["settings", "value"] and method == "POST":
             d = self.body()
-            r = comp_m.set_rate(d.get("value"), uid)
-            store.audit(uid, "setting.competitor_review_rate", "", {"value": r["review_rate"]}, ip)
-            return self.sendj(200, r)
+            return self.sendj(200, admin_m.set_value(d.get("key", ""), d.get("value"), d.get("reason", ""),
+                                                     uid, user.get("role"), ip))
+        # 業務ロールの付け外し（アプリ権限 admin・十文字さんの選択）
+        if parts == ["settings", "role"] and method == "POST":
+            d = self.body()
+            return self.sendj(200, admin_m.set_role(d.get("user_id", ""), d.get("role", ""),
+                                                    d.get("on") in ("1", "true", "on"), uid, user.get("role"), ip))
 
         # 年間目標（FR-109/110・FR-106）。**3方式と根拠が必須**。未設定は「目標未設定」
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "target":
@@ -767,10 +773,9 @@ class H(BaseHTTPRequestHandler):
         if parts == ["settings"] and method == "GET":
             # 接続先（ChatWork の部屋・AI予算の口・本文の URL）は**アプリ権限 admin にだけ**見せる。
             # 業務の数え方ではなく、他のシステムへのつなぎ方なので（2026-10-06 app-ui の提案・ADR-058）
-            rows = idea_m.settings()
-            if user.get("role") != "admin":
-                rows = [r for r in rows if r["key"] not in CONNECTION_KEYS]
-            return self.sendj(200, {"rows": rows,
+            rows = admin_m.settings_view(uid, user.get("role"), CONNECTION_KEYS)
+            return self.sendj(200, {"rows": rows, "roles": admin_m.roles_view(user.get("role")),
+                                    "log": admin_m.change_log(),
                                     "concept_stock": idea_m.concept_stock(),
                                     "ai_scoring": ai_m.status()})
         if len(parts) == 2 and parts[0] == "ideas" and method == "GET":
