@@ -153,6 +153,33 @@
       var b = clear();
       b.appendChild(el("p", { "class": "np-note", text: "きょうは " + d.today + " です。" }));
 
+      // ── 0段目: 自分のやること（2026-10-06 十文字さん選択）。開いた人が最初に要るのは「何をすればいいか」──
+      var my = d.my, mc = el("div", { "class": "np-card" });
+      mc.appendChild(el("h2", { text: "自分のやること" }));
+      mc.appendChild(el("p", { "class": "np-sub", text: my.roles.length
+        ? "あなたの業務ロール（" + my.roles.join("・") + "）のタスクと、あなたが担当のタスクです。期限切れと、7日先までを出しています。"
+        : "あなたに業務ロールが割り当てられていないため、担当者があなたのタスクだけを出しています（いまのタスクは業務ロールに付いています）。" }));
+      if (!my.tasks.length) mc.appendChild(el("p", { "class": "np-note", text: "7日先までにやるタスクはありません。" }));
+      else {
+        mc.appendChild(table(["期限", "状態", "タスク", "案件", "なぜ自分か"], my.tasks.map(function (t) {
+          return el("tr", null, [el("td", { text: t.due_on + (t.overdue ? "（期限切れ）" : "") }), el("td", { text: t.status }),
+            el("td", { text: t.title }),
+            el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product }) : txt("—")]),
+            el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
+        })));
+        if (my.tasks_n > my.tasks.length) mc.appendChild(el("p", { "class": "np-sub", text: "ほか " + (my.tasks_n - my.tasks.length) + " 件。" }));
+      }
+      if (my.gates.length) {
+        mc.appendChild(el("h3", { text: "あなたが判定するゲート（" + my.gates_n + "件）" }));
+        mc.appendChild(table(["ゲート", "状態", "案件", "足りないもの"], my.gates.map(function (g) {
+          return el("tr", null, [el("td", { text: g.gate + " " + g.name }), el("td", { text: g.state }),
+            el("td", null, [el("a", { href: "#/projects/" + g.project_id, text: g.product })]),
+            el("td", { "class": "np-num", text: g.missing_n + " 件" })]);
+        })));
+      }
+      mc.appendChild(btnRow([navBtn("#/tasks", "タスクの一覧を開く"), navBtn("#/gates", "ゲートの一覧を開く", "back")]));
+      b.appendChild(mc);
+
       // ── 1段目 ──
       b.appendChild(el("h2", { text: "いま詰まっているもの" }));
       var g1 = el("div", { "class": "np-grid np-grid-3" });
@@ -587,7 +614,7 @@
         seisanPanel(d.id, sv);
 
         // タスク
-        var tv = el("div", { "class": "np-card" });
+        var tv = el("div", { "class": "np-card", id: "np-sec-tasks" });
         tv.appendChild(el("h2", { text: "タスク（" + d.tasks.length + "件）" }));
         if (!d.template_defined) {
           tv.appendChild(el("p", { "class": "np-warn",
@@ -625,12 +652,64 @@
             el("td", { text: dash(x.changed_by) }), el("td", { text: x.what })]);
         })));
         b.appendChild(g);
+        foldSections(b);
       }).catch(fail);
 
     function row(k, v) {
       return el("tr", null, [el("th", { text: k }), el("td", { text: v })]);
     }
   }
+
+  /** 案件画面の節をたたむ（全体の見直し・2026-10-06 十文字さん選択）。縦に長すぎて目当ての節が探せないため。
+   *  ・ヘッダ（A）と「いま欠けているもの」はたたまない（判断の起点なので常に見せる）
+   *  ・上に目次のボタンを置く。押すとその節を開いて移動する
+   *  ・既定は閉じる。開いた・閉じたは、この端末に節ごとに覚える（案件をまたいで同じ節が同じ状態になる） */
+  var FOLD_KEY = "newproduct-fold-";
+  function foldSections(b) {
+    var cards = Array.prototype.filter.call(b.children, function (c) {
+      return c.classList && c.classList.contains("np-card") && /^np-sec-/.test(c.id || "");
+    });
+    if (!cards.length) return;
+    var toc = [];
+    cards.forEach(function (c) {
+      var h = c.querySelector("h2");
+      var title = h ? h.textContent : c.id;
+      var det = el("details", { "class": "np-fold" });
+      var open = null;
+      try { open = localStorage.getItem(FOLD_KEY + c.id); } catch (e) { /* 使えなくても開いたまま */ }
+      if (open === "1") det.setAttribute("open", "open");          // 既定は閉じる（目次から開く）
+      det.appendChild(el("summary", { text: title }));
+      det.addEventListener("toggle", function () {
+        try { localStorage.setItem(FOLD_KEY + c.id, det.open ? "1" : "0"); } catch (e) { /* 覚えないだけ */ }
+      });
+      b.insertBefore(det, c);
+      det.appendChild(c);
+      if (h) h.classList.add("np-fold-h");
+      toc.push(navBtn("#" + c.id, title.replace(/^[A-G]\. /, "").replace(/ — .*$/, ""), "sm"));
+    });
+    var bar = btnRow(toc);
+    bar.classList.add("np-toc");
+    var allOpen = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "すべて開く" });
+    var allClose = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "すべて閉じる" });
+    allOpen.addEventListener("click", function () { b.querySelectorAll("details.np-fold").forEach(function (x) { x.open = true; }); });
+    allClose.addEventListener("click", function () { b.querySelectorAll("details.np-fold").forEach(function (x) { x.open = false; }); });
+    bar.appendChild(allOpen); bar.appendChild(allClose);
+    b.insertBefore(el("p", { "class": "np-sub", text: "節へ移動（押すと開きます）" }), cards[0].parentNode);
+    b.insertBefore(bar, cards[0].parentNode);
+  }
+
+  // 節へのボタン（#np-sec-…）は**画面の切り替えではなく、同じ画面の中の移動**。
+  // 既定の動きに任せると hash が変わり、振り分けが「未実装の画面」を出してしまう
+  document.addEventListener("click", function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="#np-sec-"]') : null;
+    if (!a) return;
+    ev.preventDefault();
+    var t = document.getElementById(a.getAttribute("href").slice(1));
+    if (!t) return;
+    var det = t.closest("details");
+    if (det) det.open = true;
+    t.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   function fieldForm(pid, fd, editable) {
     var w = el("div", { "class": "np-field" });

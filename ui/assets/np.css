@@ -191,3 +191,35 @@ html[data-np-density="roomy"] table.np th, html[data-np-density="roomy"] table.n
 .np-choice button[aria-pressed="true"] { border: 2px solid var(--fca-navy); font-weight: 700; }
 .np-setting { border-top: 1px solid var(--fca-line); padding-top: .6rem; margin-top: .6rem; }
 .np-setting > h3 { margin: 0 0 .2rem; font-size: 1rem; }
+
+/* 案件画面の節をたたむ（ADR-057）。見出しは summary が持ち、中の h2 は重ねて出さない */
+details.np-fold { margin: 0; }
+details.np-fold > summary {
+  cursor: pointer; font-weight: 700; font-size: 1.1rem;
+  padding: .6rem .8rem; border: 1px solid var(--fca-line); border-radius: 8px;
+  background: var(--fca-card); list-style-position: inside;
+}
+details.np-fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 0; }
+details.np-fold[open] > .np-card { border-top-left-radius: 0; border-top-right-radius: 0; }
+details.np-fold > .np-card > h2.np-fold-h { display: none; }
+.np-toc { gap: .35rem; }
+
+/* ── ボタンと入力欄をそろえる（全体の見直し・2026-10-06 十文字さん選択）──
+ * これまでは画面ごとに大きさ・枠が違い、クラスの無いものはブラウザ任せ（ダークで白く浮く）だった。
+ * `:where()` で詳細度を0にして、既存の個別指定（np-btn・np-choice など）を壊さない土台にする。
+ * 押せるもの（button）は濃紺の枠＋太字、入れるもの（input・select・textarea）は罫線の枠。色に意味は持たせない */
+.fca-main :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  font: inherit; font-size: .9rem; color: var(--fca-ink);
+  background: var(--fca-card); border: 1px solid var(--fca-line); border-radius: 6px;
+  padding: .35rem .6rem; min-height: 2.25rem; box-sizing: border-box;
+}
+.fca-main :where(button) { border-color: var(--fca-navy); font-weight: 600; cursor: pointer; }
+.fca-main :where(button):hover { background: var(--fca-bg); }
+.fca-main :where(button[disabled]) { opacity: .55; cursor: not-allowed; }
+.fca-main :where(input, select, textarea)::placeholder { color: var(--fca-muted); }
+.fca-main :where(textarea) { min-height: 4.5rem; }
+/* 個別指定の角をそろえる（4px → 6px） */
+form.np-inline select, form.np-inline input, form.np-inline button,
+form.np-form input, form.np-form select, form.np-form textarea, form.np-form button,
+p.np-actions button, .np-field textarea, .np-filters a, .np-filters button { border-radius: 6px; }
+form.np-inline button, form.np-form button, p.np-actions button { border-color: var(--fca-navy); font-weight: 600; }

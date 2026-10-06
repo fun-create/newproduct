@@ -324,8 +324,33 @@ def dashboard(user_id: str) -> dict:
     role_label = {x["code"]: x["label"] for x in store.rows(
         store.q("SELECT code,label FROM role"))}
 
+    # ── 0段目: 自分のやること（2026-10-06 十文字さん選択「ダッシュボードを自分のやること中心に」）──
+    # **タスクは人ではなく業務ロールに付いている**（移行した 310 件はすべて担当者が空）ので、
+    # 「自分の」＝ 自分が担当者のもの ＋ 自分の業務ロールのもの。期限切れ（未完）と、7日先まで
+    my_tasks, my_n = [], 0
+    if user_id:
+        cond = ["t.assignee=?"]
+        cp = [user_id]
+        if my_roles:
+            cond.append(f"t.role IN ({','.join('?' * len(my_roles))})")
+            cp += sorted(my_roles)
+        until = (t + _dt.timedelta(days=7)).isoformat()
+        where = (f"t.status NOT IN ('完了','対象外') AND t.due_on IS NOT NULL AND t.due_on <= ? "
+                 f"AND ({' OR '.join(cond)})")
+        my_n = store.val(f"SELECT COUNT(*) FROM task t WHERE {where}", [until] + cp, 0)
+        for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size FROM task t "
+                         f"LEFT JOIN project p ON p.id=t.project_id WHERE {where} "
+                         f"ORDER BY t.due_on, t.project_id, t.seq LIMIT 12", [until] + cp):
+            my_tasks.append({"project_id": r["project_id"], "product": _p.product_label(dict(r)),
+                             "seq": r["seq"], "title": r["title"], "due_on": r["due_on"],
+                             "status": r["status"], "overdue": r["due_on"] < t.isoformat(),
+                             "role_label": role_label.get(r["role"], r["role"] or "—"),
+                             "by": "担当" if r["assignee"] == user_id else "ロール"})
+
     return {
         "today": t.isoformat(),
+        "my": {"tasks": my_tasks, "tasks_n": my_n, "gates": waiting[:10], "gates_n": len(waiting),
+               "roles": [role_label.get(x, x) for x in sorted(my_roles)]},
         # ── 1段目: いま詰まっているもの ──
         "stuck": {
             "overdue": {
