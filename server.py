@@ -150,7 +150,7 @@ def _page(name: str, **subs) -> bytes:
     return s.encode("utf-8")
 
 
-CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id")
+CONNECTION_KEYS = admin_m.CONNECTION_KEYS
 
 
 def _root_attrs(user: dict) -> str:
@@ -753,7 +753,7 @@ class H(BaseHTTPRequestHandler):
             except seisan_m.NotConfigured as e:
                 return self.sendj(409, {"error": str(e)})
             except seisan_m.Refused as e:
-                return self.sendj(409, {"error": "seisan が断りました: " + str(e)})
+                return self.sendj(409, {"error": "CIP が断りました: " + str(e)})
 
         if len(parts) == 3 and parts[0] == "projects" and method == "POST":
             pid, what = parts[1], parts[2]
@@ -832,7 +832,7 @@ class H(BaseHTTPRequestHandler):
             # 業務の数え方ではなく、他のシステムへのつなぎ方なので（2026-10-06 app-ui の提案・ADR-058）
             rows = admin_m.settings_view(uid, user.get("role"), CONNECTION_KEYS)
             return self.sendj(200, {"rows": rows, "roles": admin_m.roles_view(user.get("role")),
-                                    "log": admin_m.change_log(),
+                                    "log": admin_m.change_log(app_role=user.get("role") or ""),
                                     "concept_stock": idea_m.concept_stock(),
                                     "ai_scoring": ai_m.status()})
         if len(parts) == 2 and parts[0] == "ideas" and method == "GET":

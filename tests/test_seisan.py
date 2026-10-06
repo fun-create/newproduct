@@ -209,7 +209,7 @@ class Register(Base):
                           "kanri")
         with self.assertRaises(ValueError) as cm:
             self.m.register(self.pid, None, "kanri")
-        self.assertIn("seisan で登録した", str(cm.exception))
+        self.assertIn("CIP で登録した", str(cm.exception))
         row = store.one("SELECT * FROM seisan_registration WHERE project_id=?", (self.pid,))
         self.assertEqual(row["state"], "下書き")
         self.assertIsNotNone(row["draft_json"])

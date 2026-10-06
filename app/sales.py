@@ -47,7 +47,7 @@ SITES = [
 SITE_KEYS = [s[0] for s in SITES]
 
 WHY_SITE_MIX = ("未計測: サイト別の構成は、売上フィード（経営管理）を読めるようになり、"
-                "seisan の「店の商品番号 → 分類」の対応が届いてから出します")
+                "CIP の「店の商品番号 → 分類」の対応が届いてから出します")
 WHY_FBA = ("未計測: Amazon FBA は商品別の明細が 2026-04 の1か月分しかありません。"
            "杉浦さんの FBA 毎日出力が売上フィードに入ってから出します")
 WHY_PRODUCTS = ("未計測: 商品別は、売上フィード（店の商品番号ごとの明細）を読めるようになってから出します")
@@ -133,7 +133,7 @@ def _composition(d: dict) -> dict:
 FEED_SOURCE = "売上フィード（経営管理・各店の API から毎晩）。取消・返金の注文を除く"
 FEED_CAVEATS = [
     "金額は税込の商品代（単価＋オプション代）×数量。送料・決済手数料・クーポンは含みません",
-    "分類は生産管理（seisan）の紐付け表で付けています。当たらない商品番号は「分類なし」",
+    "分類は生産管理（CIP）の紐付け表で付けています。当たらない商品番号は「分類なし」",
     "期間は 2025-05 から（売上フィードの約束）。前年比は 2026-05 以降の丸1か月だけ",
 ]
 WHY_NAME = ("表示名は未取得です。売上フィードが各店の商品マスタの名前を取るようになったら出します"
@@ -174,7 +174,7 @@ def _classify(site, codes: dict, cmap: dict | None):
                        else f"{a} / {b}", "codes": sorted(ent["codes"])}
         else:
             unc += v["revenue"]
-            info[k] = {"path": ("複数の分類に分かれる番号" if ent else "seisan の紐付けに無い"),
+            info[k] = {"path": ("複数の分類に分かれる番号" if ent else "CIP の紐付けに無い"),
                        "codes": sorted(ent["codes"]) if ent else []}
     return cat1, unc, info
 
@@ -271,7 +271,7 @@ def overview_ag(site: str = "all", month: str | None = None) -> dict:
     ms = months()
     base = {"sites": [{"key": k, "label": lb} for k, lb, _ in SITES], "site": site,
             "site_label": next(lb for k, lb, _ in SITES if k == site), "months": ms,
-            "tax": "税込", "basis": "商品代（受注日・seisan の「確定」「仮確定」）"}
+            "tax": "税込", "basis": "商品代（受注日・CIP の「確定」「仮確定」）"}
     if not ms:
         return {**base, "month": None, "why": (
             f"出どころ（{export_dir()}）に月次の集計がありません。"
@@ -330,7 +330,7 @@ def project_sales(pid: str) -> dict:
         "AND product_code IS NOT NULL", (pid,))})
     base = {"codes": codes, "launch_date": p["launch_date"], "checkpoints": list(CHECKPOINTS)}
     if not codes:
-        return {**base, "why": "seisan への登録（共通商品コード）がまだありません。登録すると、ここに発売後の売上が出ます"}
+        return {**base, "why": "CIP への登録（共通商品コード）がまだありません。登録すると、ここに発売後の売上が出ます"}
     if not p["launch_date"]:
         return {**base, "why": "発売日がありません"}
     try:

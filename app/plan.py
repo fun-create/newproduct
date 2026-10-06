@@ -64,10 +64,10 @@ SETTINGS = [
     ("plan.effort_max", "月間工数ポイントの上限", "number", "点", None),
     ("plan.monthly_launch_slots", "月あたりの発売枠", "number", "本", None),
     ("plan.task_setup_lead_months", "タスク設定期限（発売の何か月前）", "number", "か月",
-     "F-2-3 の逆算。枠を案件に変えたとき、この月数を発売予定日から引いた日を"
+     "枠を案件に変えたとき、この月数を発売予定日から引いた日を"
      "「タスクを組み終える期限」として返す"),
     ("plan.holiday_months", "長期連休のある月", "text", None,
-     "未設定です。正本は Calendar（calfc）の会社休業日で、まだ連携していません。"
+     "未設定です。元になるのはカレンダーの会社休業日で、まだつないでいません。"
      "推測で 1・5・8月と置くと、置いたこと自体が根拠に見えてしまうため空にしてあります。"
      "決まるまで連休ルールは「未計測」と出します"),
     ("plan.holiday_month_max_slots", "連休月の枠の上限", "number", "本",
@@ -484,8 +484,8 @@ def _rule_holiday(rows: list[dict]) -> list[dict]:
     cap = _num("plan.holiday_month_max_slots")
     if not months or cap is None:
         return [_r("holiday", "FY", "unavailable",
-                   "長期連休のある月が未設定です。正本は Calendar（calfc）の"
-                   "会社休業日で、まだ連携していません。推測で埋めていませんので、"
+                   "長期連休のある月が未設定です。元になるのはカレンダーの"
+                   "会社休業日で、まだつないでいません。推測で埋めていませんので、"
                    "この月は人が見てください")]
     try:
         hm = {int(x) for x in months.replace("　", " ").replace(",", " ").split()}

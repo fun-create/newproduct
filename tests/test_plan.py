@@ -251,7 +251,7 @@ class TestRules(Base):
         self.slot(month="2026-05")
         r = self.rule("holiday", "FY")
         self.assertEqual(r["level"], "unavailable")
-        self.assertIn("Calendar", r["message"])
+        self.assertIn("カレンダー", r["message"])
         self.assertEqual(self.m.check(self.vid)["counts"]["unavailable"], 1)
 
     def test_holiday_rule_works_once_the_months_are_filled_in(self):

@@ -111,15 +111,15 @@ GATES = [
         _item("summary", "概要・仕様", "project:summary", "A"),
         _item("target_scene", "想定ターゲットと使用シーン", "section:C.target", "C"),
         _item("origin", "起票経路", "manual", "A", "第1段",
-              "アイデア台帳（第1段）ができたら idea.origin から自動で埋まります"),
+              "アイデアから起こした案件は、アイデアの起票経路で埋まります"),
     ], "起票は軽いままにする。これだけ。"),
 
     ("G1", 1, "評価通過", ["admin"], NOT_NEWMODEL, [
         _item("scored", "採点済み", "manual", "C", "第1段",
-              "アイデア採点（第1段）ができたら idea_score から自動で埋まります"),
+              "アイデアが採点済みなら、それで埋まります"),
         _item("feasibility", "生産方法(1-5) 判定済み", "manual", "E", "第1段"),
         _item("research", "調査ノート 1件以上", "manual", "C", "第3段",
-              "research_note（第3段以降）ができたら件数で自動判定します"),
+              "いまは人が確認して記録します"),
         _item("dedup", "重複チェック済み", "manual", "C", "第1段"),
     ], None),
 
@@ -132,7 +132,7 @@ GATES = [
         _item("launch_date", "発売予定日", "project:launch_date", "A"),
         _item("plan_check", "月次工数ポイント10〜15 と 推し活:うちわ=3:1 を崩していない",
               "manual", "A", "第1段",
-              "年間プラン（第1段）ができたら挿入ルールの検査で自動判定します"),
+              "年間プランの挿入ルールの検査を見て、人が確認して記録します"),
     ], "承認者は2ロール。どちらの資格でも記録できるようにしてある"),
 
     ("G3", 3, "コンセプト承認", ["president"], NOT_NEWMODEL, [
@@ -157,8 +157,8 @@ GATES = [
     ("G5", 5, "発売可", ["admin"], ALL_FLOWS, [
         _item("testorder", "テスト注文チェック済み", "manual", "F"),
         _item("lp", "商品ページ公開確認", "section:F.lp", "F"),
-        _item("product_code", "Seisan の商品コード確定", "seisan", "seisan", None,
-              "この画面から seisan へ登録するか、seisan で登録したコードを記録すると埋まります"),
+        _item("product_code", "CIP の商品コード確定", "seisan", "seisan", None,
+              "この画面から CIP へ登録するか、CIP で登録したコードを記録すると埋まります"),
         _item("goal_entered", "年間目標が入力済み", "target", "target", None),
         _item("announce", "全体周知済み", "manual", "F"),
         _item("profc", "PRO FUN-CREATOR 共有済み", "manual", "F"),

@@ -174,7 +174,7 @@ class Feed(unittest.TestCase):
         self.assertIn("表示名", p["name_note"])
         self.assertEqual(p["rows"][0]["name_label"], "未取得")
         self.assertEqual(p["rows"][0]["product_codes"], ["P1"])
-        self.assertEqual(p["rows"][1]["path"], "seisan の紐付けに無い")
+        self.assertEqual(p["rows"][1]["path"], "CIP の紐付けに無い")
 
     def test_names_come_from_master_table_when_it_exists(self):
         import sqlite3
@@ -227,7 +227,7 @@ class Feed(unittest.TestCase):
         pid = project.create("u", expand=False, internal_name="新商品", flow_type="meire",
                              launch_date="2026-08-01")["id"]
         o = self.m.project_sales(pid)
-        self.assertIn("seisan への登録", o["why"])
+        self.assertIn("CIP への登録", o["why"])
         with store.tx() as c:
             c.execute("INSERT INTO seisan_registration (project_id,state,product_code) VALUES (?,?,?)",
                       (pid, "登録済", "P1"))

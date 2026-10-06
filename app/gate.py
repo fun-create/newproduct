@@ -18,6 +18,15 @@ import json
 
 from . import store
 
+
+def _section_label(key: str) -> str:
+    from .project import SECTIONS
+    for sec in SECTIONS:
+        for k, label in sec["fields"]:
+            if k == key:
+                return label
+    return key
+
 # 状態。**記号だけにしない。**語を必ず添える（N-11・アクセシビリティ）
 STATES = {
     "通過":   {"glyph": "●", "word": "通過"},
@@ -70,18 +79,19 @@ def _satisfied(check: str, proj: dict, secs: dict, chks: dict,
     判定根拠を返さないと、画面で「なぜ欠けていると言われるのか」が分からない。
     """
     kind, _, rest = check.partition(":")
+    # 判定根拠は**画面に出る**ので、内部の名前（project.internal_name・C.target）ではなく語で返す（2026-10-06 点検）
     if kind == "project":
         v = proj.get(rest)
         ok = v is not None and str(v).strip() != ""
-        return ok, f"project.{rest}"
+        return ok, "入力済み" if ok else "まだ入っていません"
     if kind == "section":
         ok = (secs.get(rest) or "").strip() != ""
-        return ok, f"節 {rest}"
+        return ok, f"カルテの「{_section_label(rest)}」" + ("に入っています" if ok else "が空です")
     if kind == "lines":
         key, _, n = rest.partition(":")
         lines = [ln for ln in (secs.get(key) or "").splitlines() if ln.strip()]
         need = int(n or 1)
-        return len(lines) >= need, f"節 {key} に {len(lines)} 行（{need} 行以上が必要）"
+        return len(lines) >= need, f"カルテの「{_section_label(key)}」に {len(lines)} 行（{need} 行以上が必要）"
     if kind == "variants":
         n = store.val("SELECT COUNT(*) FROM project_variant WHERE project_id=?",
                       (project_id,), 0)

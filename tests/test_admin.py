@@ -74,6 +74,15 @@ class Admin(unittest.TestCase):
         self.m.set_value("plan.ratio_original_to_uchiwa", "4：1", "x", "kanri", "user")
         self.assertEqual(self.val("plan.ratio_original_to_uchiwa"), "4:1")
 
+    def test_connection_values_hidden_in_log_for_non_admin(self):
+        self.m.set_value("automation.chatwork_room_id", "123456", "部屋を作った", "x", "admin")
+        mine = self.m.change_log(app_role="admin")[0]
+        self.assertEqual((mine["before"], mine["after"], mine["reason"]), (None, "123456", "部屋を作った"))
+        other = self.m.change_log(app_role="user")[0]
+        self.assertNotIn("123456", str(other), "admin 以外には接続先の値を出さない")
+        self.assertIsNone(other["reason"])
+        self.assertEqual(other["label"], "自動化依頼を渡す ChatWork の部屋ID", "変えたことは見える")
+
     def test_roles_admin_only_and_keep_a_president(self):
         import auth
         orig = auth.public_users

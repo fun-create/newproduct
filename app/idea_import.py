@@ -90,7 +90,7 @@ def preview(text: str, default_origin: str = "") -> dict:
         o = x["origin"]
         if o:
             if o not in origins:
-                why.append(f"知らない起票経路「{o}」")
+                why.append(f"知らない起票経路「{o}」（使える書き方: {'・'.join(lab for _c, lab in idea.ORIGINS)}）")
             else:
                 x["origin_code"] = origins[o]
         elif default_origin:

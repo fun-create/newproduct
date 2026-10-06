@@ -30,9 +30,9 @@ SECTIONS = [
     ]},
     {"key": "D", "title": "いくらで作るか", "asks": "儲かる理由", "fields": [
         ("D.material", "資材の検討・決定"),
-        ("D.cost", "原価算出のメモ（試算原価の正本は第3段）"),
+        ("D.cost", "原価算出のメモ（試算原価は「原価・調達」で作ります）"),
         ("D.price", "販売価格"),
-        ("D.goal", "目標設定のメモ（年間目標の正本は第4段）"),
+        ("D.goal", "目標設定のメモ（年間目標は「年間目標」で決めます）"),
     ]},
     {"key": "E", "title": "どう作るか", "asks": "作れる理由", "fields": [
         ("E.method", "生産方法・生産の流れ"),
@@ -46,7 +46,7 @@ SECTIONS = [
         ("F.name", "商品名（社内呼称）の検討"),
         ("F.lp", "LP依頼用"),
         ("F.channel", "販路別の掲載"),
-        ("F.code", "Seisan 商品コード（正本は第3段の連携）"),
+        ("F.code", "CIP の商品コード（登録は「CIP への登録」で）"),
     ]},
     {"key": "G", "title": "履歴", "asks": "誰がいつ何を決めたか", "fields": []},
 ]
@@ -230,8 +230,7 @@ def listing(args: dict | None = None) -> dict:
                 "WHERE launch_date IS NOT NULL ORDER BY 1")],
         },
         "notes": [
-            "商品名は表示しません。分類（cat1/cat2/cat3）とサイズで表します。",
-            "試算原価 の列は第3段で入ります。いまは未実装です。",
+            "商品名は表示しません。分類（大・中・小）とサイズで表します。",
         ],
     }
 
@@ -483,9 +482,9 @@ def save_variant(pid: str, f: dict, user_id: str) -> dict:
             reg = c.execute("SELECT product_code FROM seisan_registration WHERE project_id=? "
                             "AND variant_id IS NULL AND state='登録済'", (pid,)).fetchone()
             if reg and not c.execute("SELECT 1 FROM project_variant WHERE project_id=?", (pid,)).fetchone():
-                raise ValueError(f"この案件は案件そのものとして seisan に登録済みです（{reg['product_code']}）。"
-                                 "バリエーションを足すと、seisan への登録をバリエーションごとにやり直すことになります。"
-                                 "先に seisan への登録の記録を取り消してください")
+                raise ValueError(f"この案件は案件そのものとして CIP に登録済みです（{reg['product_code']}）。"
+                                 "バリエーションを足すと、CIP への登録をバリエーションごとにやり直すことになります。"
+                                 "先に CIP への登録の記録を取り消してください")
             if c.execute("SELECT 1 FROM project_variant WHERE project_id=? AND label=?", (pid, label)).fetchone():
                 raise ValueError(f"「{label}」は既にあります")
             vid = c.execute("INSERT INTO project_variant (project_id,label,spec,state,launch_date) "
@@ -508,7 +507,7 @@ def delete_variant(pid: str, vid, user_id: str) -> dict:
             raise LookupError("そのバリエーションはこの案件にありません")
         if c.execute("SELECT 1 FROM seisan_registration WHERE variant_id=? AND state='登録済'",
                      (int(vid),)).fetchone() or v["product_code"]:
-            raise ValueError("seisan に登録済みのバリエーションは消せません。やめるときは状態を「見送り」にしてください")
+            raise ValueError("CIP に登録済みのバリエーションは消せません。やめるときは状態を「見送り」にしてください")
         c.execute("DELETE FROM project_variant WHERE id=?", (int(vid),))
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) "
                   "VALUES (?,?,?,?,?)", (pid, store.now_s(), user_id, "バリエーション削除", v["label"]))

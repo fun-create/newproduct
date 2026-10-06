@@ -49,7 +49,7 @@ SALES_TYPES_COPY = ("Webdeco", "フリーカット", "フルオーダー", "簡�
 
 # seisan の「新商品として登録」の入力欄と同じ並び（`PRODUCT_EDITABLE` ＋ コード・複製元）
 FIELDS = [
-    ("code", "共通商品コード", True, "seisan は採番しません。登録する人が決めます"),
+    ("code", "共通商品コード", True, "CIP は採番しません。登録する人が決めます"),
     ("name", "商品名", True, "開発部が付ける正式な名前（お客さまの入力値ではない）"),
     ("sales_type", "販売タイプ", True, None),
     ("cat1", "大分類", True, None),
@@ -89,9 +89,9 @@ def _conf() -> tuple[str, str]:
     p = env_path()
     if not p.is_file():
         raise NotConfigured(
-            f"seisan への接続設定（{p}）がありません。seisan の口は 2026-09-28 から開通しています。"
+            f"CIP への接続設定（{p}）がありません。CIP の口は 2026-09-28 から開通しています。"
             "設定ファイル（SEISAN_SVC_TOKEN=…・権限600・所有者 newproduct）を置くまでは、"
-            "seisan の画面で登録して「seisan で登録した」でコードを記録してください")
+            "CIP の画面で登録して「CIP で登録した」でコードを記録してください")
     vals = {}
     for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -121,7 +121,7 @@ def _http(method: str, path: str, params: dict | None, body: dict | None) -> tup
             j = {}
         return e.code, j if isinstance(j, dict) else {}
     except urllib.error.URLError as e:
-        raise NotConfigured(f"seisan へつながりません: {e.reason}") from None
+        raise NotConfigured(f"CIP へつながりません: {e.reason}") from None
 
 
 # 検査で差し替える。(method, path, params, body) -> (status, dict)
@@ -133,9 +133,9 @@ def _call(method: str, path: str, params=None, body=None) -> dict:
     status, j = transport(method, path, params, body)
     if status == 404 and not j.get("error"):
         # 口がまだ無い（seisan 側が未実装）。つながらないのと同じ扱いにする
-        raise NotConfigured("seisan に登録口（" + path + "）がまだありません")
+        raise NotConfigured("CIP に登録口（" + path + "）がまだありません")
     if status >= 400:
-        raise Refused(j.get("error") or f"seisan が {status} を返しました")
+        raise Refused(j.get("error") or f"CIP が {status} を返しました")
     return j
 
 
@@ -248,9 +248,9 @@ def validate(d: dict, voc: dict) -> tuple[list[str], list[str]]:
         if not v:
             continue
         if voc.get(k) is None:
-            warns.append(f"{label}「{v}」が seisan の既存の分類かは、まだ確かめられません")
+            warns.append(f"{label}「{v}」が CIP の既存の分類かは、まだ確かめられません")
         elif v not in voc[k]:
-            errs.append(f"{label}「{v}」は seisan にありません。既存の分類から選んでください")
+            errs.append(f"{label}「{v}」は CIP にありません。既存の分類から選んでください")
     code = (d.get("code") or "").strip()
     if code and any(ch.isspace() for ch in code):
         errs.append("共通商品コードに空白は入れられません")
@@ -349,7 +349,7 @@ def _guard_edit(pid: str) -> dict:
 def _guard_register(user_id: str):
     if not can_register(user_id):
         raise PermissionError(
-            "seisan への登録は、G5（発売可）を判定できる業務ロールの人だけができます")
+            "CIP への登録は、G5（発売可）を判定できる業務ロールの人だけができます")
 
 
 def _upsert(pid: str, vid, **cols):
@@ -374,7 +374,7 @@ def save_draft(pid: str, vid, fields: dict, user_id: str) -> dict:
     vid = _vid(pid, vid)
     r = _row(pid, vid)
     if r and r["state"] == "登録済":
-        raise ValueError("登録済みです。直すときは seisan の画面で直してください（正は seisan）")
+        raise ValueError("登録済みです。直すときは CIP の画面で直してください（正は CIP）")
     d = {k: str(fields.get(k) or "").strip()[:200] for k in FIELD_KEYS}
     _upsert(pid, vid, state="下書き", draft_json=json.dumps(d, ensure_ascii=False),
             updated_by=user_id)
@@ -422,7 +422,7 @@ def register(pid: str, vid, user_id: str) -> dict:
         _upsert(pid, vid, last_error=str(e)[:300], updated_by=user_id)
         msg = str(e)
         if "既に存在" in msg:
-            msg += "。seisan で登録済みなら「seisan で登録した」でコードを記録してください"
+            msg += "。CIP で登録済みなら「CIP で登録した」でコードを記録してください"
         raise ValueError(msg) from None
     _mark_done(pid, vid, d["code"], "newproduct", user_id, verified=True)
     return {"ok": True, "product_code": d["code"],
@@ -436,13 +436,13 @@ def record_code(pid: str, vid, code: str, user_id: str) -> dict:
     vid = _vid(pid, vid)
     code = (code or "").strip()
     if not code:
-        raise ValueError("seisan の共通商品コードを入れてください")
+        raise ValueError("CIP の共通商品コードを入れてください")
     ok, _ = configured()
     verified = False
     if ok:
         try:
             if not exists(code):
-                raise ValueError(f"seisan に共通商品コード「{code}」がありません。"
+                raise ValueError(f"CIP に共通商品コード「{code}」がありません。"
                                  "登録が済んでいるか、コードの打ち間違いが無いかを確かめてください")
             verified = True
         except NotConfigured:
@@ -461,7 +461,7 @@ def reset(pid: str, vid, user_id: str) -> dict:
         raise ValueError("登録済みではありません")
     _upsert(pid, vid, state="下書き", product_code=None, via=None, registered_by=None,
             registered_at=None, verified_at=None, updated_by=user_id)
-    return {"ok": True, "note": "このアプリの記録だけを戻しました。seisan の商品は残っています"}
+    return {"ok": True, "note": "このアプリの記録だけを戻しました。CIP の商品は残っています"}
 
 
 def _verify_pending(pid: str):
@@ -491,9 +491,9 @@ def gate_state(pid: str) -> tuple[bool, str]:
                 unver += 1
         else:
             rest.append(t["label"])
-    why = f"seisan 登録 {done}/{len(ts)}"
+    why = f"CIP 登録 {done}/{len(ts)}"
     if rest:
         why += "（未: " + "、".join(rest[:5]) + ("…" if len(rest) > 5 else "") + "）"
     if unver:
-        why += f"。うち {unver} 件は seisan に在るか未確認（登録口ができたら確かめます）"
+        why += f"。うち {unver} 件は CIP に在るか未確認（登録口ができたら確かめます）"
     return (done == len(ts)), why

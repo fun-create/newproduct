@@ -76,7 +76,7 @@ def code_map() -> tuple[dict | None, str | None]:
     try:
         j = seisan.store_codes()
     except (seisan.NotConfigured, seisan.Refused) as e:
-        return None, f"seisan の紐付け表が読めません: {e}"
+        return None, f"CIP の紐付け表が読めません: {e}"
     m: dict = defaultdict(lambda: {"cats": set(), "codes": set()})
     for it in j["items"]:
         k = (it.get("store"), it.get("store_code"))

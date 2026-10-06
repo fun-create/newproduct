@@ -65,11 +65,14 @@
   }
   function goSection(id) {
     var t = document.getElementById(id);
-    if (!t) return;
+    if (!t) {                                   // **黙らない**（2026-10-06 再点検: 飛び先が無く何も起きなかった）
+      window.alert("その節がこの画面に見つかりません（" + id.replace("np-sec-", "") + "）");
+      return;
+    }
     var det = t.closest("details");
     if (det) det.open = true;
-    t.scrollIntoView({ behavior: "smooth", block: "start" });
     var h = (det && det.querySelector("summary")) || t;
+    h.scrollIntoView({ behavior: "smooth", block: "start" });      // 題が上に隠れないよう、見出しへ移る
     if (!h.hasAttribute("tabindex") && h.tagName !== "SUMMARY") h.setAttribute("tabindex", "-1");
     h.focus({ preventScroll: true });
   }
@@ -187,7 +190,7 @@
             el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
         })));
-        if (my.tasks_n > my.tasks.length) mc.appendChild(el("p", { "class": "np-sub", text: "ほか " + (my.tasks_n - my.tasks.length) + " 件。" }));
+        if (my.tasks_n > my.tasks.length) mc.appendChild(el("p", { "class": "np-sub", text: "ほか " + (my.tasks_n - my.tasks.length) + " 件あります（タスクの一覧で、期間を「今週」「すべて」にすると見られます）。" }));
       }
       if (my.gates.length) {
         mc.appendChild(el("h3", { text: "あなたが判定するゲート（" + my.gates_n + "件）" }));
@@ -357,7 +360,7 @@
         b.appendChild(table(
           ["ステージ", "ゲート", "次のゲート", "発売予定日", "商品（分類・サイズ）",
            "開発タイプ", "売上計上", "工数ポイント", "担当", "欠けているもの",
-           "正本", "試算原価"],
+           "正本"],
           d.rows.map(function (r) {
             return el("tr", null, [
               el("td", { text: r.stage }),
@@ -373,8 +376,7 @@
               el("td", { "class": "np-num" }, [
                 el("a", { href: "#/projects/" + r.id, text: String(r.missing_n) + " 件" })]),
               // R-2。**移行期間の正本を列で出す**
-              el("td", { text: r.source_of_truth === "app" ? "アプリ" : "Drive（編集不可）" }),
-              el("td", { text: "未実装（第3段）" })
+              el("td", { text: r.source_of_truth === "app" ? "アプリ" : "Drive（編集不可）" })
             ]);
           })));
       }
@@ -436,7 +438,7 @@
         setTitle("案件 " + d.id, "／ " + h.product);
 
         // A. ヘッダ（常時固定）。**商品名は出さない**（N-6-2）
-        var head = el("div", { "class": "np-card" });
+        var head = el("div", { "class": "np-card", id: "np-sec-A" });     // 「A節へ」の飛び先
         head.appendChild(el("h2", { text: "A. " + h.product }));
         head.appendChild(table(["項目", "値"], [
           row("社内呼称", dash(h.internal_name)),
@@ -477,7 +479,7 @@
               secBtn("np-sec-" + m.goto, m.goto + "節へ")
             ]);
             if (m.stage) li.appendChild(el("span", { "class": "np-stage",
-              text: "（" + m.stage + "で自動化。いまは人が確認した記録で判定します）" }));
+              text: "（いまは人が確認した記録で判定します）" }));
             if (m.check === "manual" && h.editable) li.appendChild(checkForm(d.id, m));
             if (m.hint) li.appendChild(el("p", { "class": "np-sub", text: m.hint }));
             ul.appendChild(li);
@@ -543,9 +545,9 @@
         // バリエーション展開（F-4-5）。**40本の複製を作らない**
         var v = el("div", { "class": "np-card", id: "np-sec-variant" });
         v.appendChild(el("h2", { text: "バリエーション展開" }));
-        v.appendChild(el("p", { "class": "np-sub", text: "本体モデル（機種など）ごとに1行。案件を複製しません。seisan への登録はバリエーションごとに行います。" }));
+        v.appendChild(el("p", { "class": "np-sub", text: "本体モデル（機種など）ごとに1行。案件を複製しません。CIP への登録はバリエーションごとに行います。" }));
         if (!d.variants.length) v.appendChild(el("p", { "class": "np-note", text: "ありません。" }));
-        else v.appendChild(table(["本体モデル", "仕様", "対応状況", "発売日", "seisan 商品コード", ""],
+        else v.appendChild(table(["本体モデル", "仕様", "対応状況", "発売日", "CIP 商品コード", ""],
           d.variants.map(function (x) {
             var st = el("td", { text: x.state }), act = el("td");
             if (h.editable) {
@@ -628,7 +630,7 @@
 
         // seisan への登録（第3段・FR-103）。**別に読む**（seisan が落ちていても案件は見える）
         var sv = el("div", { "class": "np-card", id: "np-sec-seisan" });
-        sv.appendChild(el("h2", { text: "seisan への登録" }));
+        sv.appendChild(el("h2", { text: "CIP への登録" }));
         sv.appendChild(el("p", { "class": "np-note", text: "読み込んでいます。" }));
         b.appendChild(sv);
         seisanPanel(d.id, sv);
@@ -687,7 +689,8 @@
   var FOLD_KEY = "newproduct-fold-";
   function foldSections(b) {
     var cards = Array.prototype.filter.call(b.children, function (c) {
-      return c.classList && c.classList.contains("np-card") && /^np-sec-/.test(c.id || "");
+      // ヘッダ（A）はたたまない（判断の起点なので常に見せる。「A節へ」の飛び先でもある）
+      return c.classList && c.classList.contains("np-card") && /^np-sec-/.test(c.id || "") && c.id !== "np-sec-A";
     });
     if (!cards.length) return;
     var toc = [];
@@ -806,7 +809,7 @@
           el("tr", null, [el("th", { text: "年間目標（発売から1年・税込の商品代）" }), el("td", { text: yen(t.annual_yen) })]),
           el("tr", null, [el("th", { text: "方式" }), el("td", { text: t.method })]),
           el("tr", null, [el("th", { text: "根拠" }), el("td", { text: t.basis })]),
-          el("tr", null, [el("th", { text: "発売からの実績" }), el("td", { text: t.actual === undefined || t.actual === null ? "未計測（seisan 登録と発売の後に出ます）" : yen(t.actual) + "（発売から " + t.days + " 日）" })]),
+          el("tr", null, [el("th", { text: "発売からの実績" }), el("td", { text: t.actual === undefined || t.actual === null ? "未計測（CIP 登録と発売の後に出ます）" : yen(t.actual) + "（発売から " + t.days + " 日）" })]),
           el("tr", null, [el("th", { text: "達成率" }), el("td", { text: t.rate === null || t.rate === undefined ? "—" : t.rate + "%（年間目標に対して）"
             + (t.pace_rate !== null && t.pace_rate !== undefined ? "／経過日数で按分した目安に対して " + t.pace_rate + "%" : "") })])
         ]));
@@ -985,7 +988,7 @@
     api(P + "/cost").then(function (o) {
       while (box.childNodes.length > 1) box.removeChild(box.lastChild);
       box.appendChild(el("p", { "class": "np-sub",
-        text: "外注先・仕入先・原材料の一覧は seisan が持ちます。ここには、この案件で比べた候補と試算原価だけを置きます。金額は円・税抜で入れてください（外貨で見積もったときは、換算したレートを備考に）。" }));
+        text: "外注先・仕入先・原材料の一覧は CIP が持ちます。ここには、この案件で比べた候補と試算原価だけを置きます。金額は円・税抜で入れてください（外貨で見積もったときは、換算したレートを備考に）。" }));
 
       // 発注の締切（FR-101）
       var dl = o.deadline;
@@ -1051,7 +1054,7 @@
     }
     if (!c.adopted) { td.appendChild(txt("—")); return td; }
     if (!(o.can_register && o.editable)) { td.appendChild(txt("未登録")); return td; }
-    var btn = el("button", { type: "button", text: "seisan に登録" });
+    var btn = el("button", { type: "button", text: "CIP に登録" });
     td.appendChild(btn);
     btn.addEventListener("click", function () {
       btn.setAttribute("disabled", "disabled");
@@ -1078,7 +1081,7 @@
         var e = f.elements[k];
         if (e) obj[k] = e.type === "checkbox" ? (e.checked ? "1" : "") : e.value;
       });
-      if (!window.confirm("seisan のマスタに登録します。取り消しや修正は seisan の画面で行います。よろしいですか")) return;
+      if (!window.confirm("CIP のマスタに登録します。取り消しや修正は CIP の画面で行います。よろしいですか")) return;
       post(P + "/cost-seisan", obj).then(function (r) {
         if (r.note) window.alert(r.note);
         go();
@@ -1088,8 +1091,8 @@
 
   function materialForm(P, c, v) {
     var f = el("form", { "class": "np-field" });
-    f.appendChild(el("p", { "class": "np-sub", text: "原材料として seisan に入れます。材料コードは登録する人が決めます（seisan は採番しません）。仕入先「" + c.supplier + "」・リードタイム・最低ロットは候補から写します。" }));
-    f.appendChild(el("p", null, [el("label", null, [el("input", { type: "checkbox", name: "existing" }), " seisan に既にある材料に、仕入条件だけ付ける"])]));
+    f.appendChild(el("p", { "class": "np-sub", text: "原材料として CIP に入れます。材料コードは登録する人が決めます（CIP は採番しません）。仕入先「" + c.supplier + "」・リードタイム・最低ロットは候補から写します。" }));
+    f.appendChild(el("p", null, [el("label", null, [el("input", { type: "checkbox", name: "existing" }), " CIP に既にある材料に、仕入条件だけ付ける"])]));
     f.appendChild(el("p", null, [el("label", null, ["材料コード（必須） ", el("input", { name: "code", size: "12" })]), txt(" "),
       pickList("material_kind", "種別（必須）", v.kinds.map(function (k) { return [k, k]; }), "（選ぶ）")]));
     var cat = el("input", { name: "category", size: "14", list: "np-mcat-" + c.id });
@@ -1099,14 +1102,14 @@
     f.appendChild(el("p", null, [el("label", null, ["名称（新規のとき必須） ", el("input", { name: "name", size: "24" })]), txt(" "),
       el("label", null, ["単価（空欄なら候補の単価 " + cyen(c.unit_price) + "） ", el("input", { name: "unit_price", size: "7" })]), txt(" "),
       el("label", null, ["単位 ", el("input", { name: "unit", size: "4" })])]));
-    f.appendChild(el("p", null, [el("button", { type: "submit", text: "seisan に登録する" })]));
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "CIP に登録する" })]));
     submitTo(P, f, c, ["existing", "code", "material_kind", "category", "name", "unit_price", "unit"]);
     return f;
   }
 
   function outsourceForm(P, c, v) {
     var f = el("form", { "class": "np-field" });
-    f.appendChild(el("p", { "class": "np-sub", text: "外注先として seisan に入れます。seisan に既にある外注先なら選んでください（同じ相手を二重に作らないため）。単価・最低ロット・リードタイムは候補から写します。" }));
+    f.appendChild(el("p", { "class": "np-sub", text: "外注先として CIP に入れます。CIP に既にある外注先なら選んでください（同じ相手を二重に作らないため）。単価・最低ロット・リードタイムは候補から写します。" }));
     f.appendChild(el("p", null, [pickList("outsourcer_id", "外注先", v.outsourcers.map(function (x) { return [String(x.id), x.name]; }),
       "新しく作る（名前: " + c.supplier + "）")]));
     f.appendChild(el("p", null, [el("label", null, ["対応できる加工（新規のとき） ", el("input", { name: "capabilities", size: "20" })]), txt(" "),
@@ -1114,7 +1117,7 @@
     f.appendChild(el("p", null, [pickList("target_kind", "単価の品目", v.target_kinds.map(function (k) { return [k, k]; }), "単価は登録しない"), txt(" "),
       el("label", null, ["品目（商品コード・分類名・工程） ", el("input", { name: "target_key", size: "14" })]), txt(" "),
       el("label", null, ["単位 ", el("input", { name: "unit", size: "4" })])]));
-    f.appendChild(el("p", null, [el("button", { type: "submit", text: "seisan に登録する" })]));
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "CIP に登録する" })]));
     submitTo(P, f, c, ["outsourcer_id", "capabilities", "order_method", "target_kind", "target_key", "unit"]);
     return f;
   }
@@ -1241,7 +1244,7 @@
     api("/api/projects/" + encodeURIComponent(pid) + "/seisan").then(function (o) {
       while (box.childNodes.length > 1) box.removeChild(box.lastChild);
       box.appendChild(el("p", { "class": "np-sub",
-        text: "商品マスタは seisan が持ちます。ここで入れるのは登録前の下書きで、"
+        text: "商品マスタは CIP が持ちます。ここで入れるのは登録前の下書きで、"
           + "登録できたら消え、共通商品コードだけが残ります。" }));
       if (!o.configured) box.appendChild(el("p", { "class": "np-warn",
         text: "この画面からの登録はまだできません。" + o.why }));
@@ -1257,17 +1260,17 @@
 
     if (t.state === "登録済") {
       w.appendChild(el("p", { text: "共通商品コード " + t.product_code + "（"
-        + (t.via === "newproduct" ? "この画面から登録" : "seisan の画面で登録") + "・"
+        + (t.via === "newproduct" ? "この画面から登録" : "CIP の画面で登録") + "・"
         + (t.registered_at || "") + " " + (t.registered_by || "") + "）" }));
       w.appendChild(el("p", { "class": t.verified ? "np-note" : "np-warn",
-        text: t.verified ? "seisan に在ることを確かめました。"
-          : "seisan に在るかは未確認です（seisan の登録口ができたら、開いたときに確かめます）。" }));
+        text: t.verified ? "CIP に在ることを確かめました。"
+          : "CIP に在るかは未確認です（CIP の登録口ができたら、開いたときに確かめます）。" }));
       w.appendChild(el("p", { "class": "np-sub",
-        text: "内容を直すときは seisan の画面で直してください（正は seisan）。" }));
+        text: "内容を直すときは CIP の画面で直してください（正は CIP）。" }));
       if (o.can_register && o.editable) {
-        var rb = el("button", { type: "button", text: "この記録を取り消す（seisan の商品は消えません）" });
+        var rb = el("button", { type: "button", text: "この記録を取り消す（CIP の商品は消えません）" });
         rb.addEventListener("click", function () {
-          if (!window.confirm("このアプリの記録だけを下書きに戻します。seisan の商品は残ります。よろしいですか")) return;
+          if (!window.confirm("このアプリの記録だけを下書きに戻します。CIP の商品は残ります。よろしいですか")) return;
           post("/api/projects/" + pid + "/seisan-reset", { variant_id: vid })
             .then(function () { go(); }).catch(function (e) { err(w, e); });
         });
@@ -1277,7 +1280,7 @@
     }
 
     if (t.last_error) w.appendChild(el("p", { "class": "np-err",
-      text: "前回 seisan が断った理由: " + t.last_error }));
+      text: "前回 CIP が断った理由: " + t.last_error }));
 
     // 下書き。**seisan の画面と同じ並び・同じ選択肢**
     var f = el("form");
@@ -1293,7 +1296,7 @@
         input.appendChild(el("option", { value: "", text: "（選ぶ）" }));
         choices.forEach(function (c) { input.appendChild(el("option", { value: c, text: c })); });
         if (cur && choices.indexOf(cur) < 0)
-          input.appendChild(el("option", { value: cur, text: cur + "（seisan に無い値）" }));
+          input.appendChild(el("option", { value: cur, text: cur + "（CIP に無い値）" }));
         input.value = cur;
       } else {
         input = el("input", { id: id, name: fd.key, maxlength: "200" });
@@ -1306,7 +1309,7 @@
       if (fd.key === "copy_recipe_from" && o.configured && o.editable) f.appendChild(similarPicker(pid, f, input));
     });
     if (o.vocab.cat1 === null) f.appendChild(el("p", { "class": "np-sub",
-      text: "分類は、seisan の登録口ができるまで既存の値と照らせません。seisan の画面の表記どおりに入れてください。" }));
+      text: "分類は、CIP の登録口ができるまで既存の値と照らせません。CIP の画面の表記どおりに入れてください。" }));
 
     var list = t.errors.map(function (m) { return el("li", { text: "止まる: " + m }); })
       .concat(t.warnings.map(function (m) { return el("li", { text: "注意: " + m }); }));
@@ -1314,8 +1317,8 @@
 
     var bar = el("p", { "class": "np-sub" });
     if (o.editable) bar.appendChild(el("button", { type: "submit", text: "下書きを保存" }));
-    var reg = el("button", { type: "button", text: "seisan に登録する" });
-    var why = !o.configured ? "（seisan の登録口がまだありません）"
+    var reg = el("button", { type: "button", text: "CIP に登録する" });
+    var why = !o.configured ? "（CIP の登録口がまだありません）"
       : !o.can_register ? "（G5 を判定できる業務ロールの人だけが登録できます）"
       : t.state === "未着手" ? "（先に下書きを保存してください）"
       : t.errors.length ? "（止まる項目を直してください）" : "";
@@ -1334,8 +1337,8 @@
     });
     reg.addEventListener("click", function () {
       var code = (t.draft && t.draft.code) || "";
-      if (!window.confirm("保存済みの下書きで、seisan に共通商品コード「" + code
-        + "」を登録します。seisan の商品マスタに入り、取り消しは seisan の画面で行います。よろしいですか")) return;
+      if (!window.confirm("保存済みの下書きで、CIP に共通商品コード「" + code
+        + "」を登録します。CIP の商品マスタに入り、取り消しは CIP の画面で行います。よろしいですか")) return;
       post("/api/projects/" + pid + "/seisan-register", { variant_id: vid })
         .then(function (r) {
           if (r.copy_error) window.alert("登録しました。ただしレシピの複製は失敗しました: " + r.copy_error);
@@ -1348,7 +1351,7 @@
     if (o.can_register && o.editable) {
       var g = el("form", { "class": "np-inline" });
       var cid = "szc-" + pid + "-" + (vid || "0");
-      g.appendChild(el("label", { "for": cid, text: "seisan の画面で登録した場合 — 共通商品コード " }));
+      g.appendChild(el("label", { "for": cid, text: "CIP の画面で登録した場合 — 共通商品コード " }));
       g.appendChild(el("input", { id: cid, name: "code", maxlength: "64" }));
       g.appendChild(el("button", { type: "submit", text: "記録する" }));
       g.addEventListener("submit", function (ev) {
@@ -1372,7 +1375,7 @@
       while (w.childNodes.length > 1) w.removeChild(w.lastChild);
       if (!q.length) { w.appendChild(el("p", { "class": "np-err", text: "先に大分類を選んでください" })); return; }
       api("/api/projects/" + encodeURIComponent(pid) + "/seisan-similar?" + q.join("&")).then(function (r) {
-        if (!r.rows.length) { w.appendChild(el("p", { "class": "np-note", text: "この分類の商品は seisan にありません。" })); return; }
+        if (!r.rows.length) { w.appendChild(el("p", { "class": "np-note", text: "この分類の商品は CIP にありません。" })); return; }
         w.appendChild(el("p", { "class": "np-sub", text: r.rows.length + " 件（レシピのある商品が先。最大50件）。行の「選ぶ」で複製元に入ります。" }));
         w.appendChild(table(["コード", "販売タイプ", "分類", "形状", "サイズ", "色", "レシピ", ""],
           r.rows.map(function (x) {
@@ -3059,9 +3062,9 @@
       var b = clear();
       setTitle("原価・調達");
       b.appendChild(salesSubnav("#/cost"));
-      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件だけを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は seisan が持ちます。" }));
+      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件だけを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は CIP が持ちます。" }));
       if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "発売前の案件はありません。" })); return; }
-      b.appendChild(table(["案件", "発売予定日", "本番発注の締切", "候補（採用／未判断）", "seisan 未登録", "試算", "直接費", "想定粗利"],
+      b.appendChild(table(["案件", "発売予定日", "本番発注の締切", "候補（採用／未判断）", "CIP 未登録", "試算", "直接費", "想定粗利"],
         d.rows.map(function (r) {
           var dl = r.deadline;
           return el("tr", null, [
@@ -3198,7 +3201,7 @@
             el("td", { "class": "np-num", text: "—" })]));
           cc.appendChild(table(["分類", "売上", "構成比", "前年比"], rows));
           if (d.site === "all") cc.appendChild(el("p", { "class": "np-note",
-            text: "サイトごとの構成は、売上フィードと seisan の対応表が届いてから、各サイトのタブに出ます。" }));
+            text: "サイトごとの構成は、売上フィードと CIP の対応表が届いてから、各サイトのタブに出ます。" }));
         }
         b.appendChild(cc);
 
@@ -3263,7 +3266,18 @@
   // 設定（2026-10-06 十文字さん指示・ADR-057）。**自分の見え方**はここで誰でも変えられる。
   // 変えたら画面にすぐ当てる（読み込み直さなくてよい）。サーバーにも保存し、別の端末でも同じにする
   // ══════════════════════════════════════════════════════
-  function viewSettings() {
+  /** after = { id: 戻る節の id, msg: 知らせる文 }。全体に効く保存の後、**画面の先頭へ戻さない**（2026-10-06 再点検） */
+  function afterSave(after) {
+    if (!after) return;
+    var t = document.getElementById(after.id);
+    if (!t) return;
+    t.scrollIntoView({ block: "start" });
+    var st = el("p", { "class": "np-status", role: "status", "aria-live": "polite", text: after.msg });
+    var h = t.querySelector("h2");
+    if (h && h.nextSibling) t.insertBefore(st, h.nextSibling); else t.appendChild(st);
+  }
+
+  function viewSettings(after) {
     loading();
     Promise.all([api("/api/me"), api("/api/settings")]).then(function (r) {
       var me = r[0], st = r[1], b = clear();
@@ -3351,7 +3365,7 @@
       // データの登録（ADR-060〜）。重い登録は別の画面に分ける
       var dc = el("div", { "class": "np-card" });
       dc.appendChild(el("h2", { text: "データの登録" }));
-      dc.appendChild(el("p", { "class": "np-sub", text: "このアプリが正本として持つデータを、画面から足したり直したりします。外注先・原材料・商品は seisan、利用者はカレンダーで登録します。" }));
+      dc.appendChild(el("p", { "class": "np-sub", text: "このアプリが正本として持つデータを、画面から足したり直したりします。外注先・原材料・商品は CIP、利用者はカレンダーで登録します。" }));
       dc.appendChild(btnRow([navBtn("#/settings/events", "年間イベント・ライフイベント"),
         navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数"),
         navBtn("#/settings/ideas-import", "アイデアの一括登録")]));
@@ -3382,7 +3396,7 @@
               f.addEventListener("submit", function (ev) {
                 ev.preventDefault();
                 post("/api/settings/value", { key: x.key, value: vi.value, reason: ri.value })
-                  .then(function () { viewSettings(); })
+                  .then(function () { viewSettings({ id: "np-set-app", msg: "「" + x.label + "」を保存しました（変更の記録に残りました）" }); })
                   .catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
               });
               act.appendChild(f);
@@ -3417,7 +3431,7 @@
           bt.addEventListener("click", function () {
             if (!window.confirm(p.name + " さんの「" + r.label + "」を" + (has ? "外します" : "付けます") + "。よろしいですか")) return;
             post("/api/settings/role", { user_id: p.user_id, role: r.code, on: has ? "0" : "1" })
-              .then(function () { viewSettings(); })
+              .then(function () { viewSettings({ id: "np-set-roles", msg: p.name + " さんの「" + r.label + "」を" + (has ? "外しました" : "付けました") }); })
               .catch(function (e) { td.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
           });
           td.appendChild(bt);
@@ -3439,11 +3453,12 @@
           el("td", { text: ba }), el("td", { text: dash(x.reason) })]);
       })));
       b.appendChild(lc);
+      afterSave(after);
     }).catch(fail);
   }
 
   /** 年間イベント・ライフイベントの登録（ADR-060）。**消さない**（使わない にする）。日付は原文のまま */
-  function viewEvents() {
+  function viewEvents(after) {
     loading();
     api("/api/settings/events").then(function (d) {
       var b = clear();
@@ -3497,7 +3512,7 @@
               if (window.confirm("似た名前があります: " + res.similar.map(function (x) { return x.label; }).join("、") + "\n別のものとして保存しますか？")) send(true);
               return;
             }
-            viewEvents();
+            viewEvents({ id: kind === "年間イベント" ? "np-ev-annual" : "np-ev-life", msg: "「" + f.elements.label.value + "」を保存しました" });
           }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
         }
         f.addEventListener("submit", function (ev) { ev.preventDefault(); send(false); });
@@ -3505,7 +3520,7 @@
       }
 
       ["年間イベント", "ライフイベント"].forEach(function (kind) {
-        var c = el("div", { "class": "np-card" });
+        var c = el("div", { "class": "np-card", id: kind === "年間イベント" ? "np-ev-annual" : "np-ev-life" });
         c.appendChild(el("h2", { text: kind }));
         var rows = d.rows.filter(function (r) { return r.kind === kind; });
         var head = kind === "年間イベント" ? ["名前", "月", "日付（原文）", "販売可能性", "枠", "状態", "出どころ", ""]
@@ -3519,7 +3534,8 @@
             var e2 = el("button", { type: "button", text: r.active ? "使わない" : "使う" });
             e2.addEventListener("click", function () {
               if (r.active && !window.confirm("「" + r.label + "」を使わないにします。機会カレンダーから外れます（既存の枠の記録は残ります）。よろしいですか")) return;
-              post("/api/settings/events/active", { id: r.id, on: r.active ? "0" : "1" }).then(function () { viewEvents(); })
+              post("/api/settings/events/active", { id: r.id, on: r.active ? "0" : "1" }).then(function () {
+                viewEvents({ id: kind === "年間イベント" ? "np-ev-annual" : "np-ev-life", msg: "「" + r.label + "」を" + (r.active ? "使わないにしました" : "使うに戻しました") }); })
                 .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
             });
             act.appendChild(e1); act.appendChild(txt(" ")); act.appendChild(e2);
@@ -3540,6 +3556,7 @@
         }
         b.appendChild(c);
       });
+      afterSave(after);
     }).catch(fail);
   }
 
@@ -3559,7 +3576,7 @@
           el("td", { "class": "np-num", text: f.has_template ? sm.n + " 行" : "標準タスク未定義" }),
           el("td", { "class": "np-num", text: f.has_template ? String(sm.work_hours) : "—" }),
           el("td", { "class": "np-num", text: String(sm.reserve_hours) }),
-          el("td", { "class": "np-num", text: sm.unknown_rows ? sm.unknown_rows + " 行" : "—" }),
+          el("td", { "class": "np-num", text: sm.unknown_rows + " 行" }),
           el("td", { text: f.effort_point === null ? "未確定" : String(f.effort_point) }),
           el("td", { text: f.draft ? "版" + f.draft + " を作成中" : "—" }),
           el("td", null, [navBtn("#/settings/templates/" + f.code, d.can_edit ? "開く・直す" : "開く", "sm")])]);
@@ -3726,7 +3743,10 @@
           var cnt = Object.keys(r.count).map(function (k) { return k + " " + r.count[k]; }).join("・");
           out.appendChild(el("p", { "class": r.done ? "np-warn" : "np-note", text: (r.done ? "この内容はもう登録済みです。" : "") + "確認の結果: " + cnt }));
           var boxes = {};
-          out.appendChild(table(["入れる", "行", "商品案名", "起票経路", "テーマ", "判定", "理由・似た案"], r.rows.map(function (x) {
+          var order = { "止まる": 0, "貼り付けた中で重複": 1, "既にある": 2, "似た案あり": 3, "入る": 4 };
+          var rows = r.rows.slice().sort(function (a, z) { return (order[a.state] - order[z.state]) || (a.line - z.line); });
+          out.appendChild(el("p", { "class": "np-sub", text: "止まった行・入れない行を先に並べています。" }));
+          out.appendChild(table(["入れる", "行", "商品案名", "起票経路", "テーマ", "判定", "理由・似た案"], rows.map(function (x) {
             var td = el("td");
             if (x.state === "入る" || x.state === "似た案あり") {
               var cb = el("input", { type: "checkbox", "aria-label": x.line + "行目を入れる" });
@@ -3757,7 +3777,7 @@
       var hc = el("div", { "class": "np-card" });
       hc.appendChild(el("h2", { text: "これまでの一括登録" }));
       if (!d.batches.length) hc.appendChild(el("p", { "class": "np-note", text: "まだありません。" }));
-      else hc.appendChild(table(["いつ", "誰が", "件数", "札", ""], d.batches.map(function (x) {
+      else hc.appendChild(table(["いつ", "誰が", "件数", ""], d.batches.map(function (x) {
         var td = el("td");
         if (d.can_edit) {
           var u = el("button", { type: "button", text: "取り消す" });
@@ -3770,8 +3790,7 @@
           });
           td.appendChild(u);
         }
-        return el("tr", null, [el("td", { text: x.at }), el("td", { text: dash(x.by) }), el("td", { "class": "np-num", text: x.n + " 件" }),
-          el("td", { text: x.token }), td]);
+        return el("tr", null, [el("td", { text: x.at }), el("td", { text: dash(x.by) }), el("td", { "class": "np-num", text: x.n + " 件" }), td]);
       })));
       b.appendChild(hc);
     }).catch(fail);
@@ -3791,7 +3810,7 @@
   // まだ作っていない画面。**「未実装」と正直に書き、何段で入るかを言う。**
   // ══════════════════════════════════════════════════════
   var NOT_YET = {
-    "#/cost": ["原価・調達（案件をまたいだ一覧）", "第3段の後半", "相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。ここに案件をまたいだ一覧（締切が近い順など）を作る予定です。外注先・仕入先・原材料の一覧は seisan が持ちます。"]
+    "#/cost": ["原価・調達（案件をまたいだ一覧）", "第3段の後半", "相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。ここに案件をまたいだ一覧（締切が近い順など）を作る予定です。外注先・仕入先・原材料の一覧は CIP が持ちます。"]
   };
 
   function viewNotYet(path, entry) {

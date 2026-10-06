@@ -141,7 +141,7 @@ def analyze(site: str, from_m: str, to_m: str, compare: str = "yoy",
     def path(k):
         ent = (cmap or {}).get((st, k))
         if not ent:
-            return "seisan の紐付けに無い"
+            return "CIP の紐付けに無い"
         pairs = {(a, b) for a, b, _c in ent["cats"]}
         if len(pairs) != 1:
             return "複数の分類に分かれる番号"

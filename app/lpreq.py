@@ -85,7 +85,7 @@ def build(pid: str) -> dict:
     codes = [r["product_code"] for r in store.q(
         "SELECT product_code FROM seisan_registration WHERE project_id=? AND state='登録済'", (pid,))]
     lines.append("")
-    lines.append("【seisan 商品コード】")
+    lines.append("【CIP 商品コード】")
     lines.append("、".join(codes) if codes else "未登録（発売可 G5 の前に登録）")
     head = (["※ 埋まっていない項目: " + "、".join(missing), ""] if missing else [])
     text = "\n".join([lines[0], ""] + head + lines[2:])

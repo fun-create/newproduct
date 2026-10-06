@@ -169,15 +169,15 @@ def register_candidate(pid: str, cid, f: dict, user_id: str) -> dict:
     from app import seisan
     _editable(pid)
     if not seisan.can_register(user_id):
-        raise PermissionError("seisan への登録は、G5（発売可）を判定できる業務ロールの人だけができます")
+        raise PermissionError("CIP への登録は、G5（発売可）を判定できる業務ロールの人だけができます")
     c = store.one("SELECT * FROM sourcing_candidate WHERE id=? AND project_id=?", (int(cid), pid))
     if c is None:
         raise LookupError("その候補はこの案件にありません")
     c = dict(c)
     if not c["adopted"]:
-        raise ValueError("採用した候補だけを seisan に登録します")
+        raise ValueError("採用した候補だけを CIP に登録します")
     if c["seisan_ref"]:
-        raise ValueError(f"登録済みです（{c['seisan_ref']}）。直すときは seisan の画面で")
+        raise ValueError(f"登録済みです（{c['seisan_ref']}）。直すときは CIP の画面で")
     ref = f"newproduct:{pid}/候補{c['id']}"
     done, note = None, None
     try:
@@ -222,7 +222,7 @@ def register_candidate(pid: str, cid, f: dict, user_id: str) -> dict:
                 note = "外注単価は未登録（品目を選ばなかったため）"
     except seisan.Refused as e:
         if done is None:
-            raise ValueError("seisan が断りました: " + str(e)) from None
+            raise ValueError("CIP が断りました: " + str(e)) from None
         note = "途中まで登録: " + str(e)      # 材料・外注先はできたが、条件・単価で断られた
     with store.tx() as cx:
         cx.execute("UPDATE sourcing_candidate SET seisan_ref=?,seisan_registered_by=?,"

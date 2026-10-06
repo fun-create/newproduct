@@ -194,7 +194,12 @@ ACTION_LABEL = {"role.grant": "業務ロールを付けた", "role.revoke": "業
                 "flow.effort_point": "工数ポイント係数を決めた", "ideas.import": "アイデアを一括登録", "ideas.import.undo": "一括登録を取り消した"}
 
 
-def change_log(limit: int = 50) -> list[dict]:
+CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id")
+
+
+def change_log(limit: int = 50, app_role: str = "") -> list[dict]:
+    """全体に効く変更の記録。**接続先の値は admin 以外に伏せる**（ADR-058。2026-10-06 再点検で、
+    設定の表は絞っていたのに記録の前後の値は全員に返していたのが分かった）。"""
     cond = " OR ".join("action LIKE ?" for _ in LOG_ACTIONS)
     out = []
     for r in store.q(f"SELECT at, user_id, action, target, detail FROM audit WHERE {cond} "
@@ -203,6 +208,9 @@ def change_log(limit: int = 50) -> list[dict]:
             d = json.loads(r["detail"] or "{}")
         except ValueError:
             d = {}
+        if r["target"] in CONNECTION_KEYS and app_role != "admin":
+            d = {"label": d.get("label"), "reason": None}           # 値も根拠も出さない。「変えた」ことだけ
+            d["before"] = d["after"] = "（管理者だけが見られます）"
         out.append({"at": r["at"], "user_id": r["user_id"], "action": r["action"], "target": r["target"],
                     "action_label": ACTION_LABEL.get(r["action"]),
                     "label": d.get("label"), "before": d.get("before"), "after": d.get("after"),

@@ -209,7 +209,7 @@ details.np-fold > .np-card > h2.np-fold-h { display: none; }
 
 /* ── ボタンと入力欄をそろえる（全体の見直し・2026-10-06 十文字さん選択）──
  * これまでは画面ごとに大きさ・枠が違い、クラスの無いものはブラウザ任せ（ダークで白く浮く）だった。
- * `:where()` で詳細度を0にして、既存の個別指定（np-btn・np-choice など）を壊さない土台にする。
+ * `:where()` で中身の詳細度を0にする（全体は `.fca-main` の 0,1,0）。既存の個別指定（np-btn・np-choice など）より弱い土台にする。
  * 押せるもの（button）は濃紺の枠＋太字、入れるもの（input・select・textarea）は罫線の枠。色に意味は持たせない */
 .fca-main :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
   font: inherit; font-size: .9rem; color: var(--fca-ink);
