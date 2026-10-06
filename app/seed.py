@@ -196,10 +196,12 @@ def seed_masters():
             "INSERT INTO flow_type (code,seq,label,tsv_label,effort_point,"
             "effort_point_note,has_template,note) VALUES (?,?,?,?,?,?,?,?) "
             "ON CONFLICT(code) DO UPDATE SET seq=excluded.seq,label=excluded.label,"
-            "tsv_label=excluded.tsv_label,effort_point=excluded.effort_point,"
-            "effort_point_note=excluded.effort_point_note,"
-            "has_template=excluded.has_template,note=excluded.note",
+            "tsv_label=excluded.tsv_label,note=excluded.note",
             (code, seq, label, tsv, pt, note, has_tpl, FLOW_NOTE.get(code)))
+        # 係数とひな形の有無は、**画面で人が決めた行（decided_at あり）は書き戻さない**（ADR-061）。
+        # 書き戻すと、決めた値が次の再起動で黙って元に戻る
+        store.ex("UPDATE flow_type SET effort_point=?, effort_point_note=?, has_template=? "
+                 "WHERE code=? AND decided_at IS NULL", (pt, note, has_tpl, code))
 
     for code, label, sort, ext, note in ROLES:
         store.ex(

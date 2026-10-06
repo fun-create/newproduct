@@ -307,15 +307,20 @@ def check_stage2_db(cl: Client):
         got = db.get(k)
         note(OK if got == n else NG, f"第2段: {k} が {n} 件", f"実測 {got}")
 
-    # **推測で埋めていないこと。**⑤資材リニューアルの係数は NULL のまま
-    note(OK if db.get("flow_type_without_effort_point") == 1 else NG,
-         "第2段: 工数ポイント係数が未確定の開発タイプが1つ",
-         f"実測 {db.get('flow_type_without_effort_point')} — "
-         "⑤資材リニューアルは実測できないので NULL のままにしてある")
-    # **⑦ページリニューアルには標準タスクが無い。発明していない**
-    note(OK if db.get("flow_type_without_template") == 1 else NG,
-         "第2段: 標準タスクが無い開発タイプが1つ",
-         f"実測 {db.get('flow_type_without_template')} — ⑦ページリニューアル")
+    # **推測で埋めていないこと。**⑤資材リニューアルの係数は NULL のまま。
+    # ⑦ページリニューアルには標準タスクが無い（発明していない）。
+    # 2026-10-06 から設定ページで人が決められる（ADR-061）。決めた行は決めた人と日時を持つので、
+    # 「未確定のまま」か「人が画面で決めた」のどちらかであることを見る（黙って埋まっていない）
+    dec = db.get("flow_type_decided_on_screen") or 0
+    note(OK if (db.get("flow_type_without_effort_point") or 0) <= 1
+         and (db.get("flow_type_without_effort_point") or 0) + dec >= 1 else NG,
+         "第2段: 工数ポイント係数は未確定のままか、人が画面で決めたもの",
+         f"未確定 {db.get('flow_type_without_effort_point')}・画面で決めた {dec} — "
+         "⑤資材リニューアルは実測できないので NULL から始めている")
+    note(OK if (db.get("flow_type_without_template") or 0) <= 1
+         and (db.get("flow_type_without_template") or 0) + dec >= 1 else NG,
+         "第2段: 標準タスクが無い開発タイプは未定義のままか、人が画面で決めたもの",
+         f"未定義 {db.get('flow_type_without_template')}・画面で決めた {dec} — ⑦ページリニューアル")
 
 
 def check_stage2_api(cl: Client):

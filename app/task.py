@@ -254,16 +254,20 @@ def template_totals() -> dict:
         "SELECT t.role, r.label AS role_label, r.sort, r.external AS ext, "
         "COUNT(*) AS n, SUM(COALESCE(t.standard_hours,0)) AS h, "
         "SUM(COALESCE(t.ai_reduction_hours,0)) AS ai, "
-        "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.standard_hours,0) ELSE 0 END) AS rh "
+        "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.standard_hours,0) ELSE 0 END) AS rh, "
+        "SUM(t.standard_hours IS NULL) AS unknown "
         "FROM task_template t LEFT JOIN role r ON r.code=t.role "
-        "WHERE t.template_version=1 GROUP BY t.role ORDER BY r.sort")
+        "JOIN flow_type fv ON fv.code=t.flow_type AND t.template_version=fv.active_template_version "
+        "GROUP BY t.role ORDER BY r.sort")
+    # **各開発タイプの使用中の版**で数える（ADR-061）。時間が空欄の行は 0 にせず「未定 n 行」と数える
     per_flow = store.q(
-        "SELECT t.flow_type, f.label, COUNT(*) AS n, "
-        "SUM(COALESCE(t.standard_hours,0)) AS h, "
+        "SELECT t.flow_type, f.label, COUNT(*) AS n, f.active_template_version AS v, "
+        "SUM(COALESCE(t.standard_hours,0)) AS h, SUM(t.standard_hours IS NULL) AS unknown, "
         "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.standard_hours,0) ELSE 0 END) AS rh "
-        "FROM task_template t LEFT JOIN flow_type f ON f.code=t.flow_type "
-        "WHERE t.template_version=1 GROUP BY t.flow_type ORDER BY f.seq")
-    pf = [{"flow_type": r["flow_type"], "label": r["label"], "n": r["n"],
+        "FROM task_template t JOIN flow_type f ON f.code=t.flow_type "
+        "AND t.template_version=f.active_template_version GROUP BY t.flow_type ORDER BY f.seq")
+    pf = [{"flow_type": r["flow_type"], "label": r["label"], "n": r["n"], "version": r["v"],
+           "unknown_rows": r["unknown"] or 0,
            "hours": round(float(r["h"] or 0), 3),
            "reserve_hours": round(float(r["rh"] or 0), 3),
            "work_hours": round(float(r["h"] or 0) - float(r["rh"] or 0), 3)}
@@ -287,7 +291,7 @@ def template_totals() -> dict:
         "reserve_caption":
             "予備時間は旧テンプレートの半分・1人分（2026-09-23 十文字さんの決定）。"
             "AI削減の試算には入れません（元の試算が予備を除外して作られているため）。",
-        "template_version": 1,
+        "template_version": "開発タイプごとの使用中の版",
     }
 
 

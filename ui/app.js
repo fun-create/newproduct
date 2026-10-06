@@ -3302,7 +3302,8 @@
       var dc = el("div", { "class": "np-card" });
       dc.appendChild(el("h2", { text: "データの登録" }));
       dc.appendChild(el("p", { "class": "np-sub", text: "このアプリが正本として持つデータを、画面から足したり直したりします。外注先・原材料・商品は seisan、利用者はカレンダーで登録します。" }));
-      dc.appendChild(btnRow([navBtn("#/settings/events", "年間イベント・ライフイベント")]));
+      dc.appendChild(btnRow([navBtn("#/settings/events", "年間イベント・ライフイベント"),
+        navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数")]));
       b.appendChild(dc);
 
       // アプリ全体の設定（ADR-059）。変えられる人にだけ「変える」を出す。**根拠が必須**、空欄は未設定に戻す
@@ -3379,8 +3380,7 @@
       lc.appendChild(el("h2", { text: "変更の記録（全員に効くもの・新しい順）" }));
       if (!st.log.length) lc.appendChild(el("p", { "class": "np-note", text: "まだありません。" }));
       else lc.appendChild(table(["いつ", "誰が", "何を", "前 → 後", "根拠"], st.log.map(function (x) {
-        var what = { "role.grant": "業務ロールを付けた", "role.revoke": "業務ロールを外した", "plan.version.approve": "年間プランを承認" }[x.action]
-          || (x.label ? x.label : x.action);
+        var what = x.label || x.action_label || x.action;
         var ba = x.before !== undefined && x.before !== null || x.after !== undefined && x.after !== null
           ? (x.before === null || x.before === undefined ? "未設定" : x.before) + " → " + (x.after === null || x.after === undefined ? "未設定" : x.after)
           : (x.detail && x.detail.role ? x.target + " / " + x.detail.role : dash(x.target));
@@ -3492,6 +3492,161 @@
     }).catch(fail);
   }
 
+  /** 標準タスクのひな形と係数（ADR-061）。版1は種データ。改訂は下書き → 使い始める。起こし済みの案件は変えない */
+  function viewTemplates() {
+    loading();
+    api("/api/settings/templates").then(function (d) {
+      var b = clear();
+      setTitle("標準タスクのひな形・工数ポイント係数");
+      b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back")]));
+      b.appendChild(el("p", { "class": "np-sub", text: "案件を起こしたときに並ぶタスクの元です。改訂は「下書き」で作り、差を見てから使い始めます。使い始めた後に起こす案件から効き、起こし済みの案件のタスクは変わりません。" }));
+      if (!d.can_edit) b.appendChild(el("p", { "class": "np-note", text: "変えられるのは、商品開発部・管理者・社長の業務ロールの人です。" }));
+      b.appendChild(table(["開発タイプ", "使用中の版", "実作業", "実作業 h", "予備 h", "時間未定", "工数ポイント係数", "下書き", ""], d.flows.map(function (f) {
+        var sm = f.summary;
+        return el("tr", null, [el("td", { text: f.label }),
+          el("td", { text: "版" + f.version + (f.version === 1 ? "（種データ）" : "") }),
+          el("td", { "class": "np-num", text: f.has_template ? sm.n + " 行" : "標準タスク未定義" }),
+          el("td", { "class": "np-num", text: f.has_template ? String(sm.work_hours) : "—" }),
+          el("td", { "class": "np-num", text: String(sm.reserve_hours) }),
+          el("td", { "class": "np-num", text: sm.unknown_rows ? sm.unknown_rows + " 行" : "—" }),
+          el("td", { text: f.effort_point === null ? "未確定" : String(f.effort_point) }),
+          el("td", { text: f.draft ? "版" + f.draft + " を作成中" : "—" }),
+          el("td", null, [navBtn("#/settings/templates/" + f.code, d.can_edit ? "開く・直す" : "開く", "sm")])]);
+      })));
+      b.appendChild(el("p", { "class": "np-sub", text: "合計は開発タイプごとの1本分です。予備時間（旧テンプレートの半分・1人分）はここでは変えません。" }));
+    }).catch(fail);
+  }
+
+  function viewTemplate(code) {
+    loading();
+    var P = "/api/settings/templates/" + encodeURIComponent(code);
+    api(P).then(function (d) {
+      var b = clear(), f = d.flow;
+      setTitle("ひな形: " + f.label);
+      b.appendChild(btnRow([navBtn("#/settings/templates", "← ひな形の一覧へ戻る", "back")]));
+      function err(node, e) { node.appendChild(el("span", { "class": "np-err", text: " " + e.message })); }
+      function act(name, body, after) { return post(P + "/" + name, body || {}).then(after || function () { viewTemplate(code); }); }
+      var rl = {}; d.roles.forEach(function (r) { rl[r.code] = r.label; });
+
+      // 工数ポイント係数
+      var ec = el("div", { "class": "np-card" });
+      ec.appendChild(el("h2", { text: "工数ポイント係数" }));
+      ec.appendChild(el("p", { text: "いまの値: " + (f.effort_point === null ? "未確定" : f.effort_point)
+        + (f.effort_point_note ? "（" + f.effort_point_note + "）" : "") + (f.decided_at ? "　決めた人: " + f.decided_by + "・" + f.decided_at : "") }));
+      if (d.can_edit) {
+        var ef = el("form", { "class": "np-inline" });
+        var ev = el("input", { name: "value", size: "5", "aria-label": "係数", value: f.effort_point === null ? "" : String(f.effort_point) });
+        var er = el("input", { name: "reason", size: "28", "aria-label": "根拠", placeholder: "根拠（必須）" });
+        [txt("係数 "), ev, er, el("button", { type: "submit", text: "決める" }), el("span", { "class": "np-sub", text: " 空欄で未確定に戻します" })].forEach(function (x) { ef.appendChild(x); });
+        ef.addEventListener("submit", function (e) { e.preventDefault(); act("effort", { value: ev.value, reason: er.value }).catch(function (x) { err(ef, x); }); });
+        ec.appendChild(ef);
+      }
+      b.appendChild(ec);
+
+      function rowsTable(rows, editable) {
+        return table(["#", "タスク", "担当の業務ロール", "標準 h", "種類", ""], rows.map(function (r) {
+          var a = el("td");
+          if (editable && r.kind !== "予備") {
+            [["↑", "1"], ["↓", "0"]].forEach(function (m) {
+              var bt = el("button", { type: "button", text: m[0], "aria-label": (m[1] === "1" ? "上へ" : "下へ") + "：" + r.title });
+              bt.addEventListener("click", function () { act("row-move", { id: r.id, up: m[1] }).catch(function (x) { err(a, x); }); });
+              a.appendChild(bt); a.appendChild(txt(" "));
+            });
+            var ed = el("button", { type: "button", text: "直す" });
+            ed.addEventListener("click", function () { slot.textContent = ""; slot.appendChild(rowForm(r)); slot.scrollIntoView({ block: "nearest" }); });
+            var dl = el("button", { type: "button", text: "消す" });
+            dl.addEventListener("click", function () {
+              if (!window.confirm("「" + r.title + "」を下書きから消します。よろしいですか")) return;
+              act("row-delete", { id: r.id }).catch(function (x) { err(a, x); });
+            });
+            a.appendChild(ed); a.appendChild(txt(" ")); a.appendChild(dl);
+          }
+          return el("tr", null, [el("td", { "class": "np-num", text: String(r.seq) }), el("td", { text: r.title }),
+            el("td", { text: rl[r.role] || r.role }), el("td", { "class": "np-num", text: r.standard_hours === null ? "未定" : String(r.standard_hours) }),
+            el("td", { text: r.kind }), a]);
+        }));
+      }
+      var slot = el("div");
+      function rowForm(r) {
+        r = r || {};
+        var fm = el("form", { "class": "np-inline" });
+        var ti = el("input", { name: "title", size: "28", "aria-label": "タスク名", value: r.title || "", placeholder: "タスク名" });
+        var ro = el("select", { name: "role", "aria-label": "担当の業務ロール" });
+        d.roles.forEach(function (x) { var o = el("option", { value: x.code, text: x.label }); if (x.code === r.role) o.setAttribute("selected", "selected"); ro.appendChild(o); });
+        var hi = el("input", { name: "standard_hours", size: "5", "aria-label": "標準時間（h）", value: r.standard_hours === null || r.standard_hours === undefined ? "" : String(r.standard_hours), placeholder: "h" });
+        [ti, ro, hi, el("button", { type: "submit", text: r.id ? "直す" : "足す" })].forEach(function (x) { fm.appendChild(x); });
+        fm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          act("row", { id: r.id || "", title: ti.value, role: ro.value, standard_hours: hi.value }).catch(function (x) { err(fm, x); });
+        });
+        return fm;
+      }
+
+      // 下書き
+      var dc = el("div", { "class": "np-card" });
+      if (d.draft) {
+        var dr = d.draft, sm = dr.summary;
+        dc.appendChild(el("h2", { text: "下書き 版" + dr.version + "（" + dr.created_by + "・" + dr.created_at + "）" }));
+        dc.appendChild(el("p", { "class": "np-sub", text: "実作業 " + sm.n + " 行・" + sm.work_hours + " h" + (sm.unknown_rows ? "（時間未定 " + sm.unknown_rows + " 行。全行に入れるまで使い始められません）" : "") + "・予備 " + sm.reserve_hours + " h" }));
+        var df = dr.diff;
+        dc.appendChild(el("h3", { text: "いまの版（版" + d.current.version + "）との差" }));
+        var ul = el("ul", { "class": "np-miss" });
+        ul.appendChild(el("li", { text: "足した行: " + (df.added.length ? df.added.join("、") : "なし") }));
+        ul.appendChild(el("li", { text: "消した行: " + (df.removed.length ? df.removed.join("、") : "なし") }));
+        ul.appendChild(el("li", { text: "時間を変えた行: " + (df.changed.length ? df.changed.map(function (c) { return c.title + "（" + (c.before === null ? "未定" : c.before) + " → " + (c.after === null ? "未定" : c.after) + " h）"; }).join("、") : "なし") }));
+        dc.appendChild(ul);
+        dc.appendChild(table(["担当の業務ロール", "いまの版 h", "下書き h"], df.by_role.map(function (x) {
+          return el("tr", null, [el("td", { text: x.role }), el("td", { "class": "np-num", text: String(x.before) }), el("td", { "class": "np-num", text: String(x.after) })]); })));
+        dc.appendChild(el("h3", { text: "下書きの行" }));
+        dc.appendChild(rowsTable(dr.rows, d.can_edit));
+        dc.appendChild(slot);
+        if (d.can_edit) {
+          var add = el("button", { type: "button", "class": "np-btn", text: "行を足す" });
+          add.addEventListener("click", function () { slot.textContent = ""; slot.appendChild(rowForm(null)); });
+          var go1 = el("form", { "class": "np-inline" });
+          var why = el("input", { name: "reason", size: "30", "aria-label": "改訂の理由", placeholder: "改訂の理由（必須）" });
+          [why, el("button", { type: "submit", text: "この下書きを使い始める" })].forEach(function (x) { go1.appendChild(x); });
+          go1.addEventListener("submit", function (e) {
+            e.preventDefault();
+            if (!window.confirm("版" + dr.version + " を使い始めます。これから起こす案件のタスクが、この版になります（起こし済みの案件は変わりません）。よろしいですか")) return;
+            act("activate", { reason: why.value }).catch(function (x) { err(go1, x); });
+          });
+          var ds = el("button", { type: "button", text: "下書きを捨てる" });
+          ds.addEventListener("click", function () {
+            if (!window.confirm("下書き 版" + dr.version + " を捨てます。よろしいですか")) return;
+            act("discard").catch(function (x) { err(dc, x); });
+          });
+          dc.appendChild(el("p", { "class": "np-btnrow" }, [add]));
+          dc.appendChild(go1);
+          dc.appendChild(el("p", { "class": "np-btnrow" }, [ds]));
+        }
+      } else {
+        dc.appendChild(el("h2", { text: "改訂" }));
+        dc.appendChild(el("p", { "class": "np-sub", text: d.current.rows.length ? "いまの版を写して下書きを作り、行を足す・直す・消す・並べ替えます。" : "この開発タイプには標準タスクがありません。空の下書きから作ります。" }));
+        if (d.can_edit) {
+          var nd = el("button", { type: "button", "class": "np-btn", text: "改訂版を作る（下書き）" });
+          nd.addEventListener("click", function () { act("draft").catch(function (x) { err(dc, x); }); });
+          dc.appendChild(el("p", { "class": "np-btnrow" }, [nd]));
+        }
+      }
+      b.appendChild(dc);
+
+      // 使用中の版
+      var cc = el("div", { "class": "np-card" });
+      cc.appendChild(el("h2", { text: "使用中の版（版" + d.current.version + (d.current.version === 1 ? "・種データ" : "") + "）" }));
+      if (!d.current.rows.length) cc.appendChild(el("p", { "class": "np-note", text: "標準タスク未定義です。" }));
+      else cc.appendChild(rowsTable(d.current.rows, false));
+      if (d.can_edit && d.current.version > 1) {
+        var rv = el("form", { "class": "np-inline" });
+        var rw = el("input", { name: "reason", size: "28", "aria-label": "戻す理由", placeholder: "戻す理由（必須）" });
+        [rw, el("button", { type: "submit", text: "ひとつ前の版に戻す" })].forEach(function (x) { rv.appendChild(x); });
+        rv.addEventListener("submit", function (e) { e.preventDefault(); act("revert", { reason: rw.value }).catch(function (x) { err(rv, x); }); });
+        cc.appendChild(rv);
+      }
+      b.appendChild(cc);
+    }).catch(fail);
+  }
+
   function viewManual() {
     loading();
     api("/api/manual").then(function (d) {
@@ -3548,6 +3703,9 @@
     if (path === "#/settings") return viewSettings();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
+    if (path === "#/settings/templates") return viewTemplates();
+    var mt = /^#\/settings\/templates\/([a-z]+)$/.exec(path);
+    if (mt) return viewTemplate(mt[1]);
     return viewNotYet(path, entry);
   }
 

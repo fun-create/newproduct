@@ -149,8 +149,10 @@ def expand_tasks(project_id: str, user_id: str) -> int:
         return 0
     if store.val("SELECT COUNT(*) FROM task WHERE project_id=?", (project_id,), 0):
         return 0            # 既に展開済み。**改訂しても展開済みは保持する**（F-5-6）
-    tpl = store.q("SELECT * FROM task_template WHERE flow_type=? AND "
-                  "template_version=1 ORDER BY seq", (p["flow_type"],))
+    # 開発タイプの**使用中の版**から展開する（版1＝種データ・2以降＝設定ページで改訂したもの・ADR-061）
+    tpl = store.q("SELECT t.* FROM task_template t JOIN flow_type f ON f.code=t.flow_type "
+                  "AND t.template_version=f.active_template_version WHERE t.flow_type=? ORDER BY t.seq",
+                  (p["flow_type"],))
     with store.tx() as c:
         for t in tpl:
             c.execute(

@@ -187,6 +187,11 @@ def set_role(target: str, role: str, on: bool, user_id: str, app_role: str, ip: 
 
 # ── 全体に効く変更の記録（全員に見せる）────────────────────────────────
 LOG_ACTIONS = ("setting.%", "role.%", "event.%", "template.%", "ideas.import%", "flow.%", "plan.version.approve")
+ACTION_LABEL = {"role.grant": "業務ロールを付けた", "role.revoke": "業務ロールを外した", "plan.version.approve": "年間プランを承認",
+                "event.save": "イベントを登録・修正", "event.active": "イベントを使うに戻した", "event.inactive": "イベントを使わないにした",
+                "template.draft": "ひな形の下書きを作った", "template.discard": "ひな形の下書きを捨てた",
+                "template.activate": "ひな形の版を使い始めた", "template.revert": "ひな形をひとつ前の版に戻した",
+                "flow.effort_point": "工数ポイント係数を決めた", "ideas.import": "アイデアを一括登録", "ideas.import.undo": "一括登録を取り消した"}
 
 
 def change_log(limit: int = 50) -> list[dict]:
@@ -199,6 +204,7 @@ def change_log(limit: int = 50) -> list[dict]:
         except ValueError:
             d = {}
         out.append({"at": r["at"], "user_id": r["user_id"], "action": r["action"], "target": r["target"],
+                    "action_label": ACTION_LABEL.get(r["action"]),
                     "label": d.get("label"), "before": d.get("before"), "after": d.get("after"),
                     "reason": d.get("reason"), "detail": d if not isinstance(d, dict) or "before" not in d else None})
     return out

@@ -56,6 +56,7 @@ from app import competitor as comp_m  # noqa: E402
 from app import prefs as prefs_m  # noqa: E402
 from app import admin as admin_m  # noqa: E402
 from app import events as events_m  # noqa: E402
+from app import templates as tpl_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -596,6 +597,30 @@ class H(BaseHTTPRequestHandler):
         if parts == ["settings", "events", "active"] and method == "POST":
             d = self.body()
             return self.sendj(200, events_m.set_active(d.get("id", ""), d.get("on") in ("1", "true", "on"), uid, ip))
+        # 標準タスクのひな形と係数（ADR-061）。版1は種データ専用・画面の版は2から・起こし済みの案件は変えない
+        if parts == ["settings", "templates"] and method == "GET":
+            r = tpl_m.overview()
+            r["can_edit"] = tpl_m.can_edit(uid)
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[:2] == ["settings", "templates"] and method == "GET":
+            r = tpl_m.detail(parts[2])
+            r["can_edit"] = tpl_m.can_edit(uid)
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[:2] == ["settings", "templates"] and method == "POST":
+            code, act, d = parts[2], parts[3], self.body()
+            ops = {
+                "draft": lambda: tpl_m.new_draft(code, uid, ip),
+                "row": lambda: tpl_m.save_row(code, d, uid),
+                "row-delete": lambda: tpl_m.delete_row(code, d.get("id"), uid),
+                "row-move": lambda: tpl_m.move_row(code, d.get("id"), d.get("up") == "1", uid),
+                "discard": lambda: tpl_m.discard(code, uid, ip),
+                "activate": lambda: tpl_m.activate(code, uid, d.get("reason", ""), ip),
+                "revert": lambda: tpl_m.revert(code, uid, d.get("reason", ""), ip),
+                "effort": lambda: tpl_m.set_effort(code, d.get("value"), d.get("reason", ""), uid, ip),
+            }
+            if act not in ops:
+                return self.sendj(404, {"error": "not found"})
+            return self.sendj(200, ops[act]())
         # 業務ロールの付け外し（アプリ権限 admin・十文字さんの選択）
         if parts == ["settings", "role"] and method == "POST":
             d = self.body()
@@ -1053,15 +1078,22 @@ def db_health() -> dict:
         return {"error": str(e)}
     # **予備時間を実作業の数に混ぜない**（2026-09-23 の決定）。
     # `task_template` は実作業の数（178）のまま。予備は別の鍵で出す
+    # **種データ（版1）の数**で見る。画面で作った改訂版（2以降）は別の鍵で出す（ADR-061）
     n["task_template_reserve"] = store.val(
-        "SELECT COUNT(*) FROM task_template WHERE kind='予備'", (), 0)
-    n["task_template"] = n["task_template"] - n["task_template_reserve"]
+        "SELECT COUNT(*) FROM task_template WHERE kind='予備' AND template_version=1", (), 0)
+    n["task_template"] = store.val(
+        "SELECT COUNT(*) FROM task_template WHERE template_version=1", (), 0) - n["task_template_reserve"]
+    n["task_template_revised"] = store.val(
+        "SELECT COUNT(*) FROM task_template WHERE template_version>1", (), 0)
     n["task_reserve"] = store.val(
         "SELECT COUNT(*) FROM task WHERE kind='予備'", (), 0)
     n["flow_type_without_effort_point"] = store.val(
         "SELECT COUNT(*) FROM flow_type WHERE effort_point IS NULL", (), 0)
     n["flow_type_without_template"] = store.val(
         "SELECT COUNT(*) FROM flow_type WHERE has_template=0", (), 0)
+    # 画面で人が決めた開発タイプ（係数・ひな形）。決めた人と日時が付いている（ADR-061）
+    n["flow_type_decided_on_screen"] = store.val(
+        "SELECT COUNT(*) FROM flow_type WHERE decided_at IS NOT NULL AND decided_by IS NOT NULL", (), 0)
     try:
         n["idea"] = idea_m.counts()
     except Exception as e:                  # 第1段の移行前など
