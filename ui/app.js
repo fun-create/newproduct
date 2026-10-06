@@ -2293,7 +2293,9 @@
     box.appendChild(f);
     if (cur) {
       var acts = el("p", { "class": "np-actions" });
-      if (cur.state === "策定中") {
+      if (cur.state === "策定中" && !d.can_approve) {
+        acts.appendChild(el("span", { "class": "np-sub", text: "承認は社長の業務ロールの人が行います。" }));
+      } else if (cur.state === "策定中") {
         var ap = el("button", { type: "button", text: "この版を承認する" });
         ap.addEventListener("click", function () {
           post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/approve", {})

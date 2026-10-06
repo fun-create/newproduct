@@ -177,8 +177,20 @@ def revise(version_id: str, user_id: str, label: str = "") -> dict:
     return new
 
 
+APPROVER_ROLE = "president"
+
+
+def can_approve(user_id: str) -> bool:
+    """年間プランを承認できるか。**社長の業務ロールだけ**（「承認は十文字さんが画面で行う」・FR-131「確定は人（社長）」）。
+    アプリ権限（admin/user）では決めない。2026-10-06 まで確認が無く、利用者の誰でも承認できた（ADR-058）"""
+    from app import gate
+    return APPROVER_ROLE in gate.roles_of(user_id)
+
+
 def approve(version_id: str, user_id: str) -> dict:
     """承認する。**年度に承認済みは1つだけ**（FR-85）。前の承認済みは失効へ。"""
+    if not can_approve(user_id):
+        raise PermissionError("年間プランを承認できるのは、社長の業務ロールの人だけです")
     v = store.one("SELECT * FROM plan_version WHERE id=?", (version_id,))
     if v is None:
         raise ValueError("その版がありません")

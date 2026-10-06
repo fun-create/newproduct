@@ -395,7 +395,13 @@ def main() -> int:
         st, r2 = cl.post("/api/plan/slots/" + sid + "/convert", {})
         note(st == 400, "同じ枠を二度変換できない", str(st))
 
-        cl.post("/api/plan/versions/" + vid + "/approve", {})
+        # 承認は社長の業務ロールだけ（ADR-058）。管理者では断られ、社長なら通る
+        st, r = cl.post("/api/plan/versions/" + vid + "/approve", {})
+        note(st in (400, 403), "年間プランの承認は管理者では断られる（社長の業務ロールだけ）", str(st))
+        who.update(user_id="shacho", name="社長テスト")
+        st, r = cl.post("/api/plan/versions/" + vid + "/approve", {})
+        note(st == 200, "社長は年間プランを承認できる", str(st))
+        who.update(user_id="kanri", name="管理者テスト")
         st, r = cl.post("/api/plan/slots", {
             "version_id": vid, "launch_month": "2026-06", "product_kind": "uchiwa"})
         note(st == 400, "承認済みの版は編集できない（F-3-4）", str(st))

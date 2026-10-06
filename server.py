@@ -146,6 +146,9 @@ def _page(name: str, **subs) -> bytes:
     return s.encode("utf-8")
 
 
+CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id")
+
+
 def _root_attrs(user: dict) -> str:
     """`<html>` に付ける表示の属性（ADR-057）。**最初の描画から**その人の見え方にする（後から JS で替えるとちらつく）。
 
@@ -762,7 +765,12 @@ class H(BaseHTTPRequestHandler):
         if parts == ["rubrics"] and method == "GET":
             return self.sendj(200, {"rows": idea_m.rubrics()})
         if parts == ["settings"] and method == "GET":
-            return self.sendj(200, {"rows": idea_m.settings(),
+            # 接続先（ChatWork の部屋・AI予算の口・本文の URL）は**アプリ権限 admin にだけ**見せる。
+            # 業務の数え方ではなく、他のシステムへのつなぎ方なので（2026-10-06 app-ui の提案・ADR-058）
+            rows = idea_m.settings()
+            if user.get("role") != "admin":
+                rows = [r for r in rows if r["key"] not in CONNECTION_KEYS]
+            return self.sendj(200, {"rows": rows,
                                     "concept_stock": idea_m.concept_stock(),
                                     "ai_scoring": ai_m.status()})
         if len(parts) == 2 and parts[0] == "ideas" and method == "GET":
@@ -796,7 +804,9 @@ class H(BaseHTTPRequestHandler):
         # **警告は保存を止めない**（FR-84）。検査は GET 側で返すだけで、
         # POST 側は一度も検査結果を見ない。ここで弾くと現場は表計算に戻る。
         if parts == ["plan"] and method == "GET":
-            return self.sendj(200, plan_m.overview(qs.get("fy") or None))
+            r = plan_m.overview(qs.get("fy") or None)
+            r["can_approve"] = plan_m.can_approve(uid)            # 承認のボタンは社長にだけ出す（ADR-058）
+            return self.sendj(200, r)
         if parts == ["plan", "versions"] and method == "POST":
             d = self.body()
             r = plan_m.create_version(uid, d.get("fiscal_year"),

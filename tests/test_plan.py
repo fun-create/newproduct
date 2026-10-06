@@ -49,6 +49,19 @@ class Base(unittest.TestCase):
         from app import plan
         self.m = plan
         self.vid = plan.create_version("tester", 2026)["id"]
+        # 承認は社長の業務ロールだけ（ADR-058）。検査の承認者に社長を付けておく
+        from app import store as _st
+        with _st.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('president','tester')")
+
+    def test_only_president_can_approve(self):
+        """2026-10-06 まで確認が無く、利用者の誰でも承認できた（ADR-058）。"""
+        with self.assertRaises(PermissionError):
+            self.m.approve(self.vid, "someone")
+        from app import store as _st
+        self.assertEqual(_st.val("SELECT state FROM plan_version WHERE id=?", (self.vid,)), "策定中")
+        self.assertFalse(self.m.can_approve("someone"))
+        self.assertTrue(self.m.can_approve("tester"))
 
     def tearDown(self):
         from app import store
