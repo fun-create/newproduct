@@ -161,7 +161,7 @@ table.np tr[data-level="unavailable"] > td:first-child { border-left: 3px dotted
 .np-btnrow { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
 a.np-btn, button.np-btn {
   display: inline-flex; align-items: center; gap: .35rem;
-  min-height: 2.5rem; padding: .4rem .95rem;
+  min-height: 44px; padding: .4rem .95rem;                 /* 指の的は 44px（共通ヘッダーと同じ） */
   border: 1px solid var(--fca-navy); border-radius: 6px;
   background: var(--fca-card); color: var(--fca-ink);
   font: inherit; font-size: .9rem; font-weight: 600; line-height: 1.3;
@@ -169,13 +169,12 @@ a.np-btn, button.np-btn {
 }
 a.np-btn:hover, button.np-btn:hover { background: var(--fca-bg); text-decoration: underline; }
 a.np-btn-back { border-color: var(--fca-line); font-weight: 400; }
-a.np-btn-sm { min-height: 2rem; padding: .2rem .6rem; font-size: .8rem; }
+.np-btn-sm { padding: .2rem .7rem; font-size: .85rem; }
 
-/* 文字の大きさ（利用者ごと）。帯の 14px と rem の両方を上げる */
-html[data-np-font="large"] { font-size: 112.5%; }
-html[data-np-font="large"] body { font-size: 16px; }
-html[data-np-font="xlarge"] { font-size: 125%; }
-html[data-np-font="xlarge"] body { font-size: 17.5px; }
+/* 文字の大きさ（利用者ごと）。**本文（.fca-main）だけ**を拡大する。帯まで大きくすると 375px でナビが2段に折れた
+ * （2026-10-06 点検）。rem で書いた中身もそろって大きくなるよう zoom を使う */
+html[data-np-font="large"] .fca-main { zoom: 1.125; }
+html[data-np-font="xlarge"] .fca-main { zoom: 1.25; }
 
 /* 表の詰め具合（利用者ごと） */
 html[data-np-density="compact"] table.np th, html[data-np-density="compact"] table.np td { padding: .2rem .4rem; }
@@ -188,7 +187,11 @@ html[data-np-density="roomy"] table.np th, html[data-np-density="roomy"] table.n
   border: 1px solid var(--fca-line); border-radius: 6px;
   background: var(--fca-card); color: inherit; cursor: pointer;
 }
-.np-choice button[aria-pressed="true"] { border: 2px solid var(--fca-navy); font-weight: 700; }
+/* 選んでいるものは**塗り**にする（枠の太さだけでは見分けにくい・2026-10-06 点検）。
+ * 文字色は地の色: ライトは紺地に白に近い色、ダークは明るい青地に暗い色になり、どちらも読める */
+.np-choice button[aria-pressed="true"] { background: var(--fca-navy); color: var(--fca-bg); border-color: var(--fca-navy); font-weight: 700; }
+.np-choice button { min-height: 44px; }
+.np-status { display: block; min-height: 1.4em; font-size: .85rem; color: var(--fca-muted); }
 .np-setting { border-top: 1px solid var(--fca-line); padding-top: .6rem; margin-top: .6rem; }
 .np-setting > h3 { margin: 0 0 .2rem; font-size: 1rem; }
 
@@ -225,3 +228,18 @@ p.np-actions button, .np-field textarea, .np-filters a, .np-filters button { bor
 form.np-inline button, form.np-form button, p.np-actions button { border-color: var(--fca-navy); font-weight: 600; }
 /* 表の中のボタンは1行に収める（縦に1文字ずつ折れないように） */
 table.np td button, table.np td a.np-btn { white-space: nowrap; }
+
+/* ── 点検（2026-10-06）を受けて ── */
+/* 表は横に流せる箱の中で。画面ごと横にずれないように */
+.np-tablewrap { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.np-tablewrap > table.np { margin: 0; }
+/* 本文のリンクは紺（ライト 13.7:1・ダーク 6.6:1）。ボタン型のリンクは除く */
+.fca-main a:not(.np-btn) { color: var(--fca-navy); }
+/* たたんだ補足 */
+details.np-more { margin: .4rem 0 .8rem; }
+details.np-more > summary { cursor: pointer; color: var(--fca-muted); font-size: .85rem; }
+/* 選択肢の文が長いセレクト（保留・中止の理由など）が画面幅を押し広げないように */
+.fca-main select, .fca-main input, .fca-main textarea { max-width: 100%; }
+/* 横並びのフォームも親の幅を超えない（中の部品は縮んで折り返す） */
+form.np-inline { max-width: 100%; }
+form.np-inline > * { min-width: 0; max-width: 100%; }

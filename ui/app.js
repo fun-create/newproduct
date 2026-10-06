@@ -51,9 +51,28 @@
   /** 導線はボタンにする（2026-10-06 十文字さん「テキストリンクがわかりにくい」・ADR-057）。
    *  kind: "back"（戻る・控えめ）／ "sm"（節の中の小さな導線）。行き先は語で書く */
   function navBtn(href, label, kind) {
-    return el("a", { href: href, "class": "np-btn" + (kind ? " np-btn-" + kind : ""), text: label });
+    // 進む導線には「→」を付け、選択肢（設定の押しボタン）と見分けられるようにする（2026-10-06 点検）
+    var t = kind ? label : label + " →";
+    return el("a", { href: href, "class": "np-btn" + (kind ? " np-btn-" + kind : ""), text: t });
   }
   function btnRow(kids) { return el("p", { "class": "np-btnrow" }, kids); }
+  /** 同じ画面の中の節へ移るボタン。**hash を変えない**（変えると振り分けが別の画面を出す・2026-10-06 点検）。
+   *  たたんだ節は開き、見出しへ移ってフォーカスを置く */
+  function secBtn(id, label) {
+    var bt = el("button", { type: "button", "class": "np-btn np-btn-sm", text: label });
+    bt.addEventListener("click", function () { goSection(id); });
+    return bt;
+  }
+  function goSection(id) {
+    var t = document.getElementById(id);
+    if (!t) return;
+    var det = t.closest("details");
+    if (det) det.open = true;
+    t.scrollIntoView({ behavior: "smooth", block: "start" });
+    var h = (det && det.querySelector("summary")) || t;
+    if (!h.hasAttribute("tabindex") && h.tagName !== "SUMMARY") h.setAttribute("tabindex", "-1");
+    h.focus({ preventScroll: true });
+  }
   function dash(v) { return (v === null || v === undefined || v === "") ? "—" : String(v); }
 
   function hashPath() { return (location.hash || "#/").split("?")[0]; }
@@ -128,7 +147,8 @@
     var tb = el("tbody");
     rows.forEach(function (r) { tb.appendChild(r); });
     t.appendChild(tb);
-    return t;
+    // **スマホ幅で画面ごと横にずれないように**、表だけを横に流せる箱で包む（2026-10-06 点検・375px で4画面がはみ出した）
+    return el("div", { "class": "np-tablewrap" }, [t]);
   }
 
   function gateChips(gates) {
@@ -239,7 +259,7 @@
         // **数えた対象を書く。**「どの版の何月を見たのか」が無いと確かめようがない
         if (m.version) c.appendChild(el("p", { "class": "np-sub",
           text: "対象: " + m.version + " の " + m.month }));
-        if (m.link) c.appendChild(el("p", null, [el("a", { href: m.link, text: "開く" })]));
+        if (m.link) c.appendChild(btnRow([navBtn(m.link, "開く", "sm")]));
         if (m.stock_n !== undefined && m.stock_n !== null)
           c.appendChild(el("p", { "class": "np-sub", text: "G3通過・未発売 " + m.stock_n + " 件" }));
         g2.appendChild(c);
@@ -454,7 +474,7 @@
           d.missing.forEach(function (m) {
             var li = el("li", null, [
               m.label + " — " + m.why + " ",
-              navBtn("#np-sec-" + m.goto, m.goto + "節へ", "sm")
+              secBtn("np-sec-" + m.goto, m.goto + "節へ")
             ]);
             if (m.stage) li.appendChild(el("span", { "class": "np-stage",
               text: "（" + m.stage + "で自動化。いまは人が確認した記録で判定します）" }));
@@ -473,7 +493,7 @@
         // 止めずに知らせる（FR-101）。**通過は止めない**が、判定する人の目に入る場所に置く
         (d.warnings || []).forEach(function (w) {
           miss.appendChild(el("p", { "class": "np-warn" }, [txt(w.text + " "),
-            navBtn("#np-sec-" + w.goto, "原価・調達へ", "sm")]));
+            secBtn("np-sec-" + w.goto, "原価・調達へ")]));
         });
 
         // C〜F の節
@@ -685,7 +705,7 @@
       b.insertBefore(det, c);
       det.appendChild(c);
       if (h) h.classList.add("np-fold-h");
-      toc.push(navBtn("#" + c.id, title.replace(/^[A-G]\. /, "").replace(/ — .*$/, ""), "sm"));
+      toc.push(secBtn(c.id, title.replace(/^[A-G]\. /, "").replace(/ — .*$/, "")));
     });
     var bar = btnRow(toc);
     bar.classList.add("np-toc");
@@ -697,19 +717,6 @@
     b.insertBefore(el("p", { "class": "np-sub", text: "節へ移動（押すと開きます）" }), cards[0].parentNode);
     b.insertBefore(bar, cards[0].parentNode);
   }
-
-  // 節へのボタン（#np-sec-…）は**画面の切り替えではなく、同じ画面の中の移動**。
-  // 既定の動きに任せると hash が変わり、振り分けが「未実装の画面」を出してしまう
-  document.addEventListener("click", function (ev) {
-    var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="#np-sec-"]') : null;
-    if (!a) return;
-    ev.preventDefault();
-    var t = document.getElementById(a.getAttribute("href").slice(1));
-    if (!t) return;
-    var det = t.closest("details");
-    if (det) det.open = true;
-    t.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
 
   function fieldForm(pid, fd, editable) {
     var w = el("div", { "class": "np-field" });
@@ -1733,7 +1740,18 @@
       var d = r[0], meta = r[1];
       var b = clear();
       setTitle("アイデア", d.rubric ? "（" + d.rubric + "）" : "");
-      b.appendChild(btnRow([navBtn("#/trends", "今週のトレンド（FCTR）から起票する")]));
+      // 起票の入口を2つに（2026-10-06 点検「十文字さんが名指しした起票の流れが分かりにくい」）。
+      // 自分で書く → 下の起票フォームへ移る／トレンドから選ぶ → トレンド画面で「アイデアにする」
+      var toForm = el("button", { type: "button", "class": "np-btn", text: "アイデアを起票する ↓" });
+      toForm.addEventListener("click", function () {
+        var f = document.getElementById("np-newidea");
+        if (!f) return;
+        f.open = true;
+        f.scrollIntoView({ behavior: "smooth", block: "start" });
+        var t = f.querySelector("input[name=title]");
+        if (t) t.focus({ preventScroll: true });
+      });
+      b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する")]));
 
       // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
       var f = el("form", { "class": "np-filters", id: "np-ifilter" });
@@ -1822,7 +1840,7 @@
 
   /** 起票フォーム。**4項目＋起票経路だけ**（F-1-3）。ここを重くしない。 */
   function newIdeaForm(meta) {
-    var box = el("details", { "class": "np-card", open: "open" });
+    var box = el("details", { "class": "np-card", open: "open", id: "np-newidea" });
     box.appendChild(el("summary", { text: "アイデアを起票する（4項目＋起票経路だけ）" }));
     box.appendChild(el("p", { "class": "np-note",
       text: "起票に要るのは 商品案名・概要・想定ターゲット・起票経路 の4つだけです。デザイン自由度・生産方法・参考URL・エリアは採点のときに足します。" }));
@@ -2237,7 +2255,8 @@
         return;
       }
       setTitle("プラン", d.current.version.label);
-      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く（イベントの2か月前を発売の目安に、枠を足す）")]));
+      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く")]));
+      b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
       if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
@@ -2706,9 +2725,27 @@
         .catch(function (x) { msg.textContent = "できませんでした: " + x.message; });
     });
     box.appendChild(f); box.appendChild(msg);
-    box.appendChild(el("p", null, [
-      el("a", { href: "/api/automation/" + encodeURIComponent(r.id) + "/requirement",
-                text: "要件として書き出す（作る人へ渡す）" })]));
+    // **アプリの外（生の Markdown）へ出さない。**画面の中に出し、そのまま写せるようにする（2026-10-06 点検）
+    var rq = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "要件として書き出す（作る人へ渡す）" });
+    var rqBox = el("div", { "class": "np-field" });
+    rq.addEventListener("click", function () {
+      fetch("/api/automation/" + encodeURIComponent(r.id) + "/requirement", { credentials: "same-origin" })
+        .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.text(); })
+        .then(function (md) {
+          rqBox.textContent = "";
+          var ta = el("textarea", { rows: "14", readonly: "readonly", "aria-label": "要件（作る人へ渡す文）" });
+          ta.value = md;
+          var cp = el("button", { type: "button", text: "写す" });
+          cp.addEventListener("click", function () {
+            ta.select();
+            (navigator.clipboard ? navigator.clipboard.writeText(md) : Promise.reject()).then(function () { cp.textContent = "写しました"; })
+              .catch(function () { cp.textContent = "選んであります。⌘C / Ctrl+C で写してください"; });
+          });
+          rqBox.appendChild(ta); rqBox.appendChild(el("p", null, [cp]));
+        }).catch(function (e) { rqBox.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    });
+    box.appendChild(el("p", { "class": "np-btnrow" }, [rq]));
+    box.appendChild(rqBox);
     return box;
   }
 
@@ -2873,21 +2910,24 @@
       b.appendChild(btnRow([navBtn("#/ideas", "← アイデアへ戻る", "back"), navBtn("#/settings", "見せ方を変える（設定）", "back")]));
       if (d.why) b.appendChild(el("p", { "class": "np-warn", text: d.why }));
       var m = d.meta || {};
-      b.appendChild(el("p", { "class": "np-note", text: "Auto GROWTH が毎週月曜に出す需要テーマの「市場性」（30点満点）です。最新 " + dash(d.latest_week)
-        + "（今週 " + d.now_week + "）。今週観測されなかったテーマは、Auto GROWTH が最後に観測した週から半減期8週で下げた点で届きます（一過性の高得点を恒久の採点と混ぜないため。こちらでは重ねて下げていません）。客層ごとに上位 " + d.top_n + " つに印を付けています。" }));
+      // 説明は1行だけ。詳しい中身はたたむ（2026-10-06 点検「表の前が長い・内部の言葉が出ている」）
+      b.appendChild(el("p", { "class": "np-note", text: d.latest_week + " の需要テーマです（市場性・30点満点）。客層ごとに上位 " + d.top_n + " つに印。気になるテーマは「アイデアにする」で起票できます。" }));
       if (d.stale) b.appendChild(el("p", { "class": "np-warn", text: d.stale }));
-      if (m.sources_ok) b.appendChild(el("p", { "class": "np-note", text: "今週使えた出どころ: " + (m.sources_ok.join("、") || "なし")
-        + (m.sources_disabled && m.sources_disabled.length ? "／止めている出どころ: " + m.sources_disabled.join("、") : "") }));
-      (m.notes || []).concat(m.not_produced || []).forEach(function (n) { b.appendChild(el("p", { "class": "np-sub", text: "・" + n })); });
+      var more = el("details", { "class": "np-more" });
+      more.appendChild(el("summary", { text: "点の出し方と出どころ" }));
+      more.appendChild(el("p", { "class": "np-sub", text: "Auto GROWTH が毎週月曜に出します。今週観測されなかったテーマは、最後に観測した週から半減期8週で下げた点で届きます（こちらでは重ねて下げていません）。一過性の高得点を恒久の採点と混ぜないため、アイデアの点とは足しません。" }));
+      if (m.sources_ok) more.appendChild(el("p", { "class": "np-sub", text: "今週使えた出どころ: " + (m.sources_ok.join("、") || "なし")
+        + (m.sources_disabled && m.sources_disabled.length ? "／止めている出どころ: " + m.sources_disabled.length + " 種" : "") }));
+      b.appendChild(more);
       if (!d.segments.length) { b.appendChild(el("p", { "class": "np-note", text: "表示できるテーマがありません。" })); return; }
       d.segments.forEach(function (sg) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h2", { text: sg.name }));
-        c.appendChild(table(["", "テーマ", "市場性（減衰後）", "点／上限", "週", "連続", "根拠", "自社側70点", "合計100", ""], sg.themes.map(function (t) {
+        c.appendChild(table(["", "テーマ", "", "市場性（点／上限）", "連続", "根拠", "自社側70点", "合計100"], sg.themes.map(function (t) {
           var act = el("td");
           if (t.idea_id) act.appendChild(el("a", { href: "#/ideas/" + encodeURIComponent(t.idea_id), text: "アイデア " + t.idea_id }));
           else {
-            var bt = el("button", { type: "button", text: "アイデアにする" });
+            var bt = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "アイデアにする" });
             bt.addEventListener("click", function () {
               post("/api/fctr/idea", { theme_id: t.theme_id, segment: sg.segment }).then(function (r) {
                 location.hash = "#/ideas/" + encodeURIComponent(r.id);
@@ -2895,11 +2935,10 @@
             });
             act.appendChild(bt);
           }
-          return el("tr", null, [el("td", { text: t.top ? "上位" + d.top_n : "" }), el("td", { text: t.label }),
-            el("td", { "class": "np-num", text: String(t.decayed) + (t.age_weeks ? "（最後の観測 " + t.observed_week + "・" + t.age_weeks + "週前）" : "") }),
-            el("td", { "class": "np-num", text: t.raw + "／" + dash(t.score_max) }),
-            el("td", { text: t.week_id }), el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
-            el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) }), act]);
+          return el("tr", null, [el("td", { text: t.top ? "上位" + d.top_n : "" }), el("td", { text: t.label }), act,
+            el("td", { "class": "np-num", text: t.decayed + "／" + dash(t.score_max) + (t.age_weeks ? "（最後の観測 " + t.age_weeks + "週前）" : "") }),
+            el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
+            el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) })]);
         })));
         b.appendChild(c);
       });
@@ -3231,24 +3270,34 @@
       setTitle("設定");
       var root = document.documentElement;
 
+      // 保存の状態は節ごとの欄（aria-live）で知らせる。送信中は押せなくする（2026-10-06 点検「保存が伝わらない」）
+      var seq = 0;
       function choice(cur, opts, onPick) {
-        var row = el("div", { "class": "np-choice", role: "group" });
+        var hid = "np-set-h-" + (++seq);
+        var row = el("div", { "class": "np-choice", role: "group", "aria-labelledby": hid });
+        var st = el("span", { "class": "np-status", role: "status", "aria-live": "polite" });
         opts.forEach(function (o) {
           var bt = el("button", { type: "button", text: o.label, "aria-pressed": String(o.value === cur) });
           bt.addEventListener("click", function () {
+            var all = row.querySelectorAll("button");
+            Array.prototype.forEach.call(all, function (x) { x.setAttribute("disabled", "disabled"); });
+            st.textContent = "保存しています…";
             onPick(o.value).then(function () {
-              Array.prototype.forEach.call(row.children, function (x) { x.setAttribute("aria-pressed", String(x === bt)); });
-            }).catch(function (e) { row.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+              Array.prototype.forEach.call(all, function (x) { x.setAttribute("aria-pressed", String(x === bt)); });
+              st.textContent = "保存しました";
+            }).catch(function (e) { st.textContent = "保存できませんでした: " + e.message; })
+              .then(function () { Array.prototype.forEach.call(all, function (x) { x.removeAttribute("disabled"); }); });
           });
           row.appendChild(bt);
         });
-        return row;
+        return { row: row, status: st, id: hid };
       }
-      function section(card, title, note, row) {
+      function section(card, title, note, ch) {
         var w = el("div", { "class": "np-setting" });
-        w.appendChild(el("h3", { text: title }));
+        w.appendChild(el("h3", { id: ch.id, text: title }));
         if (note) w.appendChild(el("p", { "class": "np-sub", text: note }));
-        w.appendChild(row);
+        w.appendChild(ch.row);
+        w.appendChild(ch.status);
         card.appendChild(w);
       }
       function savePref(key) {
@@ -3288,6 +3337,7 @@
       ["trend_top", "trend_order", "trend_faded"].forEach(function (k) {
         section(tr, opt[k].label, null, choice(me.prefs[k], opt[k].options, savePref(k)));
       });
+      tr.appendChild(el("p", { "class": "np-sub", text: "変えた見せ方は、トレンド画面を開き直すと効きます。" }));
       tr.appendChild(btnRow([navBtn("#/trends", "トレンド画面を開く")]));
       b.appendChild(tr);
 
