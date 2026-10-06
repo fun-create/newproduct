@@ -32,7 +32,7 @@ def calendar() -> dict:
         have = {r["occasion"] for r in store.q(
             "SELECT occasion FROM plan_slot WHERE version_id=? AND occasion IS NOT NULL", (v["id"],))}
     annual = []
-    for r in store.q("SELECT * FROM theme WHERE kind='年間イベント' ORDER BY month, sort"):
+    for r in store.q("SELECT * FROM theme WHERE kind='年間イベント' AND active=1 ORDER BY month, sort"):
         m = r["month"]
         # 次に来る回（今月より前の月なら来年）
         y = today.year if m is None or m >= today.month else today.year + 1
@@ -44,7 +44,7 @@ def calendar() -> dict:
     life = store.rows(store.q(
         "SELECT t.id, t.label, t.product_gap, t.product_ideas, s.gift_intent, s.photo_fit, s.frequency, "
         "s.total, s.priority FROM theme t LEFT JOIN theme_score s ON s.theme_id=t.id "
-        "WHERE t.kind='ライフイベント' ORDER BY (s.total IS NULL), s.total DESC, s.priority, t.sort"))
+        "WHERE t.kind='ライフイベント' AND t.active=1 ORDER BY (s.total IS NULL), s.total DESC, s.priority, t.sort"))
     for x in life:
         x["in_plan"] = x["label"] in have
     try:
@@ -61,7 +61,7 @@ def calendar() -> dict:
 
 def to_slot(theme_id: str, user_id: str) -> dict:
     """イベントの2か月前を発売の目安にして、策定中の年間プランへ枠を1つ足す。"""
-    t = store.one("SELECT * FROM theme WHERE id=? AND kind IN ('年間イベント','ライフイベント')", (theme_id,))
+    t = store.one("SELECT * FROM theme WHERE id=? AND kind IN ('年間イベント','ライフイベント') AND active=1", (theme_id,))
     if t is None:
         raise LookupError("その機会はありません")
     v = _target_version()

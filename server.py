@@ -55,6 +55,7 @@ from app import compat as compat_m  # noqa: E402
 from app import competitor as comp_m  # noqa: E402
 from app import prefs as prefs_m  # noqa: E402
 from app import admin as admin_m  # noqa: E402
+from app import events as events_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -585,6 +586,16 @@ class H(BaseHTTPRequestHandler):
             d = self.body()
             return self.sendj(200, admin_m.set_value(d.get("key", ""), d.get("value"), d.get("reason", ""),
                                                      uid, user.get("role"), ip))
+        # 年間・ライフイベント（ADR-060）。**消さない**（使わない にする）。ID は変えない
+        if parts == ["settings", "events"] and method == "GET":
+            r = events_m.listing()
+            r["can_edit"] = events_m.can_edit(uid)
+            return self.sendj(200, r)
+        if parts == ["settings", "events"] and method == "POST":
+            return self.sendj(200, events_m.save(self.body(), uid, ip))
+        if parts == ["settings", "events", "active"] and method == "POST":
+            d = self.body()
+            return self.sendj(200, events_m.set_active(d.get("id", ""), d.get("on") in ("1", "true", "on"), uid, ip))
         # 業務ロールの付け外し（アプリ権限 admin・十文字さんの選択）
         if parts == ["settings", "role"] and method == "POST":
             d = self.body()

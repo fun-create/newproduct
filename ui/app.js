@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -3298,6 +3298,13 @@
       mc.appendChild(btnRow([navBtn("#/manual", "操作マニュアルを開く")]));
       b.appendChild(mc);
 
+      // データの登録（ADR-060〜）。重い登録は別の画面に分ける
+      var dc = el("div", { "class": "np-card" });
+      dc.appendChild(el("h2", { text: "データの登録" }));
+      dc.appendChild(el("p", { "class": "np-sub", text: "このアプリが正本として持つデータを、画面から足したり直したりします。外注先・原材料・商品は seisan、利用者はカレンダーで登録します。" }));
+      dc.appendChild(btnRow([navBtn("#/settings/events", "年間イベント・ライフイベント")]));
+      b.appendChild(dc);
+
       // アプリ全体の設定（ADR-059）。変えられる人にだけ「変える」を出す。**根拠が必須**、空欄は未設定に戻す
       var ac = el("div", { "class": "np-card", id: "np-set-app" });
       ac.appendChild(el("h2", { text: "アプリ全体の設定（全員に効くもの）" }));
@@ -3384,6 +3391,107 @@
     }).catch(fail);
   }
 
+  /** 年間イベント・ライフイベントの登録（ADR-060）。**消さない**（使わない にする）。日付は原文のまま */
+  function viewEvents() {
+    loading();
+    api("/api/settings/events").then(function (d) {
+      var b = clear();
+      setTitle("年間イベント・ライフイベント");
+      b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back"), navBtn("#/opportunities", "機会カレンダーを開く", "back")]));
+      b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーの元になる暦です。いま使っているのは 年間イベント " + d.count["年間イベント"]
+        + "・ライフイベント " + d.count["ライフイベント"] + "（最終更新 " + (d.last ? d.last.edited_at + " " + d.last.edited_by : "—") + "）。"
+        + "消さずに「使わない」にすると、機会カレンダーから外れます。名前を直すと、策定中の年間プランの枠の名前も付け替えます。" }));
+      if (!d.can_edit) b.appendChild(el("p", { "class": "np-note", text: "登録・修正できるのは、商品開発部・管理者・社長の業務ロールの人です。" }));
+      var editing = { row: null };
+
+      function form(kind, r) {
+        var f = el("form", { "class": "np-field" });
+        r = r || {};
+        f.appendChild(el("h3", { text: r.id ? "直す: " + r.label : kind + "を足す" }));
+        function inp(name, label, size, val, extra) {
+          var a = { name: name, size: size || "10", value: val === null || val === undefined ? "" : String(val) };
+          if (extra) Object.keys(extra).forEach(function (k) { a[k] = extra[k]; });
+          return el("label", null, [label + " ", el("input", a)]);
+        }
+        function chk(name, label, on) {
+          var c = el("input", { type: "checkbox", name: name });
+          if (on) c.setAttribute("checked", "checked");
+          return el("label", null, [c, " " + label]);
+        }
+        var p1 = el("p", null, [inp("label", "名前（必須）", 18, r.label)]);
+        if (kind === "年間イベント") {
+          p1.appendChild(txt(" ")); p1.appendChild(inp("month", "月（必須）", 3, r.month, { inputmode: "numeric" }));
+          p1.appendChild(txt(" ")); p1.appendChild(inp("day", "日付（書いたまま残します）", 16, r.day, { placeholder: "例: 11月15日前後の土日" }));
+          f.appendChild(p1);
+          f.appendChild(el("p", null, [chk("sellable", "販売可能性が高い", r.sellable), txt(" "), inp("note", "メモ", 24, r.note)]));
+        } else {
+          f.appendChild(p1);
+          var p2 = el("p");
+          d.axes.forEach(function (a) { p2.appendChild(inp(a.key, a.label + "（0〜" + a.max + "）", 3, r[a.key], { inputmode: "numeric" })); p2.appendChild(txt(" ")); });
+          p2.appendChild(inp("priority", "優先順位", 3, r.priority, { inputmode: "numeric" }));
+          f.appendChild(p2);
+          f.appendChild(el("p", { "class": "np-sub", text: "総合点は自動で計算します（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2、満点40）。3つそろわないと未設定のままです。" }));
+          f.appendChild(el("p", null, [chk("sellable", "販売可能性が高い", r.sellable), txt(" "), chk("product_gap", "商品が作れていない", r.product_gap), txt(" "),
+            inp("product_ideas", "商品例", 24, r.product_ideas), txt(" "), inp("note", "メモ", 18, r.note)]));
+        }
+        var bar = el("p", null, [el("button", { type: "submit", text: r.id ? "直す" : "足す" })]);
+        f.appendChild(bar);
+        function send(confirm) {
+          var o = { kind: kind, id: r.id || "", confirm: confirm ? "1" : "" };
+          ["label", "month", "day", "note", "priority", "product_ideas"].concat(d.axes.map(function (a) { return a.key; })).forEach(function (k) {
+            if (f.elements[k]) o[k] = f.elements[k].value; });
+          ["sellable", "product_gap"].forEach(function (k) { if (f.elements[k]) o[k] = f.elements[k].checked ? "1" : ""; });
+          post("/api/settings/events", o).then(function (res) {
+            if (res.similar) {
+              if (window.confirm("似た名前があります: " + res.similar.map(function (x) { return x.label; }).join("、") + "\n別のものとして保存しますか？")) send(true);
+              return;
+            }
+            viewEvents();
+          }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        }
+        f.addEventListener("submit", function (ev) { ev.preventDefault(); send(false); });
+        return f;
+      }
+
+      ["年間イベント", "ライフイベント"].forEach(function (kind) {
+        var c = el("div", { "class": "np-card" });
+        c.appendChild(el("h2", { text: kind }));
+        var rows = d.rows.filter(function (r) { return r.kind === kind; });
+        var head = kind === "年間イベント" ? ["名前", "月", "日付（原文）", "販売可能性", "枠", "状態", "出どころ", ""]
+          : ["名前", "総合", "購買意欲", "写真", "頻度", "優先", "商品が作れていない", "枠", "状態", "出どころ", ""];
+        var slot = el("div");
+        c.appendChild(table(head, rows.map(function (r) {
+          var act = el("td");
+          if (d.can_edit) {
+            var e1 = el("button", { type: "button", text: "直す" });
+            e1.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(kind, r)); slot.scrollIntoView({ block: "nearest" }); });
+            var e2 = el("button", { type: "button", text: r.active ? "使わない" : "使う" });
+            e2.addEventListener("click", function () {
+              if (r.active && !window.confirm("「" + r.label + "」を使わないにします。機会カレンダーから外れます（既存の枠の記録は残ります）。よろしいですか")) return;
+              post("/api/settings/events/active", { id: r.id, on: r.active ? "0" : "1" }).then(function () { viewEvents(); })
+                .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            act.appendChild(e1); act.appendChild(txt(" ")); act.appendChild(e2);
+          }
+          var common = [el("td", { text: r.slots ? r.slots + " 件" : "—" }), el("td", { text: r.active ? "使う" : "使わない" }), el("td", { text: r.origin }), act];
+          if (kind === "年間イベント") return el("tr", null, [el("td", { text: r.label }), el("td", { "class": "np-num", text: dash(r.month) }),
+            el("td", { text: dash(r.day) }), el("td", { text: r.sellable ? "高い" : "—" })].concat(common));
+          return el("tr", null, [el("td", { text: r.label }), el("td", { "class": "np-num", text: r.total === null ? "未設定" : String(r.total) }),
+            el("td", { "class": "np-num", text: dash(r.gift_intent) }), el("td", { "class": "np-num", text: dash(r.photo_fit) }),
+            el("td", { "class": "np-num", text: dash(r.frequency) }), el("td", { "class": "np-num", text: dash(r.priority) }),
+            el("td", { text: r.product_gap ? "印あり" : "—" })].concat(common));
+        })));
+        c.appendChild(slot);
+        if (d.can_edit) {
+          var add = el("button", { type: "button", "class": "np-btn", text: kind + "を足す" });
+          add.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(kind, null)); });
+          c.appendChild(el("p", { "class": "np-btnrow" }, [add]));
+        }
+        b.appendChild(c);
+      });
+    }).catch(fail);
+  }
+
   function viewManual() {
     loading();
     api("/api/manual").then(function (d) {
@@ -3439,6 +3547,7 @@
     if (path === "#/reports") return viewReports();
     if (path === "#/settings") return viewSettings();
     if (path === "#/manual") return viewManual();
+    if (path === "#/settings/events") return viewEvents();
     return viewNotYet(path, entry);
   }
 

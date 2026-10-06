@@ -39,6 +39,10 @@ F-2（機会カレンダー）の要件ではない。**入れないことを、
 （13件・商品例つき）が同じ列を使う。こちらは数値5連を持たないので、式の検算で分かれる。
 **列位置だけで読むと、この2つが混ざる。**それが 09-21 に恐れたことで、恐れ自体は正しかった。
 
+## 画面で直した行は上書きしない（2026-10-06・ADR-060）
+
+設定ページで登録・修正した行には `theme.edited_at` が付く。流し直しても、その行は**変えない**。
+
 ## 入れないもの
 
 - **日付は原文のまま** `theme.day` へ入れる（「11月15日前後の土日」「1月の第２月曜日」
@@ -157,7 +161,7 @@ def apply(d: dict, user_id: str = "import") -> dict:
                 "source_row,source_col) VALUES (?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET month=excluded.month,day=excluded.day,"
                 "sort=excluded.sort,sellable=excluded.sellable,"
-                "source_row=excluded.source_row",
+                "source_row=excluded.source_row WHERE theme.edited_at IS NULL",
                 (tid, e["name"], "年間イベント", e["month"], e["day"], k, None,
                  1 if e["name"] in d["sellable"] else 0, e["row"], 3))
             n["annual"] += 1
@@ -168,7 +172,8 @@ def apply(d: dict, user_id: str = "import") -> dict:
                 "source_row,source_col) VALUES (?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(id) DO UPDATE SET sort=excluded.sort,"
                 "sellable=excluded.sellable,"
-                "source_row=excluded.source_row,source_col=excluded.source_col",
+                "source_row=excluded.source_row,source_col=excluded.source_col "
+                "WHERE theme.edited_at IS NULL",
                 # **採点済みライフイベントは全件が「販売可能性が高い」。**
                 # 元表2行目の見出しが「販売可能性が高いライフイベント」（7列目）で、
                 # この列に並んでいること自体が印。別に印の列があるわけではない
@@ -179,7 +184,8 @@ def apply(d: dict, user_id: str = "import") -> dict:
                 "total,priority,source,captured_at) VALUES (?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(theme_id) DO UPDATE SET gift_intent=excluded.gift_intent,"
                 "photo_fit=excluded.photo_fit,frequency=excluded.frequency,"
-                "total=excluded.total,priority=excluded.priority",
+                "total=excluded.total,priority=excluded.priority "
+                "WHERE theme_id NOT IN (SELECT id FROM theme WHERE edited_at IS NOT NULL)",
                 (tid, e["gift_intent"], e["photo_fit"], e["frequency"], e["total"],
                  e["priority"], f"{SOURCE} 行{e['row']}（{e['col'] + 1}列目）", now))
             n["scored"] += 1
@@ -191,7 +197,7 @@ def apply(d: dict, user_id: str = "import") -> dict:
                 "INSERT INTO theme (id,label,kind,sort,product_gap,product_ideas,"
                 "source_row,source_col) VALUES (?,?,?,?,1,?,?,10) "
                 "ON CONFLICT(id) DO UPDATE SET product_gap=1,"
-                "product_ideas=excluded.product_ideas",
+                "product_ideas=excluded.product_ideas WHERE theme.edited_at IS NULL",
                 (tid, e["name"], "ライフイベント", 900 + e["row"], e["ideas"],
                  e["row"]))
             n["gaps"] += 1
