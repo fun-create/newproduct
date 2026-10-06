@@ -31,10 +31,10 @@ def save(pid: str, f: dict, user_id: str) -> dict:
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     method = (f.get("method") or "").strip()
     if method not in METHODS:
-        raise ValueError("方式は " + "／".join(METHODS) + " から選んでください（自由入力にしない・F-10-8）")
+        raise ValueError("方式は " + "／".join(METHODS) + " から選んでください（自由入力にしない）")
     basis = (f.get("basis") or "").strip()[:2000]
     if len(basis) < BASIS_MIN:
         raise ValueError(f"根拠を書いてください（{METHODS[method]}）")

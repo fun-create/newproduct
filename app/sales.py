@@ -408,7 +408,7 @@ def new_product_summary() -> dict:
         r = {"id": p["id"], "product": project_m.product_label(p), "internal_name": p["internal_name"],
              "launch_date": p["launch_date"], "basis": p["revenue_basis"], "amount": None, "why": None}
         if p["revenue_basis"] not in ("全額", "増分"):
-            r["why"] = "全額か増分かが選ばれていません（F-4-9）"
+            r["why"] = "全額か増分かが選ばれていません"
             tot["方式未選択"] += 1
             rows.append(r); continue
         ps = project_sales(p["id"])

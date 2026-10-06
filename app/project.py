@@ -97,7 +97,7 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
     rc = 1 if str(f.get("revenue_counted") or "0") in ("1", "true", "含める") else 0
     basis = (f.get("revenue_basis") or "").strip() or None
     if rc and basis not in REVENUE_BASIS:
-        raise ValueError("売上に含めるなら、計上方式（全額／増分）を選んでください（F-4-9）")
+        raise ValueError("売上に含めるなら、計上方式（全額／増分）を選んでください")
     if not rc:
         basis = None
     ep = f.get("effort_point")
@@ -228,8 +228,8 @@ def listing(args: dict | None = None) -> dict:
                 "WHERE launch_date IS NOT NULL ORDER BY 1")],
         },
         "notes": [
-            "商品名は表示しません。分類（cat1/cat2/cat3）とサイズで表します（N-6-2）。",
-            "`試算原価` の列は第3段で入ります。いまは未実装です。",
+            "商品名は表示しません。分類（cat1/cat2/cat3）とサイズで表します。",
+            "試算原価 の列は第3段で入ります。いまは未実装です。",
         ],
     }
 
@@ -334,7 +334,7 @@ def save_section(project_id: str, key: str, body: str, user_id: str):
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     with store.tx() as c:
         c.execute("INSERT INTO project_section (project_id,section_key,body,"
                   "updated_by,updated_at) VALUES (?,?,?,?,?) "
@@ -413,7 +413,7 @@ def move_stage(pid: str, action: str, user_id: str, reason_code: str = "", note:
         raise LookupError("案件がありません")
     p = dict(p)
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     o = stage_options(p)
     hold_from = p.get("stage_before_hold")
     if action == "next":
@@ -427,7 +427,7 @@ def move_stage(pid: str, action: str, user_id: str, reason_code: str = "", note:
             raise ValueError("いまのステージからは選べません")
         table = "hold_reason" if action == "hold" else "abort_reason"
         if not reason_code or store.one(f"SELECT 1 FROM {table} WHERE code=?", (reason_code,)) is None:
-            raise ValueError(("保留" if action == "hold" else "中止") + "の理由を選んでください（選択式・F-6-5）")
+            raise ValueError(("保留" if action == "hold" else "中止") + "の理由を選んでください（選択式）")
         to = "保留" if action == "hold" else "中止"
         if action == "hold":
             hold_from = p["stage"]
@@ -455,7 +455,7 @@ def save_variant(pid: str, f: dict, user_id: str) -> dict:
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     label = (f.get("label") or "").strip()[:80]
     if not label:
         raise ValueError("本体モデル（バリエーション名）を入れてください")
@@ -499,7 +499,7 @@ def delete_variant(pid: str, vid, user_id: str) -> dict:
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     with store.tx() as c:
         v = c.execute("SELECT * FROM project_variant WHERE id=? AND project_id=?", (int(vid), pid)).fetchone()
         if v is None:
@@ -519,7 +519,7 @@ def set_revenue(pid: str, counted: bool, basis: str, user_id: str) -> dict:
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     basis = (basis or "").strip() or None
     if counted and basis not in REVENUE_BASIS:
         raise ValueError("含めるときは「全額」か「増分」を選んでください（リニューアルは増分が目安）")

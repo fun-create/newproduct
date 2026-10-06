@@ -39,33 +39,33 @@ OPEN_STAGES = ("起票", "質問中", "要件確定", "実装待ち", "実装中
 # key, 質問文, なぜ聞くか, 必須か, 例
 QUESTIONS = [
     ("how_now", "いま、どうやっていますか（手順を1〜2行で）",
-     "自動化は今の手順の写し。**手順が書けない作業は自動化できません。**",
+     "自動化は今の手順の写し。手順が書けない作業は自動化できません。",
      True, "WebDecoの管理画面を開く → 画像を1枚ずつアップ → サイズを選んで保存"),
     ("input", "何を渡すと、その作業が始まりますか（入力）",
-     "**始まりが決まらないと、いつ動かすかが決まりません。**"
+     "始まりが決まらないと、いつ動かすかが決まりません。"
      "「電子タバコの写真」のように、物で答えてください。",
      True, "元となる画像1枚（PNG・透過）"),
     ("output", "何ができたら、終わりですか（出力）",
-     "**終わりが決まらないと、できたかどうかを誰も判定できません。**",
+     "終わりが決まらないと、できたかどうかを誰も判定できません。",
      True, "各サイズ（S/M/L）の画像が作られ、管理画面に登録まで済んでいる"),
     ("judgement", "人が見ないと決められないところは、どこですか",
-     "**ここが自動化の可否を分けます。**全部が機械で決まるなら丸ごと自動化でき、"
+     "ここが自動化の可否を分けます。全部が機械で決まるなら丸ごと自動化でき、"
      "1か所だけ人の目が要るなら、そこで止めて人に見せる作りにします。"
-     "**「無い」なら「無い」と答えてください。**",
+     "「無い」なら「無い」と答えてください。",
      True, "色味の調整。元画像によっては人が見ないと決まらない"),
     ("tools", "いま使っている道具（画面・ソフト）は何ですか",
      "つなぎ方が変わります。管理画面しか無いものと、"
      "ファイルを置けば済むものとでは、作りが違います。",
      True, "WebDeco管理画面 ／ Photoshop"),
     ("freq", "どのくらいの頻度で、1回どのくらい時間がかかりますか",
-     "**効果の見積りに使います。**「月に何回」「1回あたり何分」を、"
+     "効果の見積りに使います。「月に何回」「1回あたり何分」を、"
      "おおよそで構いませんので数で。",
      True, "月20回・1回30分"),
     ("risk", "間違えたら、どうなりますか（やり直せますか／お客様に出ますか）",
-     "やり直せない作業や、お客様に出るものは、**自動化しても人の承認を挟みます。**",
+     "やり直せない作業や、お客様に出るものは、自動化しても人の承認を挟みます。",
      True, "登録し直せば直る。お客様には出ない"),
     ("done_check", "「できた」と分かるのは、何を見たときですか",
-     "**自動化したあと、動いているかを見張るための目印です。**"
+     "自動化したあと、動いているかを見張るための目印です。"
      "これが無いと、黙って止まっていても誰も気づきません。",
      True, "管理画面のスタンプ一覧に3サイズとも並んでいること"),
     ("extra", "ほかに、伝えておきたいことはありますか",
@@ -162,7 +162,7 @@ def effort(request_id: str) -> dict:
         return {"hours_per_month": None, "state": "未計測",
                 "why": "1回あたりの時間と月の回数が未入力です。"
                        + ("「どのくらいの頻度で」の答えはあります（"
-                          + a["freq"]["answer"][:40] + "）が、**文章のままでは数えられません。**"
+                          + a["freq"]["answer"][:40] + "）が、文章のままでは数えられません。"
                           "数を入れてください" if a.get("freq") and a["freq"]["answer"]
                           else "「どのくらいの頻度で」の質問がまだです")}
     # 標準タスクに当たるなら、既にある AI削減の見込みを添える
@@ -179,7 +179,7 @@ def effort(request_id: str) -> dict:
             "per_year": round(float(r["hours_per_month"]) * 12, 1),
             "template": tpl,
             "note": "この時間は依頼した人の申告です。"
-                    + ("標準タスク「%s」のAI削減見込み（%s）とは別の数字で、**足しません。**"
+                    + ("標準タスク「%s」のAI削減見込み（%s）とは別の数字で、足しません。"
                        % (tpl["title"],
                           "未算出" if tpl["ai_reduction_rate"] is None
                           else f"{tpl['ai_reduction_rate']:.0%}")
@@ -211,7 +211,7 @@ def set_stage(request_id: str, stage: str, user_id: str, handoff_to: str = "") -
         if not p["ready"]:
             raise ValueError(
                 "必要な質問が %d問 残っています（%s）。"
-                "**答えが揃う前に実装へ渡さない**のがこの画面の趣旨です"
+                "答えが揃う前に実装へ渡さないのがこの画面の趣旨です"
                 % (len(p["missing"]), "・".join(QMAP[k][1] for k in p["missing"])[:80]))
     with store.tx() as c:
         c.execute("UPDATE automation_request SET stage=?,decided_by=?,decided_at=?,"
@@ -272,10 +272,10 @@ def listing(args: dict | None = None) -> dict:
         # **測れていない件数を必ず出す**（N-10）。合計だけ見せると全部の合計に見える
         "hours_note": (
             f"月あたりの時間が入っているのは {measured[0]['n'] if measured else 0} / "
-            f"{n_all} 件です。**残りは未計測**で、合計には入っていません。"),
+            f"{n_all} 件です。残りは未計測で、合計には入っていません。"),
         "template_note": (
-            f"**{n_gap} 件は標準タスク178行のどれにも当たりません。**"
-            "「やっていない」のではなく、**表のほうが現場に追いついていない**という意味です。"
+            f"{n_gap} 件は標準タスク178行のどれにも当たりません。"
+            "「やっていない」のではなく、表のほうが現場に追いついていないという意味です。"
             if n_gap else None),
         "stages": STAGES,
     }
@@ -310,7 +310,7 @@ def detail(request_id: str) -> dict | None:
             "SELECT * FROM automation_note WHERE request_id=? ORDER BY at", (request_id,))),
         "stages": STAGES,
         "handoff_note":
-            "**このアプリは実装しません。**答えが揃ったら要件として書き出し、"
+            "このアプリは実装しません。答えが揃ったら要件として書き出し、"
             "作る人へ渡すところまでが、この画面の役目です。",
     }
 
@@ -371,9 +371,9 @@ def _setting(key: str, default=None):
 def seed_settings() -> int:
     rows = [
         (ROOM_SETTING, "自動化依頼を渡す ChatWork の部屋ID", "text", None,
-         "**未設定です。**入れるまで送信できません。"
-         "トークンは `config/chatwork.env`（0600・このアプリ専用に発行）に置きます。"
-         "**他のアプリのトークンを写さないでください**"),
+         "未設定です。入れるまで送信できません。"
+         "トークンは config/chatwork.env（0600・このアプリ専用に発行）に置きます。"
+         "他のアプリのトークンを写さないでください"),
         (BASE_URL_SETTING, "本文に載せるこのアプリのURL", "text", None, None),
     ]
     for key, label, kind, unit, why in rows:
@@ -446,7 +446,7 @@ def chatwork_status(request_id: str) -> dict:
         "preview": chatwork_text(request_id),
         "sent_count": r["sent_count"], "sent_at": r["sent_at"],
         "sent_room": r["sent_room"], "sent_message_id": r["sent_message_id"],
-        "note": "**ChatWork は取り消せません。**送る前に上の文面をそのまま確かめてください。"
+        "note": "ChatWork は取り消せません。送る前に上の文面をそのまま確かめてください。"
                 "自動では送りません（人が押したときだけ送ります）。",
     }
 
@@ -463,7 +463,7 @@ def chatwork_send(request_id: str, user_id: str, *, sender=None,
     if r["sent_count"] and not allow_resend:
         raise ValueError(
             f"この依頼は {r['sent_at']} に既に送っています（{r['sent_count']} 回）。"
-            "もう一度送るなら「再送する」を選んでください。**ChatWork は取り消せません**")
+            "もう一度送るなら「再送する」を選んでください。ChatWork は取り消せません")
     room = _setting(ROOM_SETTING)
     res = cw.post(room, st["preview"], sender=sender)
     with store.tx() as c:

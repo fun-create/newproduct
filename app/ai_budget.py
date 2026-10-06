@@ -74,7 +74,7 @@ def seed_settings() -> int:
              "kind=excluded.kind,unit=excluded.unit,why=excluded.why",
              (ENDPOINT_SETTING, DEFAULT_ENDPOINT, "AI予算の確認先（Auto GROWTH）",
               "text", None,
-              "同じホストの口。**枠の正本はあちら。**外からは 403 で落ちる"))
+              "同じホストの口。枠の正本はあちら。外からは 403 で落ちる"))
     return 1
 
 
@@ -86,7 +86,7 @@ def check_job(job: str) -> str:
     if not job.startswith(JOB_PREFIX):
         raise BadJob(
             f"job 名は {JOB_PREFIX!r} で始めてください（受け取った値: {job!r}）。"
-            "始まらないと **job 別の上限が効かず、全体の枠を引きます**"
+            "始まらないと job 別の上限が効かず、全体の枠を引きます"
             "（実測: cap 0.0 / remaining null）")
     return job
 
@@ -100,7 +100,7 @@ def _call(method: str, url: str, payload: dict | None, *, caller=None) -> dict:
         except (OSError, ValueError) as e:
             raise BudgetUnavailable(
                 f"AI予算の口につながりません（{type(e).__name__}）。"
-                "**確かめられないので使いません。**"
+                "確かめられないので使いません。"
                 f"口: {url}") from None
     data = None
     headers = {}
@@ -124,12 +124,12 @@ def _call(method: str, url: str, payload: dict | None, *, caller=None) -> dict:
             return d
         raise BudgetUnavailable(
             f"AI予算の口が {e.code} を返しました（予算の返事の形ではありません）。"
-            f"**別のものが同じポートに居る可能性があります。**口: {url} / 応答: {body[:120]}"
+            f"別のものが同じポートに居る可能性があります。口: {url} / 応答: {body[:120]}"
         ) from None
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise BudgetUnavailable(
             f"AI予算の口につながりません（{type(e).__name__}）。"
-            "**確かめられないので使いません。**"
+            "確かめられないので使いません。"
             f"口: {url}") from None
 
 
@@ -148,7 +148,7 @@ def check(job: str, *, caller=None) -> dict:
     if not isinstance(d, dict) or not ({"ok", "cap", "reason"} & set(d)):
         return {"state": "unavailable", "usable": False, "job": j,
                 "why": "AI予算の口が、予算の返事の形で応えていません。"
-                       f"**別のものが同じポートに居る可能性があります。**口: {endpoint()}"}
+                       f"別のものが同じポートに居る可能性があります。口: {endpoint()}"}
     if not d.get("ok"):
         return {"state": "over_cap" if d.get("reason") == "over_cap" else "refused",
                 "usable": False, "why": d.get("detail") or d.get("reason") or "断られました",
@@ -157,7 +157,7 @@ def check(job: str, *, caller=None) -> dict:
     if d.get("cap") in (None, 0, 0.0) or rem is None:
         return {"state": "no_cap", "usable": False, "job": j,
                 "why": f"job {j!r} に枠がありません（cap={d.get('cap')}）。"
-                       "Auto GROWTH の `per_job` に入っているか確かめてください",
+                       "Auto GROWTH の per_job に入っているか確かめてください",
                 **{k: d.get(k) for k in ("cap", "spent", "remaining", "scope")}}
     return {
         "state": "ok" if rem > 0 else "over_cap", "usable": rem > 0, "job": j,
@@ -166,8 +166,8 @@ def check(job: str, *, caller=None) -> dict:
         "month_cap": d.get("month_cap"),
         # **合算であることを言葉で持たせる**（画面がここを出す）
         "spent_label": f"枠（{d.get('scope')}）の今月の使用額",
-        "note": "この金額は **枠の合算**です。"
-                f"{' と '.join(JOBS)} が同じ 5.0 を分け合います（ADR-037）。",
+        "note": "この金額は 枠の合算です。"
+                f"{' と '.join(JOBS)} が同じ 5.0 を分け合います。",
     }
 
 

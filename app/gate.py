@@ -227,7 +227,7 @@ def review(project_id: str, gate: str, result: str, user_id: str,
         table = "hold_reason" if result == "保留" else "abort_reason"
         if not reason_code or store.one(
                 f"SELECT 1 FROM {table} WHERE code=?", (reason_code,)) is None:
-            raise ValueError(f"{result} には理由の選択が要ります（選択式・F-6-5）")
+            raise ValueError(f"{result} には理由の選択が要ります（選択式）")
         reason_code = reason_code
     else:
         reason_code = ""

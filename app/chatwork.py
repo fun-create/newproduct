@@ -50,8 +50,8 @@ def _read_token() -> str:
     if not p.is_file():
         raise NotConfigured(
             f"{p} がありません。ChatWork のAPIトークンを、このアプリ専用に発行して"
-            f"置いてください（`{TOKEN_KEY}=…` の1行・権限 600・所有者 newproduct）。"
-            "**他のアプリのトークンを写さないでください**（どのアプリが投げたのか"
+            f"置いてください（{TOKEN_KEY}=… の1行・権限 600・所有者 newproduct）。"
+            "他のアプリのトークンを写さないでください（どのアプリが投げたのか"
             "分からなくなり、片方を止めると両方止まります）")
     for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -77,7 +77,7 @@ def status(room_id: str | None) -> dict:
         why = str(e)
     ok = bool(room_id) and has_token
     if not room_id:
-        why = ("送り先の部屋が未設定です。設定 `automation.chatwork_room_id` に"
+        why = ("送り先の部屋が未設定です。設定 automation.chatwork_room_id に"
                "ChatWork の部屋IDを入れてください" + (f"／{why}" if why else ""))
     return {"ready": ok, "token_file": str(p), "has_token": has_token,
             "room_id": room_id, "why": None if ok else why}

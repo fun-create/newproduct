@@ -342,7 +342,7 @@ def overview(pid: str, user_id: str) -> dict:
 def _guard_edit(pid: str) -> dict:
     p = _project(pid)
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     return p
 
 

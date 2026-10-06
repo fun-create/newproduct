@@ -56,7 +56,7 @@ def _editable(pid: str):
     if p is None:
         raise LookupError("案件がありません")
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
 
 
 def apply(pid: str, template_id, user_id: str) -> dict:

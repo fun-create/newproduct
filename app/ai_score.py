@@ -69,8 +69,8 @@ def setting_on() -> bool:
 
 def reason_off(budget: dict | None = None) -> str:
     if not setting_on():
-        return ("AI採点は設定で off です（`ai_scoring_enabled`）。"
-                "予算枠は 2026-09-24 に付きました（`newproduct-*` 5.0）。"
+        return ("AI採点は設定で off です（ai_scoring_enabled）。"
+                "予算枠は 2026-09-24 に付きました（newproduct-* 5.0）。"
                 "使うなら設定で on にしてください。")
     b = budget or ai_budget.check(JOB)
     return f"予算を確かめられないか、残りがありません: {b.get('why') or b.get('state')}"
@@ -99,15 +99,15 @@ def status() -> dict:
         "budget": b,
         "setting_on": setting_on(),
         "scorer_implemented": False,
-        "scorer_note": "**モデルを呼ぶ実装はまだありません。**"
-                       "予算の口はできているので、`Scorer` を足せば動きます。",
+        "scorer_note": "モデルを呼ぶ実装はまだありません。"
+                       "予算の口はできているので、Scorer を足せば動きます。",
         "rubric_version": idea_m.V2_VERSION,
         "records": {
             "kept": ["rubric版（idea_score.rubric_version）",
                      "実行日時（idea_score.scored_at）",
                      "モデル名（idea_score.model）"],
-            "why": "F-1-11。どの基準で・いつ・何が付けた点なのかが残らないと、"
-                   "採点が当たったかどうかを後から検証できない（Q1-D）",
+            "why": "どの基準で・いつ・何が付けた点なのかが残らないと、"
+                   "採点が当たったかどうかを後から検証できない",
         },
         "ai_scored": store.val(
             "SELECT COUNT(*) FROM idea_score WHERE scored_by='ai'", (), 0),
@@ -139,7 +139,7 @@ def run_batch(idea_ids: list[str], user_id: str, scorer: Scorer | None = None,
             axes = sc.score(dict(r))
             res = idea_m.score_v2(iid, axes, user_id, scored_by="ai",
                                   model=sc.model,
-                                  source_note="AI採点（F-1-11）")
+                                  source_note="AI採点")
             out.append({"id": iid, "total": res["total"], "rank": res["rank"],
                         "model": sc.model})
         except (ValueError, LookupError, RuntimeError) as e:

@@ -40,25 +40,25 @@ RULES = ["ratio", "effort", "count", "holiday"]
 # code, label, seq, ratio_group, counts_as_launch, default_flow, note
 PRODUCT_KINDS = [
     ("original", "オリジナルグッズ", 1, "original", 1, None,
-     "3:1 の「3」の側。**2026-09-23 十文字さんの決定で「うちわか、そうでないか」で"
-     "数えることに決着した**ので、この行に当たらない枠（その他・未設定）も"
+     "3:1 の「3」の側。2026-09-23 十文字さんの決定で「うちわか、そうでないか」で"
+     "数えることに決着したので、この行に当たらない枠（その他・未設定）も"
      "「うちわ以外」として同じ側に入る"),
     ("uchiwa", "うちわ", 2, "uchiwa", 1, None,
-     "3:1 の「1」の側。**`ratio_group='uchiwa'` だけがこちら側**"),
+     "3:1 の「1」の側。ratio_group='uchiwa' だけがこちら側"),
     ("pagerenew", "ページリニューアル", 3, None, 0, "pagerenew",
-     "**発売本数に数えない**（F-10-11）。売上計上も既定で含めない（F-4-9）。"
+     "発売本数に数えない。売上計上も既定で含めない。"
      "計画の38%を占めるため、これを本数に混ぜると「月3商品」が達成に見える"),
     ("other", "その他", 9, None, 1, None,
-     "LOVOT・ぶっこみなど。**比率では「うちわ以外」として3の側に数える**"
+     "LOVOT・ぶっこみなど。比率では「うちわ以外」として3の側に数える"
      "（2026-09-23 の決定）。発売本数にも数える"),
 ]
 
 SETTINGS = [
     ("plan.ratio_original_to_uchiwa", "挿入ルール: うちわ以外：うちわ", "text", None,
-     "出典は2026年度 年間プランの挿入ルール（3:1）。**2026-09-23 十文字さんの決定で"
-     "「うちわか、そうでないか」で数える**ことに決着。ここは比の数だけを持つ"),
+     "出典は2026年度 年間プランの挿入ルール（3:1）。2026-09-23 十文字さんの決定で"
+     "「うちわか、そうでないか」で数えることに決着。ここは比の数だけを持つ"),
     ("plan.ratio_tolerance_slots", "比率の許容差", "number", "枠",
-     "**枠1本ぶんまでは警告しない。**年間26枠で 3:1 は割り切れず、"
+     "枠1本ぶんまでは警告しない。年間26枠で 3:1 は割り切れず、"
      "端数のたびに警告が出ると誰も読まなくなる"),
     ("plan.effort_min", "月間工数ポイントの下限", "number", "点", None),
     ("plan.effort_max", "月間工数ポイントの上限", "number", "点", None),
@@ -67,13 +67,13 @@ SETTINGS = [
      "F-2-3 の逆算。枠を案件に変えたとき、この月数を発売予定日から引いた日を"
      "「タスクを組み終える期限」として返す"),
     ("plan.holiday_months", "長期連休のある月", "text", None,
-     "**未設定です。**正本は Calendar（calfc）の会社休業日で、まだ連携していません。"
+     "未設定です。正本は Calendar（calfc）の会社休業日で、まだ連携していません。"
      "推測で 1・5・8月と置くと、置いたこと自体が根拠に見えてしまうため空にしてあります。"
      "決まるまで連休ルールは「未計測」と出します"),
     ("plan.holiday_month_max_slots", "連休月の枠の上限", "number", "本",
-     "**未設定です。**「多くしない」としか決まっておらず、本数が決まっていません"),
+     "未設定です。「多くしない」としか決まっておらず、本数が決まっていません"),
     ("plan.fiscal_year_start_month", "年度の開始月", "number", "月",
-     "**未設定です。**このアプリは年度の開始月を使わない作りにしてあります"
+     "未設定です。このアプリは年度の開始月を使わない作りにしてあります"
      "（枠のある月だけを並べる）。空欄のままで支障はありません"),
 ]
 
@@ -238,7 +238,7 @@ def create_slot(user_id: str, **f) -> dict:
     if v is None:
         raise ValueError("版を選んでください")
     if v["state"] != "策定中":
-        raise ValueError(f"{v['state']}の版は編集できません。改訂版を作ってください（F-3-4）")
+        raise ValueError(f"{v['state']}の版は編集できません。改訂版を作ってください")
     date = (f.get("launch_date") or "").strip() or None
     if date:
         _dt.date.fromisoformat(date)     # 形が違えば ValueError で弾く
@@ -285,7 +285,7 @@ def update_slot(slot_id: str, user_id: str, **f) -> dict:
     if s is None:
         raise ValueError("その枠がありません")
     if s["state"] != "策定中":
-        raise ValueError(f"{s['state']}の版は編集できません。改訂版を作ってください（F-3-4）")
+        raise ValueError(f"{s['state']}の版は編集できません。改訂版を作ってください")
     if s["project_id"]:
         raise ValueError("案件に変換済みの枠です。案件の側で直してください")
     sets, p = [], []
@@ -462,8 +462,7 @@ def _rule_count(rows: list[dict]) -> list[dict]:
         lvl = "ok" if n == int(want) else "warn"
         msg = f"{n} 本（目標 {int(want)} 本）"
         if skipped:
-            msg += (f"。ページリニューアル等 {skipped} 本は本数に数えていません"
-                    "（F-10-11）")
+            msg += f"。ページリニューアル等 {skipped} 本は本数に数えていません"
         out.append(_r("count", m, lvl, msg, n=n, want=int(want), skipped=skipped))
     return out
 
@@ -474,7 +473,7 @@ def _rule_holiday(rows: list[dict]) -> list[dict]:
     if not months or cap is None:
         return [_r("holiday", "FY", "unavailable",
                    "長期連休のある月が未設定です。正本は Calendar（calfc）の"
-                   "会社休業日で、まだ連携していません。**推測で埋めていません**ので、"
+                   "会社休業日で、まだ連携していません。推測で埋めていませんので、"
                    "この月は人が見てください")]
     try:
         hm = {int(x) for x in months.replace("　", " ").replace(",", " ").split()}
@@ -509,11 +508,11 @@ def check(version_id: str) -> dict:
     return {
         "results": res, "counts": n,
         "warn_unacked": sum(1 for r in res if r["level"] == "warn" and not r["acked"]),
-        "note": "**警告は保存を止めません**（F-3-3）。例外は理由を付けて承知できますが、"
+        "note": "警告は保存を止めません。例外は理由を付けて承知できますが、"
                 "承知しても警告は消えません。消せる作りにすると理由が書かれなくなります。",
         "effort_unit_note":
-            "月間10〜15 は枠の**工数ポイント**（フロー係数）の合計です。"
-            "標準タスクの**時間(h)**ではありません。時間側の月次負荷はタスク画面に"
+            "月間10〜15 は枠の工数ポイント（フロー係数）の合計です。"
+            "標準タスクの時間(h)ではありません。時間側の月次負荷はタスク画面に"
             "別に出しています（予備時間の扱いが未決のため、そちらは実態より軽く出ます）。",
     }
 
@@ -523,7 +522,7 @@ def ack(version_id: str, rule: str, scope: str, reason: str, user_id: str) -> di
         raise ValueError(f"知らないルール {rule!r}")
     reason = (reason or "").strip()
     if not reason:
-        raise ValueError("例外にする理由を書いてください（F-3-3）")
+        raise ValueError("例外にする理由を書いてください")
     if store.one("SELECT 1 FROM plan_version WHERE id=?", (version_id,)) is None:
         raise ValueError("その版がありません")
     with store.tx() as c:
@@ -609,11 +608,11 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
                    f"{s['version_label']} / {s['launch_month']} / 枠 {slot_id}"
                    f" ／ タスク設定期限 {due.get('due') or '未算出'}"))
     msg = ("案件を作りました。"
-           + (f"**タスクを組み終える期限は {due['due']}**"
+           + (f"タスクを組み終える期限は {due['due']}"
               f"（発売の{due.get('lead_months')}か月前・残り {due['days_left']} 日）。"
               if due.get("due") else f"タスク設定期限は出せません（{due.get('reason')}）。"))
     if kind is not None and not kind["counts_as_launch"]:
-        msg += f"　この枠（{kind['label']}）は**発売本数に数えません**（F-10-11）。"
+        msg += f"　この枠（{kind['label']}）は発売本数に数えません。"
     if not r.get("template_defined"):
         msg += "　この開発タイプは標準タスクが未定義のため、タスク一覧は空です。"
     return {"slot_id": slot_id, "project_id": r["id"],
@@ -640,7 +639,7 @@ def slot_consumption() -> dict:
         n_draft = store.val("SELECT COUNT(*) FROM plan_version "
                             "WHERE state='策定中'", (), 0)
         return {**base, "value": None, "state": "未計測", "month": month,
-                "why": "**承認済みの年間プランがまだありません。**"
+                "why": "承認済みの年間プランがまだありません。"
                        + (f"策定中の版が {n_draft} 件あります。承認すると数え始めます。"
                           if n_draft else "プラン画面で版を作り、承認すると数え始めます。")}
     rows = store.q("SELECT s.project_id, k.counts_as_launch FROM plan_slot s "
@@ -653,7 +652,7 @@ def slot_consumption() -> dict:
                 "version": v["label"],
                 # **0件と未計測を混ぜない。**「置いていない」は事実であって欠測ではない
                 "why": f"{v['label']} に {month} の枠が1本もありません。"
-                       "未計測ではなく、**この月に枠を置いていない**という意味です。"}
+                       "未計測ではなく、この月に枠を置いていないという意味です。"}
     return {**base, "value": f"{done} / {n} 本", "month": month,
             "version": v["label"], "slots": n, "converted": done,
             "launch_slots": sum(1 for r in rows if _counts_as_launch(dict(r))),
@@ -697,6 +696,6 @@ def overview(fiscal_year=None) -> dict:
         "kinds": kinds(),
         "empty_note": ("年間プランの版がまだありません。"
                        "年度を選んで「版を作る」から始めます。"
-                       "**計画が0行の状態から立ち上がる設計**です（D-3・FR-134）。")
+                       "計画が0行の状態から立ち上がる設計です。")
         if not vs else None,
     }

@@ -54,7 +54,7 @@ def _project(pid: str) -> dict:
 def _editable(pid: str) -> dict:
     p = _project(pid)
     if p["source_of_truth"] != "app":
-        raise PermissionError("Drive 側が正本の案件はアプリで編集できません（R-2）")
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     return p
 
 

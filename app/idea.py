@@ -80,11 +80,11 @@ MARGIN_BANDS = [
     (800, 5), (600, 4), (400, 3), (200, 2), (0, 1),
 ]
 MARGIN_BANDS_NOTE = (
-    "**この刻みで採点を始めます**（2026-09-23 十文字さんの決定）。"
+    "この刻みで採点を始めます（2026-09-23 十文字さんの決定）。"
     "1個あたりの想定粗利額を1〜10点に写すための境界で、"
-    "根拠となる原価の正本（seisan の材料原価）は**第3段で入ります**。"
-    "入った時点で刻みを見直しますが、そのときは**新しい版（v3）として足します。**"
-    "いまの点は書き換えません（F-1-10。版は合算しない）。"
+    "根拠となる原価の正本（seisan の材料原価）は第3段で入ります。"
+    "入った時点で刻みを見直しますが、そのときは新しい版（v3）として足します。"
+    "いまの点は書き換えません（版は合算しない）。"
 )
 
 # F-1-9・業務要件 Q1-C。**テーマ内の上位比率**でランクを決める
@@ -130,14 +130,14 @@ V2_AXES = [
     ("market_size", "ターゲット規模",   "common", 2.0, 1, 10, None),
     ("advantage",   "競合優位性",       "common", 1.0, 1, 10, None),
     ("margin",      "想定粗利額（円→点）", "common", 1.5, 1, 10,
-     "F-1-7。円で入れた想定粗利額を margin_bands で点に写す。"
+     "円で入れた想定粗利額を margin_bands で点に写す。"
      "v1 の「高単価化しやすさ×0.5（寄与6%/2%）」の置き換え"),
     ("theme_fit",   "テーマ適合",       "theme",  3.0, 1, 10,
-     "F-1-5 ②。ライフイベント相性／推し活相性／LOVOT相性はここに収まる"),
+     "ライフイベント相性／推し活相性／LOVOT相性はここに収まる"),
     ("feasibility", "生産方法(1-5)",    "factor", None, 1, 5,
-     "F-1-6。**点ではなく減点係数。**総合点に掛ける"),
+     "点ではなく減点係数。総合点に掛ける"),
     ("demand_cycle", "需要発生（通年／季節／単発）", "attribute", None, None, None,
-     "F-1-8。**点にしない。**年間プランの枠取りに使う属性"),
+     "点にしない。年間プランの枠取りに使う属性"),
 ]
 
 
@@ -165,21 +165,21 @@ RUBRICS = [
          "premium": 0.5, "year_round": 1.0, "theme_fit": 1.0},
         {"SS": 81, "S": 75, "A": 70, "B": 65,
          "_note": "実データの実測レンジ SS 81〜82 ／ S 75〜80 ／ A 70〜74 ／ "
-                  "B 65〜70 ／ C 33〜65。**A/B と B/C の境界が重複している**"
+                  "B 65〜70 ／ C 33〜65。A/B と B/C の境界が重複している"
                   "（65点・70点の行が両方のランクに存在）。"
-                  "移行では**シートに書かれたランクをそのまま**入れている"},
+                  "移行ではシートに書かれたランクをそのまま入れている"},
         "総合点列から逆算したウェイト（最大誤差0.5点）。"
-        "**デザイン自由度・生産方法は総合点に入っていない**（回帰係数±0.01以内）"),
+        "デザイン自由度・生産方法は総合点に入っていない（回帰係数±0.01以内）"),
     _v1_rubric(
         "v1-uchiwa", "v1 推し活うちわ", "oshikatsu",
         {"demand": 2.5, "market_size": 1.5, "advantage": 1.5,
          "premium": 0.5, "year_round": 1.0, "theme_fit": 3.0},
         {"SS": 82, "S": 78, "A": 70, "B": 66,
          "_note": "実データの実測レンジ SS 82〜90 ／ S 78〜79 ／ A 70〜73 ／ "
-                  "B 66 ／ C 26〜56。**C の最高56 と B の66 の間に10点の空白**が"
+                  "B 66 ／ C 26〜56。C の最高56 と B の66 の間に10点の空白が"
                   "あり、連続分布でない（バッチ一括採点の痕跡）"},
         "オリジナルとウェイトが違う（購買意欲 ×2.5・規模 ×1.5・相性 ×3.0）のに、"
-        "**同じ SS/S/A/B/C の記号を使っている。**これが横並び比較できない原因"),
+        "同じ SS/S/A/B/C の記号を使っている。これが横並び比較できない原因"),
     {
         "version": "v1-lovot", "label": "v1 LOVOT専用", "generation": 1,
         "theme_id": "lovot", "common_max": None, "theme_max": None,
@@ -187,7 +187,7 @@ RUBRICS = [
         "thresholds": {"SS": 110, "S": 95, "A": 80, "B": 65,
                        "_note": "評価基準シートに明記（SS 110〜140 ／ S 95〜109 ／ "
                                 "A 80〜94 ／ B 65〜79 ／ C 〜64）。"
-                                "**総合点の計算式セルは #ERROR! のまま壊れている**が、"
+                                "総合点の計算式セルは #ERROR! のまま壊れているが、"
                                 "7項目のウェイトで42行すべて誤差0で再現できた"},
         "feasibility_factors": None, "margin_bands": None,
         "note": "3つ目の採点系。7項目・140点満点。"
@@ -198,11 +198,11 @@ RUBRICS = [
         "version": "v1-bukkomi", "label": "v1 ぶっこみ", "generation": 1,
         "theme_id": "bukkomi", "common_max": None, "theme_max": None,
         "total_max": None, "rank_method": "absolute",
-        "thresholds": {"_note": "**閾値は実測できない。**実データ2件がどちらも未採点"},
+        "thresholds": {"_note": "閾値は実測できない。実データ2件がどちらも未採点"},
         "feasibility_factors": None, "margin_bands": None,
         "note": "唯一明文化された参入条件を持つシート（①誰かの熱量が高い時 "
                 "②機会が明確な時 ③最低限の評価基準）。"
-                "**ウェイトは NULL。**採点済みの行が1件も無く、実測できない",
+                "ウェイトは NULL。採点済みの行が1件も無く、実測できない",
         "axes": [(c, l, "common", None, 1, 10,
                   "ウェイト未実測（採点済みの行が無い）") for c, l in V1_BUKKOMI_AXES],
     },
@@ -215,9 +215,9 @@ RUBRICS = [
         "feasibility_factors": {str(k): v for k, v in FEASIBILITY_FACTORS.items()},
         "margin_bands": {"bands": [[lo, pt] for lo, pt in MARGIN_BANDS],
                          "note": MARGIN_BANDS_NOTE},
-        "note": "**v1 と合算しない**（F-1-10・第8章 ⑦）。既存の移行分は再採点しない。"
+        "note": "v1 と合算しない。既存の移行分は再採点しない。"
                 "総合点 = (共通点 + テーマ適合点) × 生産方法の減点係数。"
-                "ランクはテーマ内の百分位（F-1-9）",
+                "ランクはテーマ内の百分位",
         "axes": V2_AXES,
     },
 ]
@@ -276,16 +276,16 @@ def seed_rubrics() -> int:
 # **未設定を 0 で埋めない**（N-10）。value は NULL のまま置き、理由を持たせる
 SETTINGS = [
     ("monthly_launch_target", "月間の発売目標本数", "number", "本",
-     "**未確定です。**年間36本か52本かが未決で、F-14（販売計画シミュレーション）"
+     "未確定です。年間36本か52本かが未決で、販売計画シミュレーション"
      "で決める設計になっています。決まるまで「コンセプト在庫月数」は計算しません"),
     ("concept_stock_floor", "コンセプト在庫月数の下限", "number", "か月", None),
     ("cost_tax_rate", "消費税率（試算原価の税込表示）", "number", "%", None),
     ("competitor_review_rate", "競合の売上推計に使うレビュー率", "number", "%",
-     "**未設定です。**買った人のうちレビューを書く人の割合。商品開発部が決めます。"
-     "決まるまで競合調査の売上推計（レビュー件数 ÷ レビュー率 × 価格）は出しません（F-9-7）"),
+     "未設定です。買った人のうちレビューを書く人の割合。商品開発部が決めます。"
+     "決まるまで競合調査の売上推計（レビュー件数 ÷ レビュー率 × 価格）は出しません"),
     ("ai_scoring_enabled", "AI採点を使う", "bool", None,
-     "**既定は off。**`newproduct-*` のAI予算枠（AutoGrowth の ai_budget.json）が"
-     "未取得のため（全体設計書 第11章 ⑩）"),
+     "既定は off。newproduct-* のAI予算枠（AutoGrowth の ai_budget.json）が"
+     "未取得のため"),
 ]
 
 SETTING_DEFAULTS = {"concept_stock_floor": "6", "ai_scoring_enabled": "0",
@@ -418,7 +418,7 @@ def create(user_id: str, **f) -> dict:
     if origin is not None and origin not in ORIGIN_CODES:
         raise ValueError(f"知らない起票経路 {origin!r}")
     if origin is None:
-        raise ValueError("起票経路を選んでください（F-1-4。あとから区別できなくなります）")
+        raise ValueError("起票経路を選んでください（あとから区別できなくなります）")
     theme_id = (f.get("theme_id") or "").strip() or None
     if theme_id and store.one("SELECT 1 FROM theme WHERE id=?", (theme_id,)) is None:
         raise ValueError(f"知らないテーマ {theme_id!r}")
@@ -528,21 +528,21 @@ def score_v2(idea_id: str, axes: dict, user_id: str,
         v = axes.get(code)
         n = _int_or_none(v, 1, 10, code)
         if n is None:
-            raise ValueError(f"{code} が未入力です。**0 では埋めません**（N-10）")
+            raise ValueError(f"{code} が未入力です。0 では埋めません")
         got[code] = n
 
     mp = margin_points(idea.get("expected_margin_yen"))
     if mp is None:
         raise ValueError(
             "想定粗利額（円）が未入力です。v1 の「高単価化しやすさ」は"
-            "円建てに置き換えました（F-1-7）。先にアイデアの項目へ入れてください")
+            "円建てに置き換えました。先にアイデアの項目へ入れてください")
     got["margin"] = mp
 
     fac = feasibility_factor(idea.get("production_feasibility"))
     if fac is None:
         raise ValueError(
-            "生産方法(1-5) が未入力です。v2 では**総合点に掛ける減点係数**なので、"
-            "入っていないと総合点が出せません（F-1-6）。"
+            "生産方法(1-5) が未入力です。v2 では総合点に掛ける減点係数なので、"
+            "入っていないと総合点が出せません。"
             "1.0 で通すと「作れない案」が上位に来ます")
 
     common = (2.5 * got["demand"] + 2.0 * got["market_size"]
@@ -771,10 +771,10 @@ def listing(args: dict | None = None) -> dict:
                 "ORDER BY sort")),
         },
         "notes": [
-            "**採点の版を混ぜて1つの順位表にしていません**（F-1-10）。"
+            "採点の版を混ぜて1つの順位表にしていません。"
             "版を選ぶと、その版の点とランクだけを出します。",
-            "移行した 1件 1件の `起票経路` は**不明**です。"
-            "元のシートに起票経路の列がありません。推測では埋めていません（N-10）。",
+            "移行した 1件 1件の 起票経路 は不明です。"
+            "元のシートに起票経路の列がありません。推測では埋めていません。",
         ],
     }
 
@@ -809,9 +809,9 @@ def _v2_ready(d: dict) -> tuple[bool, list[str]]:
     if not d.get("theme_id"):
         miss.append("テーマ（テーマ適合点の定義がテーマごとに変わります）")
     if d.get("expected_margin_yen") is None:
-        miss.append("想定粗利額（円）— v1 の「高単価化しやすさ」の置き換え（F-1-7）")
+        miss.append("想定粗利額（円）— v1 の「高単価化しやすさ」の置き換え")
     if d.get("production_feasibility") is None:
-        miss.append("生産方法(1-5) — 総合点に掛ける減点係数（F-1-6）")
+        miss.append("生産方法(1-5) — 総合点に掛ける減点係数")
     return (not miss), miss
 
 
@@ -839,8 +839,8 @@ def concept_stock() -> dict:
     }
     if target is None or float(target) <= 0:
         return {**base, "value": None, "state": "未計測",
-                "why": "**月間の発売目標本数が未確定です。**年間36本か52本かが"
-                       "決まっておらず、F-14（販売計画シミュレーション）で決める"
+                "why": "月間の発売目標本数が未確定です。年間36本か52本かが"
+                       "決まっておらず、販売計画シミュレーションで決める"
                        "設計になっています。設定に入れると計算します。"
                        f"（いまのG3通過・未発売は {n} 件）"}
     v = round(n / float(target), 1)

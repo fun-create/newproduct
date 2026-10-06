@@ -250,7 +250,7 @@
           el("td", { text: "⑤資材リニューアルは係数そのものが未確定です（実測できていません）。" })]),
         el("tr", null, [el("td", { text: "ページリニューアルの案件" }),
           el("td", { "class": "np-num", text: String(a.pagerenew_no_template) }),
-          el("td", { text: "**標準タスク未定義。**この開発タイプはタスク一覧が空になります。" })])
+          el("td", { text: "標準タスク未定義。この開発タイプはタスク一覧が空になります。" })])
       ]));
 
       b.appendChild(el("p", { "class": "np-note",
@@ -362,7 +362,7 @@
       Array.prototype.forEach.call(f.elements, function (x) { if (x.name) o[x.name] = x.value; });
       post("/api/projects", o).then(function (r) {
         if (!r.template_defined) {
-          msg.textContent = "起こしました。**この開発タイプには標準タスクがありません**"
+          msg.textContent = "起こしました。この開発タイプには標準タスクがありません"
             + "（178行の種データに1行もありません）。タスク一覧は空のままです。";
           setTimeout(function () { location.hash = "#/projects/" + r.id; }, 1500);
         } else {
@@ -591,10 +591,10 @@
         tv.appendChild(el("h2", { text: "タスク（" + d.tasks.length + "件）" }));
         if (!d.template_defined) {
           tv.appendChild(el("p", { "class": "np-warn",
-            text: "**標準タスク未定義。**この開発タイプ（ページリニューアル）には標準タスクが"
+            text: "標準タスク未定義。この開発タイプ（ページリニューアル）には標準タスクが"
               + "存在しません。178行の種データに1行もなく、発明もしていません。"
               + "そのため、案件を作ってもタスク一覧は空になります。"
-              + "定義は商品開発部の未着手事項です（全体設計書 第11章 ⑪）。" }));
+              + "定義は商品開発部の未着手事項です。" }));
         }
         if (!d.tasks.length) {
           tv.appendChild(el("p", { "class": "np-note", text: "タスクはありません。" }));
@@ -612,7 +612,7 @@
               ]);
             })));
           tv.appendChild(el("p", { "class": "np-note",
-            text: "標準h は**予備時間を含まない実作業h**です（テンプレート由来）。" }));
+            text: "標準h は予備時間を含まない実作業hです（テンプレート由来）。" }));
         }
         b.appendChild(tv);
 
@@ -1342,7 +1342,7 @@
           ? d.my_roles.map(function (c) { return rl[c] || c; }).join("／") : "なし") }));
     if (!can) {
       w.appendChild(el("p", { "class": "np-warn",
-        text: "あなたはこのゲートを判定できません。**承認資格はアプリ権限（admin/user）ではなく業務ロールで決まります。**" }));
+        text: "あなたはこのゲートを判定できません。承認資格はアプリ権限（admin/user）ではなく業務ロールで決まります。" }));
       return w;
     }
     var f = el("form", { "class": "np-inline" });
@@ -1507,7 +1507,7 @@
         var tt = d.template_totals;
         b.appendChild(el("h2", { text: "テンプレートの標準工数 — " + tt.caption }));
         b.appendChild(el("p", { "class": "np-warn",
-          text: "この表は **" + tt.caption + "** です。"
+          text: "この表は " + tt.caption + " です。"
             + "つまり 1本あたりではない 数字です。" + tt.per_project_caption }));
         b.appendChild(table(["ロール", "タスク数", "実作業h（6フロー合算）",
           "予備h（6フロー合算）", "AI削減可能h（6フロー合算）"],
@@ -1529,7 +1529,7 @@
               el("td", { "class": "np-num", text: r.reserve_hours + "h" })]);
           })));
         b.appendChild(el("p", { "class": "np-note",
-          text: "⑦ページリニューアルはこの表に出ません。**標準タスクが1行も定義されていない**ためです。" }));
+          text: "⑦ページリニューアルはこの表に出ません。標準タスクが1行も定義されていないためです。" }));
       }).catch(fail);
   }
 
@@ -1630,8 +1630,8 @@
         })));
       }
       b.appendChild(el("p", { "class": "np-note",
-        text: "`対象外` は放置ではなく設計です。④ニューモデル追加は G2 → G5 の簡易フローで、"
-          + "G1・G3・G4 を通しません（F-6-4）。" }));
+        text: "対象外 は放置ではなく設計です。④ニューモデル追加は G2 → G5 の簡易フローで、"
+          + "G1・G3・G4 を通しません。" }));
       if (d.passed_30d !== null) b.appendChild(el("p", { "class": "np-note",
         text: "直近30日で通過したゲート: " + d.passed_30d + " 件。" }));
     }).catch(fail);
@@ -1705,7 +1705,7 @@
 
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
-          text: "アイデアがありません。移行は tools/import_ideas.py で流します。" }));
+          text: "アイデアがありません。上の「アイデアを起票する」から足せます。" }));
       } else if (d.rubric) {
         // 版を選んだとき。**その版の点とランクだけ**を出す
         b.appendChild(table(
@@ -1757,7 +1757,7 @@
     var box = el("details", { "class": "np-card", open: "open" });
     box.appendChild(el("summary", { text: "アイデアを起票する（4項目＋起票経路だけ）" }));
     box.appendChild(el("p", { "class": "np-note",
-      text: "起票に要るのは 商品案名・概要・想定ターゲット・起票経路 の4つだけです。デザイン自由度・生産方法・参考URL・エリアは採点のときに足します（F-1-3）。" }));
+      text: "起票に要るのは 商品案名・概要・想定ターゲット・起票経路 の4つだけです。デザイン自由度・生産方法・参考URL・エリアは採点のときに足します。" }));
     var f = el("form", { "class": "np-form" });
     var title = el("input", { name: "title", placeholder: "商品案名（社内の企画名）", "aria-label": "商品案名" });
     var summary = el("textarea", { name: "summary", rows: "3", placeholder: "概要・仕様", "aria-label": "概要・仕様" });
@@ -1875,7 +1875,7 @@
       // ══ 採点。**v1 と v2 を並べる。合算しない** ══
       b.appendChild(el("h2", { text: "採点" }));
       b.appendChild(el("p", { "class": "np-warn",
-        text: "版の違う点数を合算していません。v1 は移行したシートの点そのもの（再採点していません）、v2 は新しい軸です。並べて見比べるためのものです（F-1-10）。" }));
+        text: "版の違う点数を合算していません。v1 は移行したシートの点そのもの（再採点していません）、v2 は新しい軸です。並べて見比べるためのものです。" }));
 
       var gen1 = d.scores.filter(function (s) { return s.generation === 1; });
       var gen2 = d.scores.filter(function (s) { return s.generation === 2; });
@@ -1933,7 +1933,7 @@
       var sum = [
         ["総合点", s.total === null ? "—" : String(s.total) + (s.total_max ? "／" + s.total_max : "")],
         ["ランク", dash(s.rank)],
-        ["ランクの決め方", s.rank_basis === "percentile" ? "テーマ内の百分位（F-1-9）" : "シートに書かれていた絶対点の閾値"],
+        ["ランクの決め方", s.rank_basis === "percentile" ? "テーマ内の百分位" : "シートに書かれていた絶対点の閾値"],
         ["採点者", s.scored_by === "import" ? "移行（シートの値）" : s.scored_by],
         ["モデル名", dash(s.model)],
         ["採点日時", dash(s.scored_at)]
@@ -1959,14 +1959,14 @@
     var box = el("details", { "class": "np-card" });
     box.appendChild(el("summary", { text: "v2 で採点する" }));
     box.appendChild(el("p", { "class": "np-note",
-      text: "総合点 =（①共通点 0〜70 ＋ ②テーマ適合点 0〜30）× 生産方法の減点係数。ランクはテーマ内の百分位で決まります（F-1-5・F-1-6・F-1-9）。" }));
+      text: "総合点 =（①共通点 0〜70 ＋ ②テーマ適合点 0〜30）× 生産方法の減点係数。ランクはテーマ内の百分位で決まります。" }));
     if (!d.v2_ready) {
       box.appendChild(el("p", { "class": "np-warn", text: "まだ採点できません。足りないものがあります:" }));
       var ul = el("ul", { "class": "np-miss" });
       d.v2_blockers.forEach(function (x) { ul.appendChild(el("li", { text: x })); });
       box.appendChild(ul);
       box.appendChild(el("p", { "class": "np-note",
-        text: "足りない値を 1.0 や 0 で代用しません。作れない案が上位に来るのを防ぐのが v2 の目的です（N-10）。" }));
+        text: "足りない値を 1.0 や 0 で代用しません。作れない案が上位に来るのを防ぐのが v2 の目的です。" }));
       return box;
     }
     var f = el("form", { "class": "np-form" });
@@ -1997,7 +1997,7 @@
   function aiPanel(d, meta) {
     var a = meta.ai_scoring;
     var c = el("div", { "class": "np-card" });
-    c.appendChild(el("h3", { text: "AI採点（F-1-11）" }));
+    c.appendChild(el("h3", { text: "AI採点" }));
     c.appendChild(el("p", { "class": a.enabled ? "np-note" : "np-warn",
       text: a.enabled ? "有効です。" : a.reason }));
     c.appendChild(el("p", { "class": "np-note",
@@ -2119,7 +2119,7 @@
         btn.addEventListener("click", function () {
           // **取り消せないので、押す前にもう一度聞く**
           if (!window.confirm("ChatWork の部屋 " + s.config.room_id
-              + " へ送ります。**送ったあと取り消せません。**よろしいですか？")) return;
+              + " へ送ります。送ったあと取り消せません。よろしいですか？")) return;
           btn.disabled = true;
           post("/api/automation/" + encodeURIComponent(id) + "/chatwork",
                s.sent_count ? { resend: "1" } : {})
@@ -2193,7 +2193,7 @@
       });
       box.appendChild(table(["版", "年度", "状態", "枠", "承認"], rows));
       box.appendChild(el("p", { "class": "np-note",
-        text: "**承認済みは年度に1つだけ**です（F-3-4）。承認済みの版は編集できません。"
+        text: "承認済みは年度に1つだけです。承認済みの版は編集できません。"
               + "期中に直すときは「改訂版を作る」で写してから直します。" }));
     }
     var msg = el("p", { "class": "np-note" });
@@ -2368,7 +2368,7 @@
     var msg = el("p", { "class": "np-note" });
     box.appendChild(el("h2", { text: "枠を足す" }));
     box.appendChild(el("p", { "class": "np-note",
-      text: "**発売月だけで作れます。**日は決まってから入れます。"
+      text: "発売月だけで作れます。日は決まってから入れます。"
             + "仮の日付を置くと、そこから逆算した期限が動き出します。" }));
     var f = el("form", { "class": "np-form" });
     f.appendChild(el("label", { text: "発売月（YYYY-MM）" }));
@@ -2428,9 +2428,9 @@
     api("/api/automation" + (p.length ? "?" + p.join("&") : "")).then(function (d) {
       var b = clear();
       b.appendChild(el("p", { "class": "np-note",
-        text: "手でやっている作業のうち、**自動化したいもの**を集める画面です。"
+        text: "手でやっている作業のうち、自動化したいものを集める画面です。"
           + "出したあと、8つの質問に答えると要件になります。"
-          + "**このアプリが実装するわけではありません。**要件を書き出して、作る人へ渡します。" }));
+          + "このアプリが実装するわけではありません。要件を書き出して、作る人へ渡します。" }));
 
       // 数の段。**測れていない件数を必ず出す**
       var g = el("div", { "class": "np-grid np-grid-3" });
@@ -2473,7 +2473,7 @@
               el("td", { text: dash(r.requester) }),
               el("td", { text: r.stage }),
               el("td", { text: r.answered + " / " + r.required }),
-              el("td", { text: r.in_template ? "あり" : "**無し**" }),
+              el("td", { text: r.in_template ? "あり" : "無し" }),
               el("td", { "class": "np-num",
                 text: r.hours_per_month === null ? "未計測" : r.hours_per_month + "h" })]);
           })));
@@ -2487,7 +2487,7 @@
     var msg = el("p", { "class": "np-note" });
     box.appendChild(el("h2", { text: "自動化してほしい作業を出す" }));
     box.appendChild(el("p", { "class": "np-note",
-      text: "**作業名だけで出して構いません。**細かいことは、このあと質問でうかがいます。" }));
+      text: "作業名だけで出して構いません。細かいことは、このあと質問でうかがいます。" }));
     var f = el("form", { "class": "np-form" });
     f.appendChild(el("label", { text: "作業名" }));
     f.appendChild(el("input", { name: "title", required: "required",
@@ -2534,7 +2534,7 @@
       var t = el("p", { "class": d.template ? "np-note" : "np-warn" });
       t.textContent = d.template
         ? "標準タスク「" + d.template.title + "」（" + dash(d.template.flow_label) + "）に当たります。"
-        : "**標準タスク178行のどれにも当たりません。**「やっていない」のではなく、表のほうが現場に追いついていないという意味です。";
+        : "標準タスク178行のどれにも当たりません。「やっていない」のではなく、表のほうが現場に追いついていないという意味です。";
       b.appendChild(t);
       if (r.note) b.appendChild(el("p", { "class": "np-sub", text: r.note }));
 
@@ -2613,7 +2613,7 @@
     var r = d.request;
     box.appendChild(el("h3", { text: "状態を変える" }));
     box.appendChild(el("p", { "class": "np-note",
-      text: "**答えが揃う前に「要件確定」から先へは進めません。**"
+      text: "答えが揃う前に「要件確定」から先へは進めません。"
         + "揃わないまま渡すと、作る側が想像で埋めることになります。" }));
     var f = el("form", { "class": "np-form" });
     var sel = el("select", { name: "stage" });

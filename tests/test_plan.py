@@ -358,7 +358,7 @@ class TestOverview(Base):
         m = d["months"][0]
         self.assertEqual(m["effort"], 5.5)
         self.assertEqual(m["effort_unknown"], 1)
-        self.assertIn("**時間(h)**ではありません", d["rules"]["effort_unit_note"])
+        self.assertIn("時間(h)ではありません", d["rules"]["effort_unit_note"])
 
     def test_bad_month_format_is_rejected(self):
         with self.assertRaises(ValueError):
