@@ -3303,7 +3303,8 @@
       dc.appendChild(el("h2", { text: "データの登録" }));
       dc.appendChild(el("p", { "class": "np-sub", text: "このアプリが正本として持つデータを、画面から足したり直したりします。外注先・原材料・商品は seisan、利用者はカレンダーで登録します。" }));
       dc.appendChild(btnRow([navBtn("#/settings/events", "年間イベント・ライフイベント"),
-        navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数")]));
+        navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数"),
+        navBtn("#/settings/ideas-import", "アイデアの一括登録")]));
       b.appendChild(dc);
 
       // アプリ全体の設定（ADR-059）。変えられる人にだけ「変える」を出す。**根拠が必須**、空欄は未設定に戻す
@@ -3647,6 +3648,85 @@
     }).catch(fail);
   }
 
+  /** アイデアの一括登録（ADR-062）。貼り付け → 確認（保存しない）→ 登録。取り消しは手が入っていない行だけ */
+  function viewIdeasImport() {
+    loading();
+    api("/api/settings/ideas-import").then(function (d) {
+      var b = clear();
+      setTitle("アイデアの一括登録");
+      b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back"), navBtn("#/ideas", "アイデアの一覧を開く", "back")]));
+      if (!d.can_edit) { b.appendChild(el("p", { "class": "np-note", text: "一括登録できるのは、商品開発部・管理者・社長の業務ロールの人です。" })); }
+      var c = el("div", { "class": "np-card" });
+      c.appendChild(el("h2", { text: "貼り付ける" }));
+      c.appendChild(el("p", { "class": "np-sub", text: "表計算ソフトの範囲をそのまま貼り付けるか、CSV を貼り付けます。1行目は見出しにしてください（商品案名・概要・想定ターゲット・起票経路・テーマ。商品案名は必須）。1回 " + d.max_rows + " 行まで。お客さまの情報（名前・メールアドレス・電話番号）は入れないでください。" }));
+      var ta = el("textarea", { rows: "10", "aria-label": "貼り付ける内容", placeholder: "商品案名\t概要\t想定ターゲット\t起票経路\n…" });
+      c.appendChild(el("div", { "class": "np-field" }, [ta]));     // 幅いっぱい（.np-field textarea）
+      var og = el("select", { "aria-label": "起票経路が空の行に入れる経路" });
+      og.appendChild(el("option", { value: "", text: "空欄の行は止める（既定）" }));
+      d.origins.forEach(function (o) { og.appendChild(el("option", { value: o.code, text: "空欄の行はすべて「" + o.label + "」にする" })); });
+      var pv = el("button", { type: "button", text: "確認する（まだ登録しません）" });
+      c.appendChild(el("p", { "class": "np-btnrow" }, [og, pv]));
+      var out = el("div");
+      c.appendChild(out);
+      b.appendChild(c);
+
+      pv.addEventListener("click", function () {
+        out.textContent = "";
+        post("/api/settings/ideas-import/preview", { text: ta.value, default_origin: og.value }).then(function (r) {
+          var cnt = Object.keys(r.count).map(function (k) { return k + " " + r.count[k]; }).join("・");
+          out.appendChild(el("p", { "class": r.done ? "np-warn" : "np-note", text: (r.done ? "この内容はもう登録済みです。" : "") + "確認の結果: " + cnt }));
+          var boxes = {};
+          out.appendChild(table(["入れる", "行", "商品案名", "起票経路", "テーマ", "判定", "理由・似た案"], r.rows.map(function (x) {
+            var td = el("td");
+            if (x.state === "入る" || x.state === "似た案あり") {
+              var cb = el("input", { type: "checkbox", "aria-label": x.line + "行目を入れる" });
+              if (x.include) cb.setAttribute("checked", "checked");
+              boxes[x.line] = cb; td.appendChild(cb);
+            } else td.appendChild(txt("—"));
+            var why = x.why.join("／") + (x.similar ? "似た案: " + x.similar.map(function (s) { return s.title + "（" + s.id + "）"; }).join("、") : "")
+              + (x.origin_note ? "　" + x.origin_note : "");
+            return el("tr", null, [td, el("td", { "class": "np-num", text: String(x.line) }), el("td", { text: x.title || "（空）" }),
+              el("td", { text: dash(x.origin || (x.origin_code ? "（" + x.origin_code + "）" : "")) }), el("td", { text: dash(x.theme) }),
+              el("td", { text: x.state }), el("td", { text: why })]);
+          })));
+          if (!d.can_edit || r.done) return;
+          var go1 = el("button", { type: "button", "class": "np-btn", text: "印を付けた行を登録する" });
+          go1.addEventListener("click", function () {
+            var ex = Object.keys(boxes).filter(function (k) { return !boxes[k].checked; });
+            var n = Object.keys(boxes).length - ex.length;
+            if (!n) { window.alert("登録する行がありません"); return; }
+            if (!window.confirm(n + " 件を登録します。よろしいですか")) return;
+            post("/api/settings/ideas-import/register", { text: ta.value, default_origin: og.value, token: r.token, exclude: ex.join(",") })
+              .then(function (res) { window.alert(res.n + " 件を登録しました"); viewIdeasImport(); })
+              .catch(function (e) { out.appendChild(el("p", { "class": "np-err", text: e.message })); });
+          });
+          out.appendChild(el("p", { "class": "np-btnrow" }, [go1]));
+        }).catch(function (e) { out.appendChild(el("p", { "class": "np-err", text: e.message })); });
+      });
+
+      var hc = el("div", { "class": "np-card" });
+      hc.appendChild(el("h2", { text: "これまでの一括登録" }));
+      if (!d.batches.length) hc.appendChild(el("p", { "class": "np-note", text: "まだありません。" }));
+      else hc.appendChild(table(["いつ", "誰が", "件数", "札", ""], d.batches.map(function (x) {
+        var td = el("td");
+        if (d.can_edit) {
+          var u = el("button", { type: "button", text: "取り消す" });
+          u.addEventListener("click", function () {
+            if (!window.confirm("この一括登録を取り消します。手が入っていない行だけを消し、採点・編集済みの行や案件につながった行は残します。よろしいですか")) return;
+            post("/api/settings/ideas-import/undo", { token: x.token }).then(function (r) {
+              window.alert("消した " + r.removed + " 件" + (r.kept.length ? "／残した " + r.kept.length + " 件: " + r.kept.map(function (k) { return k.title + "（" + k.why + "）"; }).join("、") : ""));
+              viewIdeasImport();
+            }).catch(function (e) { td.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          td.appendChild(u);
+        }
+        return el("tr", null, [el("td", { text: x.at }), el("td", { text: dash(x.by) }), el("td", { "class": "np-num", text: x.n + " 件" }),
+          el("td", { text: x.token }), td]);
+      })));
+      b.appendChild(hc);
+    }).catch(fail);
+  }
+
   function viewManual() {
     loading();
     api("/api/manual").then(function (d) {
@@ -3704,6 +3784,7 @@
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();
+    if (path === "#/settings/ideas-import") return viewIdeasImport();
     var mt = /^#\/settings\/templates\/([a-z]+)$/.exec(path);
     if (mt) return viewTemplate(mt[1]);
     return viewNotYet(path, entry);

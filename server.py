@@ -57,6 +57,7 @@ from app import prefs as prefs_m  # noqa: E402
 from app import admin as admin_m  # noqa: E402
 from app import events as events_m  # noqa: E402
 from app import templates as tpl_m  # noqa: E402
+from app import idea_import as imp_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -255,9 +256,12 @@ class H(BaseHTTPRequestHandler):
         self.send(303, b"", "text/plain; charset=utf-8",
                   [("Location", to)] + (extra or []))
 
-    def body(self) -> dict:
+    def body(self, limit: int = 64 * 1024) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
-        if n <= 0 or n > 64 * 1024:
+        if n > limit:
+            # **黙って空にしない。**空にすると「内容がありません」と別の理由で断られて、本当の理由が見えない
+            raise ValueError(f"送る内容が大きすぎます（{n // 1024} KB。上限 {limit // 1024} KB）。分けて送ってください")
+        if n <= 0:
             return {}
         raw = self.rfile.read(n).decode("utf-8", "replace")
         return {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
@@ -388,7 +392,10 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, _page("login.html", ERROR=""))
         if not self.csrf_ok():
             return self.send(400, b"bad request", "text/plain; charset=utf-8")
-        d = self.body()
+        try:
+            d = self.body()
+        except ValueError:
+            d = {}                       # 大きすぎる送信は、今までどおり空として断る（ログインで 500 を出さない）
         s, err = auth.login(d.get("user_id", ""), d.get("password", ""),
                             self.client_ip())
         if err:
@@ -621,6 +628,20 @@ class H(BaseHTTPRequestHandler):
             if act not in ops:
                 return self.sendj(404, {"error": "not found"})
             return self.sendj(200, ops[act]())
+        # アイデアの一括登録（ADR-062）。確認は何も保存しない。登録は確認した札と一致するものだけ
+        if parts == ["settings", "ideas-import"] and method == "GET":
+            return self.sendj(200, {"batches": imp_m.batches(), "can_edit": imp_m.can_edit(uid),
+                                    "origins": [{"code": c, "label": l} for c, l in idea_m.ORIGINS],
+                                    "max_rows": imp_m.MAX_ROWS})
+        if parts == ["settings", "ideas-import", "preview"] and method == "POST":
+            d = self.body(limit=1024 * 1024)
+            return self.sendj(200, imp_m.preview(d.get("text", ""), d.get("default_origin", "")))
+        if parts == ["settings", "ideas-import", "register"] and method == "POST":
+            d = self.body(limit=1024 * 1024)
+            return self.sendj(200, imp_m.register(d.get("text", ""), d.get("default_origin", ""), d.get("token", ""),
+                                                  [x for x in (d.get("exclude") or "").split(",") if x], uid, ip))
+        if parts == ["settings", "ideas-import", "undo"] and method == "POST":
+            return self.sendj(200, imp_m.undo(self.body().get("token", ""), uid, ip))
         # 業務ロールの付け外し（アプリ権限 admin・十文字さんの選択）
         if parts == ["settings", "role"] and method == "POST":
             d = self.body()
