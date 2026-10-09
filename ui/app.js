@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -2267,7 +2267,7 @@
         return;
       }
       setTitle("プラン", d.current.version.label);
-      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く")]));
+      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く"), navBtn("#/simulate", "販売計画シミュレーション")]));
       b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
@@ -3901,6 +3901,113 @@
     }).catch(fail);
   }
 
+  /** 販売計画シミュレーション（F-14・ADR-072）。過去の新商品の実績の分布から、本数ごとの年間売上の幅を出す。
+   *  「目標 ÷ 本数」を単独で出さない（中央値の何倍が要るかを並べる）。工数の上限を超える案は、超える月を語で返す */
+  function viewSimulate() {
+    loading();
+    var q = hashQuery();
+    var qs = ["fy", "target", "cands", "ep"].filter(function (k) { return q.get(k); })
+      .map(function (k) { return k + "=" + encodeURIComponent(q.get(k)); });
+    api("/api/simulate" + (qs.length ? "?" + qs.join("&") : "")).then(function (d) {
+      var b = clear();
+      setTitle("販売計画シミュレーション", "／ " + d.fy + "年度");
+      b.appendChild(btnRow([navBtn("#/plan", "← プランへ戻る", "back")]));
+      b.appendChild(el("p", { "class": "np-sub", text: "新商品を年間に何本出せば、売上目標に届くかを試算します。案を並べて比べ、社長が確定します。目標は当面この画面で入れます（経営管理の計画を読む口ができたら切り替えます）。" }));
+
+      // 入力
+      var f = el("form", { "class": "np-inline" });
+      function inp(name, label, size, val, ph) {
+        return el("label", null, [label + " ", el("input", { name: name, size: size, value: val === null || val === undefined ? "" : String(val), placeholder: ph || "" })]);
+      }
+      [inp("fy", "年度", 5, d.fy), inp("target", "新商品の売上目標（円・税込）", 12, d.target_yen, "例 12000000"),
+       inp("cands", "比べる本数", 14, d.scenarios.map(function (x) { return x.n; }).join(","), "24,36,48,52"),
+       inp("ep", "1本あたりの工数ポイント", 5, d.effort_point, ""), el("button", { type: "submit", text: "試算する" })]
+        .forEach(function (x) { f.appendChild(x); });
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var p = ["fy", "target", "cands", "ep"].map(function (k) { var v = f.elements[k].value.trim(); return v ? k + "=" + encodeURIComponent(v) : null; }).filter(Boolean);
+        location.hash = "#/simulate" + (p.length ? "?" + p.join("&") : "");
+      });
+      var ic = el("div", { "class": "np-card" });
+      ic.appendChild(el("h2", { text: "前提" }));
+      ic.appendChild(f);
+      ic.appendChild(el("p", { "class": "np-sub", text: "1本あたりの工数ポイントの既定は、開発タイプの係数の平均（" + dash(d.effort_point_default) + "）です。月の枠と工数の上下限は設定ページの値、連休月の枠はカレンダーの営業日から決まります。" }));
+      b.appendChild(ic);
+
+      // 実績の分布
+      var ds = d.distribution, dc = el("div", { "class": "np-card" });
+      dc.appendChild(el("h2", { text: "過去の新商品の実績（発売から12か月）" }));
+      if (!ds.n) dc.appendChild(el("p", { "class": "np-warn", text: ds.why }));
+      else {
+        dc.appendChild(table(["使った商品", "中央値", "真ん中の半分", "最大", "0円", "売上の8割を占める商品"], [el("tr", null, [
+          el("td", { text: ds.range }), el("td", { "class": "np-num", text: yen(ds.median) }),
+          el("td", { "class": "np-num", text: yen(ds.p25) + " 〜 " + yen(ds.p75) }), el("td", { "class": "np-num", text: yen(ds.max) }),
+          el("td", { "class": "np-num", text: ds.zero + " 件（" + Math.round(ds.zero_rate * 1000) / 10 + "%）" }),
+          el("td", { "class": "np-num", text: "上位 " + ds.top80 + " 商品" })])]));
+        dc.appendChild(el("p", { "class": "np-sub", text: "売れ方は一部の商品に偏っています。平均で目標を置くと、ほとんどの商品が届かない分布です。最近発売して12か月そろわない " + ds.incomplete + " 商品は入れていません。" }));
+      }
+      b.appendChild(dc);
+
+      // 案の比較
+      var sc = el("div", { "class": "np-card" });
+      sc.appendChild(el("h2", { text: "本数ごとの見込み" }));
+      sc.appendChild(el("p", { "class": "np-sub", text: d.method }));
+      var head = ["年間の本数", "年間売上の見込み（下振れ／真ん中／上振れ）", "0円見込み"];
+      if (d.target_yen) head = head.concat(["目標に届く見込み", "1本あたりに要る売上"]);
+      head = head.concat(["工数と枠", ""]);
+      sc.appendChild(table(head, d.scenarios.map(function (x) {
+        var cells = [el("td", { "class": "np-num", text: x.n + " 本" }),
+          el("td", { "class": "np-num", text: x.p50 === undefined ? "—" : yen(x.p10) + "／" + yen(x.p50) + "／" + yen(x.p90) }),
+          el("td", { "class": "np-num", text: x.zero_expected === undefined ? "—" : "約 " + x.zero_expected + " 本" })];
+        if (d.target_yen) cells = cells.concat([el("td", { "class": "np-num", text: x.reach_rate === undefined ? "—" : x.reach_rate + "%" }),
+          el("td", { "class": "np-num", text: x.need_each === undefined ? "—" : yen(x.need_each) + "（中央値の " + x.need_x_median + " 倍）" })]);
+        var act = el("td");
+        if (d.can_confirm && x.feasible) {
+          var bt = el("button", { type: "button", text: "この案で確定する" });
+          bt.addEventListener("click", function () {
+            var why = window.prompt(d.fy + "年度を " + x.n + " 本で確定します。理由（なぜこの本数か・必須）", "");
+            if (!why) return;
+            post("/api/simulate/confirm", { fy: d.fy, n: x.n, target: d.target_yen || "", ep: d.effort_point === null ? "" : d.effort_point, note: why })
+              .then(function () { viewSimulate(); }).catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          act.appendChild(bt);
+        }
+        cells = cells.concat([el("td", { text: x.feasible ? "収まる" : (x.why_not || []).join("／") }), act]);
+        return el("tr", null, cells);
+      })));
+      if (!d.can_confirm) sc.appendChild(el("p", { "class": "np-sub", text: "確定は社長の業務ロールの人が行います。" }));
+      b.appendChild(sc);
+
+      // 月ごとの配置（案ごとにたたむ）
+      d.scenarios.forEach(function (x) {
+        var det = el("details", { "class": "np-fold" });
+        det.appendChild(el("summary", { text: x.n + " 本のときの月ごとの配置" }));
+        var c = el("div", { "class": "np-card" }), pl = x.placement;
+        if (pl.note) c.appendChild(el("p", { "class": "np-sub", text: pl.note }));
+        c.appendChild(table(["月", "本数", "枠", "工数ポイント", "工数（下限 " + dash(pl.effort_min) + "〜上限 " + dash(pl.effort_max) + "）"], pl.months.map(function (m) {
+          return el("tr", null, [el("td", { text: m.month + (m.holiday ? "（連休月）" : "") }), el("td", { "class": "np-num", text: m.n + " 本" }),
+            el("td", { "class": "np-num", text: m.cap === null ? "未設定" : m.cap + " 本" }), el("td", { "class": "np-num", text: dash(m.effort) }),
+            el("td", { text: m.state })]);
+        })));
+        if (pl.unplaced) c.appendChild(el("p", { "class": "np-warn", text: "枠に入りきらない本数: " + pl.unplaced + " 本（年間の枠は " + pl.capacity + " 本）" }));
+        det.appendChild(c);
+        b.appendChild(det);
+      });
+
+      // 確定した版
+      var vc = el("div", { "class": "np-card" });
+      vc.appendChild(el("h2", { text: "確定した販売計画（" + d.fy + "年度）" }));
+      if (!d.versions.length) vc.appendChild(el("p", { "class": "np-note", text: "まだ確定していません。" }));
+      else vc.appendChild(table(["確定日時", "本数", "目標", "見込み（真ん中）", "使った実績", "理由", "状態"], d.versions.map(function (v) {
+        return el("tr", null, [el("td", { text: v.decided_at + " " + v.decided_by }), el("td", { "class": "np-num", text: v.params.n_releases + " 本" }),
+          el("td", { "class": "np-num", text: v.params.target_yen ? yen(v.params.target_yen) : "未入力" }),
+          el("td", { "class": "np-num", text: v.result.p50 === undefined ? "—" : yen(v.result.p50) }),
+          el("td", { text: v.data_range }), el("td", { text: dash(v.note) }), el("td", { text: v.state })]);
+      })));
+      b.appendChild(vc);
+    }).catch(fail);
+  }
+
   function viewManual() {
     loading();
     api("/api/manual").then(function (d) {
@@ -3955,6 +4062,7 @@
     if (path === "#/opportunities") return viewOpportunities();
     if (path === "#/reports") return viewReports();
     if (path === "#/settings") return viewSettings();
+    if (path === "#/simulate") return viewSimulate();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();

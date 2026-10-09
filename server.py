@@ -58,6 +58,7 @@ from app import admin as admin_m  # noqa: E402
 from app import events as events_m  # noqa: E402
 from app import templates as tpl_m  # noqa: E402
 from app import idea_import as imp_m  # noqa: E402
+from app import simulate as sim_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -497,6 +498,29 @@ class H(BaseHTTPRequestHandler):
             return self.sendj(200, task_m.dashboard(uid))
 
         # 機会カレンダー（FR-78〜81）
+        # 販売計画シミュレーション（F-14・ADR-072）。見るのは全員・確定は社長
+        if parts == ["simulate"] and method == "GET":
+            def _f(k):
+                v = (qs.get(k) or "").replace(",", "").strip()
+                if not v:
+                    return None
+                try:
+                    return float(v)
+                except ValueError:
+                    raise ValueError(f"{k} は数字で入れてください") from None
+            fy = int(qs.get("fy") or sim_m.current_fy())
+            cands = [int(x) for x in (qs.get("cands") or "").replace("、", ",").split(",") if x.strip().isdigit()]
+            r = sim_m.compare(fy, _f("target"), cands or None, _f("ep"))
+            r["can_confirm"] = sim_m.can_confirm(uid)
+            r["versions"] = sim_m.versions(fy)
+            return self.sendj(200, r)
+        if parts == ["simulate", "confirm"] and method == "POST":
+            d = self.body()
+            tgt = (d.get("target") or "").replace(",", "").strip()
+            ep = (d.get("ep") or "").strip()
+            return self.sendj(200, sim_m.confirm(int(d.get("fy") or sim_m.current_fy()), int(d.get("n") or 0),
+                                                 float(tgt) if tgt else None, float(ep) if ep else None,
+                                                 d.get("note", ""), uid, ip))
         if parts == ["opportunities"] and method == "GET":
             return self.sendj(200, opp_m.calendar())
         if parts == ["opportunities", "slot"] and method == "POST":
