@@ -108,17 +108,70 @@ def editor_text(key: str) -> str:
     return "変えられるのは、" + "・".join(ROLE_LABEL.get(r, r) for r in rule[0]) + "の業務ロールの人です"
 
 
+# 「この設定は何か」。**値が変わっても変わらない説明**（2026-10-09 十文字さん「設定を変更しても説明欄が更新されない」）。
+# これまでは説明欄に「未設定のときの理由」（setting.why）を出していて、値を入れた後も「未確定です」のまま残っていた
+DESC = {
+    "cost_tax_rate": "試算原価の税込表示に使う消費税率",
+    "competitor_review_rate": "買った人のうちレビューを書く人の割合。競合の売上推計（レビュー件数 ÷ レビュー率 × 価格）に使う",
+    "monthly_launch_target": "1か月あたりの発売目標本数。コンセプト在庫月数の分母",
+    "concept_stock_floor": "コンセプト在庫月数がこれを下回ると、ダッシュボードに「不足」と出す",
+    "plan.effort_min": "年間プランの1か月の工数ポイント合計の下限（下回ると警告）",
+    "plan.effort_max": "年間プランの1か月の工数ポイント合計の上限（超えると警告）",
+    "plan.monthly_launch_slots": "1か月に置く発売枠の数（月3商品のルール）",
+    "plan.ratio_original_to_uchiwa": "年間プランの「うちわ以外：うちわ」の枠の比率",
+    "plan.ratio_tolerance_slots": "比率のずれを何枠まで警告しないか",
+    "plan.task_setup_lead_months": "枠を案件にしたとき、発売の何か月前をタスクを組み終える期限にするか",
+    "plan.holiday_month_max_slots": "長期連休のある月に置ける枠の数の上限",
+    "plan.holiday_months": "長期連休のある月（連休ルールの判定に使う）",
+    "plan.fiscal_year_start_month": "年度の開始月",
+    "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
+    "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
+    "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",
+    "ai_scoring_enabled": "アイデアの採点に AI を使うか",
+}
+
+
+def _last_reasons() -> dict:
+    """設定ごとの、いちばん新しい変更（誰・いつ・根拠）。"""
+    out = {}
+    for r in store.q("SELECT at, user_id, action, detail FROM audit WHERE action LIKE 'setting.%' ORDER BY id DESC"):
+        k = r["action"][len("setting."):]
+        if k in out:
+            continue
+        try:
+            d = json.loads(r["detail"] or "{}")
+        except ValueError:
+            d = {}
+        out[k] = {"at": r["at"], "by": r["user_id"], "reason": d.get("reason")}
+    return out
+
+
 def settings_view(user_id: str, app_role: str, connection_keys=()) -> list[dict]:
-    """設定ページの表。区分ごとに並べ、区分の中では**未設定を先に**出す。"""
+    """設定ページの表。区分ごとに並べ、区分の中では**未設定を先に**出す。
+
+    説明は2つに分ける: `desc`＝この設定は何か（いつも同じ）／`note`＝いまの値について
+    （未設定ならその理由、人が変えた値なら最後の根拠、変えられないものはその理由、初期値ならそう書く）。"""
     from app import idea
+    last = _last_reasons()
     out = []
     for r in idea.settings():
         k = r["key"]
         if k in connection_keys and app_role != "admin":
             continue
         group = EDITABLE[k][2] if k in EDITABLE else "変えないもの"
+        unset = r["value"] in (None, "")
+        if k in LOCKED:
+            note = r["why"] or LOCKED[k]
+        elif unset:
+            note = r["why"] or "未設定です"
+        elif k in last and last[k]["reason"]:
+            hide = k in connection_keys and app_role != "admin"
+            note = "根拠: " + ("（管理者だけが見られます）" if hide else last[k]["reason"])
+        else:
+            note = "初期値です（変更の記録はありません）"
         out.append({**r, "group": group, "editable": can_edit(k, user_id, app_role),
-                    "who": editor_text(k), "locked_why": LOCKED.get(k)})
+                    "who": editor_text(k), "locked_why": LOCKED.get(k),
+                    "desc": DESC.get(k, r["label"]), "note": note})
     out.sort(key=lambda x: (GROUP_ORDER.index(x["group"]) if x["group"] in GROUP_ORDER else 99,
                             x["value"] not in (None, ""), x["label"]))
     return out

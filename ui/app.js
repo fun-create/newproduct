@@ -3422,7 +3422,7 @@
           }
           return el("tr", null, [el("td", { text: x.label }), el("td", { text: v }),
             el("td", { text: x.updated_at ? x.updated_at + " " + dash(x.updated_by) : "—" }),
-            el("td", { text: x.why || "" }), act]);
+            el("td", null, [txt(x.desc), x.note ? el("div", { "class": "np-sub", text: x.note }) : null]), act]);
         }));
       });
       ac.appendChild(table(["項目", "いまの値", "最終更新", "説明", ""], setRows));

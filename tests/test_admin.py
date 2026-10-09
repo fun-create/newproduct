@@ -74,6 +74,18 @@ class Admin(unittest.TestCase):
         self.m.set_value("plan.ratio_original_to_uchiwa", "4：1", "x", "kanri", "user")
         self.assertEqual(self.val("plan.ratio_original_to_uchiwa"), "4:1")
 
+    def test_description_follows_the_value(self):
+        """説明は「何か」（変わらない）と「いまの値について」に分ける（2026-10-09 十文字さんの指摘）。"""
+        row = lambda k: next(x for x in self.m.settings_view("boss", "user") if x["key"] == k)   # noqa: E731
+        r = row("monthly_launch_target")
+        self.assertIn("未確定", r["note"], "未設定のあいだは理由を出す")
+        self.m.set_value("monthly_launch_target", "3", "経営判断", "boss", "user")
+        r = row("monthly_launch_target")
+        self.assertEqual(r["note"], "根拠: 経営判断")
+        self.assertNotIn("未確定", r["desc"] + r["note"], "値を入れた後に「未確定」を残さない")
+        self.assertEqual(row("cost_tax_rate")["note"], "初期値です（変更の記録はありません）")
+        self.assertIn("呼ぶ仕組み", row("ai_scoring_enabled")["note"], "変えられないものは、その理由")
+
     def test_connection_values_hidden_in_log_for_non_admin(self):
         self.m.set_value("automation.chatwork_room_id", "123456", "部屋を作った", "x", "admin")
         mine = self.m.change_log(app_role="admin")[0]
