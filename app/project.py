@@ -586,9 +586,11 @@ def set_launch_date(pid: str, date: str, reason: str, user_id: str) -> dict:
                   (pid, store.now_s(), user_id, "発売予定日",
                    f"{p['launch_date'] or '未定'} → {date or '未定'}。理由: {reason}"))
     from app import schedule
-    try:
-        sc = schedule.refresh(pid, user_id)
-    except Exception as e:                      # noqa: BLE001 日付は変わった。目安が出ないだけ
-        sc = {"ok": False, "why": f"目安を計算できませんでした（{type(e).__name__}）"}
+    sc = None                                   # タスクの無い案件は目安の話をしない
+    if store.val("SELECT COUNT(*) FROM task WHERE project_id=?", (pid,), 0):
+        try:
+            sc = schedule.refresh(pid, user_id)
+        except Exception as e:                  # noqa: BLE001 日付は変わった。目安が出ないだけ
+            sc = {"ok": False, "why": f"目安を計算できませんでした（{type(e).__name__}）"}
     return {"ok": True, "changed": True, "launch_date": date, "schedule": sc}
 
