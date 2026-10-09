@@ -38,8 +38,11 @@ class HubMetrics(unittest.TestCase):
         with store.tx() as c:
             c.execute("INSERT INTO past_product (code,name,launch_date,fy,first12_yen,months_seen,complete,months_json,source,imported_at) "
                       "VALUES ('P1','a','2023-03-10',2022,1200,12,1,?,'t',?)", (json.dumps([100] * 12), now))
+            # 表は数字の無い先の月まで 0 で埋めてある（P2 は 3か月目までしか数字が無い）
             c.execute("INSERT INTO past_product (code,name,launch_date,fy,first12_yen,months_seen,complete,months_json,source,imported_at) "
-                      "VALUES ('P2','b','2023-05-01',2023,30,3,0,?,'t',?)", (json.dumps([10, 10, 10]), now))
+                      "VALUES ('P2','b','2023-05-01',2023,30,3,0,?,'t',?)", (json.dumps([10, 10, 10] + [0] * 9), now))
+            c.execute("INSERT INTO past_product (code,name,launch_date,fy,first12_yen,months_seen,complete,months_json,source,imported_at) "
+                      "VALUES ('P3','c','2024-03-01',2023,0,0,0,?,'t',?)", (json.dumps([0] * 12), now))
         self.today = dt.date(2026, 11, 3)
 
     def tearDown(self):
@@ -56,7 +59,7 @@ class HubMetrics(unittest.TestCase):
     def test_ranges_and_values(self):
         rev = {r["captured_at"][:7]: r["value"] for r in self._rows("revenue_newproduct")}
         self.assertEqual(min(rev), "2023-04", "12か月以内の商品がそろう月から")
-        self.assertEqual(max(rev), "2024-02", "表の最後の月（P1 の12か月目）まで")
+        self.assertEqual(max(rev), "2024-02", "表の最後の月（合計が 0 でない最後の月）まで。0 で埋めた先の月は送らない")
         self.assertEqual(rev["2023-05"], 110)
         self.assertEqual(rev["2023-08"], 100)
         la = {r["captured_at"][:7]: r["value"] for r in self._rows("launches")}

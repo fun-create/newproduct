@@ -61,15 +61,16 @@ def build(today: dt.date | None = None) -> dict:
     this_month = today.strftime("%Y-%m")
     rows, notes = [], []
     pp = store.rows(store.q("SELECT launch_date, months_json FROM past_product WHERE launch_date IS NOT NULL"))
-    ends = [_add(p["launch_date"][:7], len(json.loads(p["months_json"])) - 1)
-            for p in pp if p["months_json"] and json.loads(p["months_json"])]
-    data_end = min(max(ends), _add(this_month, -1)) if ends else None
+    rev: dict[str, float] = {}
+    for p in pp:
+        for k, v in enumerate(json.loads(p["months_json"] or "[]")[:12]):
+            ym = _add(p["launch_date"][:7], k)
+            rev[ym] = rev.get(ym, 0.0) + float(v or 0)
+    # 表の最後の月＝**全商品の合計が 0 でない最後の月**（取り込みの data_end と同じ定義）。
+    # 表は数字の無い先の月まで 0 で埋めてあるので、商品ごとの月数から出すと先へ延びて 0 を送ってしまう（2026-10-09 に気づいた）
+    filled = [ym for ym, v in rev.items() if v > 0]
+    data_end = min(max(filled), _add(this_month, -1)) if filled else None
     if data_end:
-        rev: dict[str, float] = {}
-        for p in pp:
-            for k, v in enumerate(json.loads(p["months_json"] or "[]")[:12]):
-                ym = _add(p["launch_date"][:7], k)
-                rev[ym] = rev.get(ym, 0.0) + float(v or 0)
         for ym in _months(REVENUE_FROM, data_end):
             rows.append({"metric": "revenue_newproduct", "dims": DIMS_MONTH, "captured_at": _month_end(ym),
                          "value": round(rev.get(ym, 0.0))})
