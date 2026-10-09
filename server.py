@@ -515,6 +515,7 @@ class H(BaseHTTPRequestHandler):
             r = sim_m.compare(fy, _f("target"), cands or None, _f("ep"), _f("share"), depts or None)
             r["can_confirm"] = sim_m.can_confirm(uid)
             r["versions"] = sim_m.versions(fy)
+            r["revision"] = sim_m.revision_check(fy)          # FR-132。経営管理の計画が改訂されたか
             return self.sendj(200, r)
         if parts == ["simulate", "confirm"] and method == "POST":
             d = self.body()
@@ -522,7 +523,10 @@ class H(BaseHTTPRequestHandler):
             ep = (d.get("ep") or "").strip()
             return self.sendj(200, sim_m.confirm(int(d.get("fy") or sim_m.current_fy()), int(d.get("n") or 0),
                                                  float(tgt) if tgt else None, float(ep) if ep else None,
-                                                 d.get("note", ""), uid, ip, d.get("basis", "")))
+                                                 d.get("note", ""), uid, ip, d.get("basis", ""),
+                                                 {"version": d.get("plan_version") or None,
+                                                  "share_pct": float(d["share"]) if d.get("share") else None,
+                                                  "depts": [x for x in (d.get("depts") or "").split(",") if x] or None}))
         if parts == ["opportunities"] and method == "GET":
             return self.sendj(200, opp_m.calendar())
         if parts == ["opportunities", "slot"] and method == "POST":
@@ -690,6 +694,12 @@ class H(BaseHTTPRequestHandler):
             r = target_m.progress(pid, p["launch_date"] if p else None, actual)
             # FR-177。確定した販売計画の1本あたりを「逆算法」の候補として出す。実績の分布は目安として添える
             r["plan_ref"] = sim_m.plan_ref(p["launch_date"] if p else None)
+            # FR-132。逆算法の目標で、元の販売計画が経営管理の改訂で変わっていたら差を出す（未発売の案件だけ）
+            pr = r["plan_ref"]
+            if pr and not pr.get("none") and r.get("method") == "逆算法":
+                rv = sim_m.revision_check(pr["fy"])
+                if rv and rv.get("changed"):
+                    r["plan_revision"] = {k: rv.get(k) for k in ("was", "now", "new_each", "old_each", "why")}
             dd = sim_m.distribution()
             r["dist"] = {k: dd.get(k) for k in ("n", "median", "top80")}
             return self.sendj(200, r)

@@ -156,6 +156,28 @@ class Simulate(unittest.TestCase):
         self.m.confirm(2026, 12, 6000000, 5.0, "計画の6%", "boss", "", "経営管理の計画の6%")
         self.assertEqual(self.m.versions(2026)[0]["params"]["target_basis"], "経営管理の計画の6%")
 
+    def test_revision_of_keiei_plan_is_warned(self):
+        """FR-132。確定した計画の元の版が改訂されたら、目標の差と未発売の案件（逆算法）の差を出す。"""
+        from app import keiei, project, target
+        def doc(ver, goods):
+            return {"fy": 2026, "version": ver, "departments": [{"key": "funcreate_goods", "label": "グッズ"}],
+                    "plan": [{"dept_key": "funcreate_goods", "metric": "revenue", "month": "2026-09", "value": goods}]}
+        cur = {"d": doc("v01", 100000000)}
+        orig = keiei.plan
+        keiei.plan = lambda fy, opener=None: cur["d"]
+        self.addCleanup(setattr, keiei, "plan", orig)
+        r = self.m.compare(2026, None, [10], 5.0, 5, None)
+        pf = r["target_from_plan"]
+        self.m.confirm(2026, 10, pf["yen"], 5.0, "計画の5%", "boss", "", pf["basis"], pf)
+        self.assertEqual(self.m.revision_check(2026), {"changed": False, "version": "v01"})
+        pid = project.create("u", expand=False, internal_name="未発売の案件", flow_type="meire", launch_date="2026-12-01")["id"]
+        target.save(pid, {"method": "逆算法", "annual_yen": "500000", "basis": "販売計画の1本あたり"}, "u")
+        cur["d"] = doc("v02", 120000000)
+        rv = self.m.revision_check(2026)
+        self.assertEqual((rv["was"], rv["now"], rv["old_target"], rv["new_target"]), ("v01", "v02", 5000000, 6000000))
+        self.assertEqual((rv["old_each"], rv["new_each"]), (500000, 600000))
+        self.assertEqual([(x["name"], x["diff"]) for x in rv["projects"]], [("未発売の案件", 100000)])
+
     def test_keiei_not_connected_is_said(self):
         os.environ["NEWPRODUCT_KEIEI_TOKEN"] = "/nonexistent/keiei_token"
         self.addCleanup(os.environ.pop, "NEWPRODUCT_KEIEI_TOKEN", None)

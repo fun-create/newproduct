@@ -867,6 +867,11 @@
       var bar = el("p", null, [el("button", { type: "submit", text: t.state === "目標未設定" ? "目標を決める" : "目標を直す" }),
         el("span", { "class": "np-sub", text: dsx.n ? "　平均で置くとほぼ全商品が未達になります（過去の新商品 " + dsx.n + " 件の発売から12か月の中央値は " + yen(dsx.median) + "・上位 " + dsx.top80 + " 商品で8割）。似ている商品の実績から置くのが目安です。" : "" })]);
       // FR-177。確定した販売計画があれば、その1本あたりを「逆算法」で入れられる
+      if (t.plan_revision) {
+        var prv = t.plan_revision;
+        f.appendChild(el("p", { "class": "np-warn", text: "この目標の元にした販売計画は、経営管理の計画の改訂（" + prv.was + " → " + prv.now + "）で変わっています。"
+          + (prv.new_each ? "改訂後の1本あたりは " + yen(prv.new_each) + "（前は " + yen(prv.old_each) + "）。" : "") + "見直してください。" }));
+      }
       var pr = t.plan_ref;
       if (pr && !pr.none && pr.each) {
         var fill = el("button", { type: "button", text: "販売計画（" + pr.fy + "年度・" + pr.n + "本）の1本あたり " + yen(pr.each) + " を入れる" });
@@ -4037,7 +4042,8 @@
             var why = window.prompt(d.fy + "年度を " + x.n + " 本で確定します。理由（なぜこの本数か・必須）", "");
             if (!why) return;
             post("/api/simulate/confirm", { fy: d.fy, n: x.n, target: d.target_yen || "", ep: d.effort_point === null ? "" : d.effort_point, note: why,
-                                             basis: fromPlan ? fromPlan.basis : "" })
+                                             basis: fromPlan ? fromPlan.basis : "", plan_version: fromPlan ? fromPlan.version : "",
+                                             share: fromPlan ? fromPlan.share_pct : "", depts: fromPlan ? fromPlan.depts.join(",") : "" })
               .then(function () { viewSimulate(); }).catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
           });
           act.appendChild(bt);
@@ -4071,6 +4077,23 @@
         det.appendChild(c);
         b.appendChild(det);
       });
+
+      // FR-132。確定した計画の元になった経営管理の計画が改訂されていたら知らせる
+      var rv = d.revision;
+      if (rv && rv.changed) {
+        var rc = el("div", { "class": "np-card" });
+        rc.appendChild(el("h2", { text: "経営管理の計画が改訂されています（" + rv.was + " → " + rv.now + "）" }));
+        if (rv.why) rc.appendChild(el("p", { "class": "np-warn", text: rv.why }));
+        else {
+          rc.appendChild(el("p", { "class": "np-warn", text: "確定した販売計画の目標は " + yen(rv.old_target) + " でしたが、同じ割合・部門でいまの計画から出すと " + yen(rv.new_target)
+            + "（1本あたり " + yen(rv.old_each) + " → " + yen(rv.new_each) + "）です。見直すときは、もう一度試算して確定してください。" }));
+          if (rv.projects.length) rc.appendChild(table(["未発売の案件（逆算法の目標）", "いまの年間目標", "改訂後の1本あたり", "差"], rv.projects.map(function (x) {
+            return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + x.id, text: x.name })]), el("td", { "class": "np-num", text: yen(x.annual_yen) }),
+              el("td", { "class": "np-num", text: yen(x.new_each) }), el("td", { "class": "np-num", text: x.diff === null ? "—" : yen(x.diff) })]);
+          })));
+        }
+        b.appendChild(rc);
+      }
 
       // 確定した版
       var vc = el("div", { "class": "np-card" });

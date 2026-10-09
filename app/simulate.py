@@ -247,7 +247,7 @@ def can_confirm(user_id: str) -> bool:
 
 
 def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_id: str, ip: str = "",
-            target_basis: str = "") -> dict:
+            target_basis: str = "", plan_from: dict | None = None) -> dict:
     """案を確定して版に残す（FR-131）。**確定は社長だけ。**前提・実績の範囲・試算日時ごと残す。"""
     if not can_confirm(user_id):
         raise PermissionError("販売計画を確定できるのは、社長の業務ロールの人だけです")
@@ -261,6 +261,10 @@ def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_
     params = {"fiscal_year": fy, "n_releases": n_releases, "target_yen": target_yen, "effort_point": ep,
               "draws": DRAWS, "seed": SEED + n_releases,
               "target_basis": (target_basis or "").strip()[:300] or ("画面で入れた金額" if target_yen else "目標なし")}
+    if plan_from and plan_from.get("version"):
+        # 経営管理の計画から出した目標なら、元にした版・割合・部門を残す。版が改訂されたら知らせる（FR-132）
+        params["plan_from"] = {"version": plan_from["version"], "share_pct": plan_from.get("share_pct"),
+                               "depts": plan_from.get("depts")}
     with store.tx() as c:
         c.execute("UPDATE sim_plan SET state='取消' WHERE fiscal_year=? AND state='確定'", (fy,))
         c.execute("INSERT INTO sim_plan (id,fiscal_year,label,params_json,result_json,data_range,state,decided_by,decided_at,note) "
@@ -308,3 +312,41 @@ def plan_ref(launch_date: str | None) -> dict | None:
     how = (f"{fy}年度の販売計画（確定 {v['decided_at'][:10]}・{n}本・目標 {tgt:,.0f}円）の 目標 ÷ 本数" if tgt else
            f"{fy}年度の販売計画（確定 {v['decided_at'][:10]}・{n}本・目標なし）の 見込みの真ん中 {p50:,.0f}円 ÷ 本数")
     return {"fy": fy, "n": n, "each": each, "basis": how, "id": v["id"]}
+
+
+def revision_check(fy: int) -> dict | None:
+    """FR-132・ADR-077。確定した販売計画の目標が経営管理の計画から出したもので、**その版が改訂されていたら**差を返す。
+    同じ割合・部門で、いまの版の目標を出し直し、1本あたりと**未発売の案件の年間目標（逆算法）**との差も並べる。"""
+    v = next((x for x in versions(fy) if x["state"] == "確定"), None)
+    if v is None or not v["params"].get("plan_from"):
+        return None
+    pf = v["params"]["plan_from"]
+    from app import keiei
+    try:
+        rb = keiei.revenue_by_dept(fy)
+    except keiei.NotConnected as e:
+        return {"why": str(e)}
+    if rb["version"] == pf["version"]:
+        return {"changed": False, "version": rb["version"]}
+    try:
+        new = plan_target(fy, pf["share_pct"], pf.get("depts"))["yen"]
+    except ValueError as e:
+        return {"changed": True, "was": pf["version"], "now": rb["version"], "why": str(e)}
+    n = v["params"]["n_releases"]
+    old = v["params"].get("target_yen") or 0
+    out = {"changed": True, "was": pf["version"], "now": rb["version"], "old_target": old, "new_target": new,
+           "diff": new - old, "old_each": round(old / n) if n else None, "new_each": round(new / n) if n else None,
+           "projects": []}
+    today = store.today_s()
+    for r in store.q("SELECT p.id, p.internal_name, p.launch_date, t.annual_yen, t.method FROM project p "
+                     "JOIN sales_target t ON t.project_id=p.id WHERE t.method='逆算法' "
+                     "AND (p.launch_date IS NULL OR p.launch_date > ?)", (today,)):
+        ld = r["launch_date"]
+        if ld:
+            y, m = int(ld[:4]), int(ld[5:7])
+            if (y if m >= 5 else y - 1) != fy:
+                continue
+        out["projects"].append({"id": r["id"], "name": r["internal_name"], "annual_yen": r["annual_yen"],
+                                "new_each": out["new_each"],
+                                "diff": (out["new_each"] - r["annual_yen"]) if r["annual_yen"] is not None else None})
+    return out
