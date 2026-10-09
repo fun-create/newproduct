@@ -97,6 +97,9 @@ def answered_by(usage: dict, asked: str) -> str:
 URL_RE = re.compile(r"https?://[^\s\"'<>()\[\]]+")
 WEB_TOOLS = ("WebSearch", "WebFetch")
 WEB_TIMEOUT_SEC = int(os.environ.get("NEWPRODUCT_AI_WEB_TIMEOUT", "600"))
+# 1回のウェブ調査の上限（目安の額）。2026-10-09 の試しで、絞らないと1回 $1.10・37回の検索と読み取りになった
+# （予算は newproduct-* で月 $5）。超えたら claude が打ち切る
+WEB_MAX_USD = float(os.environ.get("NEWPRODUCT_AI_WEB_MAX_USD", "0.6"))
 
 
 def _trace(lines: list[dict]) -> dict:
@@ -150,7 +153,7 @@ def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | No
            "--no-session-persistence", "--strict-mcp-config"]
     if web:
         cmd += ["--output-format", "stream-json", "--verbose", "--tools", ",".join(WEB_TOOLS),
-                "--allowedTools", *WEB_TOOLS]
+                "--max-budget-usd", str(WEB_MAX_USD), "--allowedTools", *WEB_TOOLS]
     else:
         cmd += ["--output-format", "json", "--tools", ""]
     env = {"HOME": AI_HOME, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "ja_JP.UTF-8",
