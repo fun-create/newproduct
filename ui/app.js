@@ -495,7 +495,9 @@
         }
         b.appendChild(miss);
 
-        [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"]].forEach(function (k) {
+        [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"],
+         ["concept", "コンセプトまとめの下書き", "np-sec-C", "C節へ"], ["diff", "差別化の下書き", "np-sec-C", "C節へ"],
+         ["share", "部内共有文の下書き", "np-sec-C", "C節へ"], ["quality", "「品質について」の下書き", "np-sec-E", "E節へ"]].forEach(function (k) {
           if (((d.ai_drafts || {})[k[0]] || []).some(function (p) { return p.state === "提案"; }))
             miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した" + k[1] + "が、確かめるのを待っています。 "), secBtn(k[2], k[3])]));
         });
@@ -525,6 +527,9 @@
             c.appendChild(fieldForm(d.id, fd, h.editable));
             if (fd.key === "F.name") c.appendChild(namePanel(d, meta));      // 商品名の案出し（ADR-082）
             if (fd.key === "F.lp") c.appendChild(draftPanel(d, meta, "lp"));          // LP依頼書の下書き（ADR-087）
+            if (fd.key === "C.concept") { c.appendChild(draftPanel(d, meta, "concept")); c.appendChild(draftPanel(d, meta, "share")); }
+            if (fd.key === "C.diff") c.appendChild(draftPanel(d, meta, "diff"));
+            if (fd.key === "E.quality") c.appendChild(draftPanel(d, meta, "quality"));
             if (fd.key === "C.competitor") c.appendChild(draftPanel(d, meta, "competitor"));
             if (fd.key === "C.competitor") c.appendChild(webCompetitorPanel(d, meta));   // ウェブで競合を探す（ADR-088）
           });
@@ -2328,6 +2333,14 @@
 
   // LP依頼書・競合調査の下書き（FR-149・ADR-087）。**AI は案を出すだけ。**直した文面だけを欄の末尾に足す
   var DRAFT = {
+    concept: { title: "AI にコンセプトまとめの下書きを出させる", target: "コンセプトまとめ",
+          about: "ターゲット・ニーズ・差別化・競合のメモから、コンセプト（1文）の案・誰の何を解決するか・大事にすることを出します。" },
+    share: { title: "AI に「商品決定の根拠」の部内共有文を出させる", target: "", copyOnly: true,
+          about: "なぜこの商品を作るかを商品開発部内に共有する文の下書きです（ひとことで・なぜ作るか・勝ち筋・決まっていないこと）。カルテには足しません。写して使ってください。" },
+    diff: { title: "AI に差別化の下書きを出させる", target: "差別化",
+          about: "競合の表やメモと比べて言える差別化を、1行1点で出します。足すときは行だけを足します（見出しは付けません。ゲートの「3点以上」は行の数で数えるため）。" },
+    quality: { title: "AI に「品質について」の下書きを出させる", target: "品質について",
+          about: "生産方法・試作・資材・リスクのメモから、検品で見る点・起きやすい不具合と対策・お客さまへの注意書きの案を出します。数値はカルテに無ければ「要確認」になります。" },
     lp: { title: "AI に LP依頼書の下書きを出させる", target: "LP依頼用",
           about: "カルテの内容から、キャッチコピーの案・ページの構成案・よくある質問の案を出します。" },
     competitor: { title: "AI に競合調査の進め方を出させる", target: "競合調査",
@@ -2340,7 +2353,7 @@
     var open = props.filter(function (p) { return p.state === "提案"; })[0];
     if (open) { c.setAttribute("open", "open"); c.setAttribute("data-np-attention", "1"); }
     c.appendChild(el("summary", { text: K.title + (open ? "（確かめるのを待っている下書きがあります）" : "") }));
-    c.appendChild(el("p", { "class": "np-note", text: K.about + "直してから「" + K.target + "に足す」を押すと、欄の末尾に足します（書いてある文は消しません）。" }));
+    c.appendChild(el("p", { "class": "np-note", text: K.about + (K.copyOnly ? "" : "直してから「" + K.target + "に足す」を押すと、欄の末尾に足します（書いてある文は消しません）。") }));
     if (open) {
       var f = el("form", { "class": "np-form" });
       f.appendChild(el("h4", { text: "下書き（" + open.created_at + "・" + open.model + "）" }));
@@ -2354,9 +2367,19 @@
       f.appendChild(el("p", { "class": "np-note", text: "渡した項目: " + ((open.inputs && open.inputs["項目"]) || []).join("・") }));
       var msg = el("p", { "class": "np-note", role: "status" });
       if (h.editable) {
-        var ok = el("button", { type: "submit", "class": "np-btn", text: K.target + "に足す" });
+        var ok = el("button", { type: "submit", "class": "np-btn", text: K.copyOnly ? "使った（記録する）" : K.target + "に足す" });
         var no = el("button", { type: "button", text: "使わない" });
-        f.appendChild(btnRow([ok, no]));
+        var row = [ok, no];
+        if (K.copyOnly) {
+          var cp = el("button", { type: "button", text: "写す" });
+          cp.addEventListener("click", function () {
+            ta.select();
+            (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(function () { cp.textContent = "写しました"; })
+              .catch(function () { cp.textContent = "選んであります。⌘C / Ctrl+C で写してください"; });
+          });
+          row = [cp, ok, no];
+        }
+        f.appendChild(btnRow(row));
         f.addEventListener("submit", function (ev) {
           ev.preventDefault();
           post("/api/projects/" + encodeURIComponent(d.id) + "/ai-draft-proposals/" + open.id + "/adopt", { text: ta.value })
@@ -2694,7 +2717,7 @@
       else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "種類", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
         a.runs.map(function (r) {
           return el("tr", null, [el("td", { text: String(r.id) }),
-            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査", web_competitor: "競合（ウェブ）", web_demand: "需要（ウェブ）" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
+            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査", concept: "コンセプト", diff: "差別化", quality: "品質", share: "共有文", web_competitor: "競合（ウェブ）", web_demand: "需要（ウェブ）" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
             el("td", { text: r.requested_at }), el("td", { text: r.stage }),
             el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
             el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);

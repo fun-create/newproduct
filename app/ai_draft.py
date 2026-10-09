@@ -3,6 +3,8 @@
 カルテの下書きを AI に出させる（FR-149 の2つ目・3つ目・2026-10-09 十文字さんの選択・ADR-087）。
 
 - `lp`（LP依頼書）: キャッチコピーの案・ページの構成案・よくある質問の案。足す先は「LP依頼用」（F.lp）
+- `concept`（コンセプトまとめ・C.concept）・`diff`（差別化・C.diff・1行1点で行だけ足す）・`quality`（品質について・E.quality）・
+  `share`（商品決定の根拠の部内共有文・足す欄は無く写して使う）＝文章作成の下書き（ADR-089）
 - `competitor`（競合調査）: 比べる観点・探す競合の種類と検索語・いまの表から読めること。足す先は「競合調査」（C.competitor）
   **AI はウェブを見られない**（道具を渡していない）ので、競合の店名・価格・URL・レビュー件数は作らせない。
   競合の表（出典と確認日が必須・FR-141）に入れるのは人が調べた値だけ
@@ -38,6 +40,9 @@ COMMON = """あなたは FUN-CREATE株式会社（愛知県西尾市）の新商
 - トーンは落ち着いた専門性・誠実さ・推し活文化へのリスペクト。丁寧語ベースで、過度な敬語は避ける
 - 答えは JSON のオブジェクトだけ。前後に文章やコードブロックを付けない"""
 
+# 種類ごと: 足す先（target・無ければ写して使うだけ）・渡す節・頼むこと。
+# `lines=True` の欄（1行1点）には見出しを付けず、行だけを足す。**見出しが1点として数えられないように**
+# （ゲート G の「差別化 3点以上」は C.diff の行数で数える・モールの出品依頼も1行を1点として並べる）
 KINDS = {
     "lp": {
         "label": "LP依頼書の下書き", "target": "F.lp", "target_label": "LP依頼用",
@@ -46,6 +51,41 @@ KINDS = {
         "ask": ("このカルテの新商品の LP（商品ページ）を作る人に渡す、依頼の下書きを出してください。\n"
                 "sections は次の3つ: 「キャッチコピーの案」（5つ・1行ずつ）、「ページの構成案」（上から順に、各ブロックで伝えること）、"
                 "「よくある質問の案」（5つ・問いと答えの方向）。答えに数字や事実が要る所は「（要確認）」と書く。"),
+    },
+    "concept": {
+        "label": "コンセプトまとめの下書き", "target": "C.concept", "target_label": "コンセプトまとめ",
+        "inputs": (("C.target", "ターゲット・使用シーン"), ("C.needs", "ニーズ"), ("C.diff", "差別化"),
+                   ("C.competitor", "競合調査のメモ"), ("F.name", "商品名の検討"), ("C.concept", "これまでのコンセプトまとめ")),
+        "ask": ("このカルテの新商品の「コンセプトまとめ」の下書きを出してください。\n"
+                "sections は次の3つ: 「コンセプト（1文）」（3案）、「誰の・どんな場面の・何を解決するか」、"
+                "「大事にすること・やらないこと」。カルテに無いことは書かない。"),
+    },
+    "diff": {
+        "label": "差別化の下書き", "target": "C.diff", "target_label": "差別化", "lines": True,
+        "inputs": (("C.target", "ターゲット・使用シーン"), ("C.needs", "ニーズ"), ("C.concept", "コンセプト"),
+                   ("C.competitor", "競合調査のメモ"), ("C.diff", "これまでの差別化")),
+        "ask": ("このカルテの新商品の「差別化」の下書きを出してください。1行に1点、5点まで。"
+                "競合の表やメモと比べて言えることだけを書く（比べられないものは書かず unverified に回す）。"
+                "「これまでの差別化」と同じ点は出さない。\n"
+                "sections は1つだけ: 「差別化の案」。body は1行1点（行頭の記号は付けない）。"),
+    },
+    "quality": {
+        "label": "「品質について」の下書き", "target": "E.quality", "target_label": "品質について",
+        "inputs": (("E.method", "生産方法・生産の流れ"), ("E.sample", "サンプル検討・試作"), ("D.material", "資材"),
+                   ("E.risk", "主要リスクと対策"), ("C.concept", "コンセプト"), ("E.quality", "これまでの品質のメモ")),
+        "ask": ("このカルテの新商品の「品質について」の下書きを出してください。\n"
+                "sections は次の3つ: 「検品で見る点」、「起きやすい不具合と対策」、「お客さまへの注意書きの案」。"
+                "素材・製法の数値（耐熱温度・色落ちの程度など）はカルテに無ければ「（要確認）」と書く。"),
+    },
+    "share": {
+        "label": "商品決定の根拠（部内共有）の下書き", "target": None, "target_label": "共有文",
+        "inputs": (("C.target", "ターゲット・使用シーン"), ("C.needs", "ニーズ"), ("C.diff", "差別化"),
+                   ("C.concept", "コンセプト"), ("C.competitor", "競合調査のメモ"), ("D.price", "販売価格"),
+                   ("D.goal", "目標設定のメモ"), ("E.method", "生産方法")),
+        "ask": ("このカルテの新商品について、「なぜこの商品を作るか」を商品開発部内に共有する文の下書きを出してください。"
+                "読む人は社内の担当者で、2〜3分で読める長さにする。\n"
+                "sections は次の4つ: 「ひとことで」、「なぜ作るか（ニーズと機会）」、「勝ち筋（差別化と競合）」、"
+                "「決まっていないこと」（カルテで空いている所・要確認の所）。"),
     },
     "competitor": {
         "label": "競合調査の下書き", "target": "C.competitor", "target_label": "競合調査",
@@ -215,17 +255,35 @@ def adopt(proposal_id: int, user_id: str, text: str) -> dict:
     if not text:
         raise ValueError("足す文面が空です")
     k = KINDS[p["kind"]]
-    cur = store.one("SELECT body FROM project_section WHERE project_id=? AND section_key=?",
-                    (p["project_id"], k["target"]))
-    body = ((cur["body"] if cur else "") or "").rstrip()
-    head = f"── AI案（{p['model']}・{p['created_at']}）をもとに {store.today_s()} 追記 ──"
-    project_m.save_section(p["project_id"], k["target"], (body + "\n\n" if body else "") + head + "\n" + text, user_id)
     edited = text != as_text(json.loads(p["body"]).get("sections", []))
-    note = f"{k['target_label']}に足した（" + ("直して" if edited else "そのまま") + "）"
+    how = "直して" if edited else "そのまま"
+    if k["target"] is None:
+        # 足す欄が無い（共有文）。**写して使った**ことだけを残す
+        note = f"{k['target_label']}として使った（{how}・{p['model']}・{p['created_at']}）"
+    else:
+        cur = store.one("SELECT body FROM project_section WHERE project_id=? AND section_key=?",
+                        (p["project_id"], k["target"]))
+        body = ((cur["body"] if cur else "") or "").rstrip()
+        if k.get("lines"):
+            have = {ln.strip() for ln in body.splitlines() if ln.strip()}
+            add = []
+            for ln in text.splitlines():
+                ln = re.sub(r"^\s*(?:[・\-*•]|\d+[.)．、])\s*", "", ln).strip()
+                if ln and not re.fullmatch(r"【.*】", ln) and ln not in have and ln not in add:
+                    add.append(ln)
+            if not add:
+                raise ValueError("足す行がありません（空か、すでに欄にある行だけです）")
+            new_body = (body + "\n" if body else "") + "\n".join(add)
+            note = f"{k['target_label']}に {len(add)} 行足した（{how}・{p['model']}・{p['created_at']}）"
+        else:
+            head = f"── AI案（{p['model']}・{p['created_at']}）をもとに {store.today_s()} 追記 ──"
+            new_body = (body + "\n\n" if body else "") + head + "\n" + text
+            note = f"{k['target_label']}に足した（{how}）"
+        project_m.save_section(p["project_id"], k["target"], new_body, user_id)
     with store.tx() as c:
         c.execute("UPDATE project_ai_proposal SET state='採用', decided_by=?, decided_at=?, decided_note=? WHERE id=?",
                   (user_id, store.now_s(), note, proposal_id))
-    return {"ok": True, "edited": edited, "target": k["target"], "project_id": p["project_id"]}
+    return {"ok": True, "edited": edited, "target": k["target"], "note": note, "project_id": p["project_id"]}
 
 
 def reject(proposal_id: int, user_id: str, note: str = "") -> dict:

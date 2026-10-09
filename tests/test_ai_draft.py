@@ -95,6 +95,36 @@ class AiDraft(unittest.TestCase):
         self.assertEqual(self.m.proposals_of(self.pid)["competitor"][0]["state"], "見送り")
         self.assertIsNone(self._sec("C.competitor"))
 
+    def test_diff_adds_lines_only_so_gate_count_stays_honest(self):
+        """差別化は1行1点。**見出しを足さない**（ゲートの「3点以上」は行の数で数える）。重複と記号は落とす。"""
+        from app import project
+        project.save_section(self.pid, "C.diff", "色を選べる", "u")
+        self.m.start_run(self.pid, "diff", "u", sync=True, force=True,
+                         runner=self._runner([{"title": "差別化の案", "body": "・名入れ無料\n1. 色を選べる\n即日発送"}]))
+        p = self.m.proposals_of(self.pid)["diff"][0]
+        out = self.m.adopt(p["id"], "boss", p["text"])
+        self.assertEqual(self._sec("C.diff"), "色を選べる\n名入れ無料\n即日発送")
+        self.assertIn("2 行足した", out["note"])
+
+    def test_share_is_copy_only(self):
+        self.m.start_run(self.pid, "share", "u", sync=True, force=True,
+                         runner=self._runner([{"title": "ひとことで", "body": "推しの色で毎日を"}]))
+        p = self.m.proposals_of(self.pid)["share"][0]
+        before = self.store.val("SELECT COUNT(*) FROM project_section WHERE project_id=?", (self.pid,))
+        out = self.m.adopt(p["id"], "boss", p["text"])
+        self.assertIsNone(out["target"])
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM project_section WHERE project_id=?", (self.pid,)), before,
+                         "共有文はカルテに書かない")
+        self.assertEqual(self.m.proposals_of(self.pid)["share"][0]["state"], "採用")
+
+    def test_quality_and_concept_append_with_heading(self):
+        for kind, key in (("quality", "E.quality"), ("concept", "C.concept")):
+            self.m.start_run(self.pid, kind, "u", sync=True, force=True,
+                             runner=self._runner([{"title": "検品で見る点", "body": "印刷のずれ"}]))
+            p = self.m.proposals_of(self.pid)[kind][0]
+            self.m.adopt(p["id"], "boss", p["text"])
+            self.assertIn("── AI案（claude-sonnet-5・", self._sec(key))
+
     def test_not_logged_in_fails(self):
         from app import ai_score
         runner = lambda cmd, **kw: _proc({"result": "Not logged in · Please run /login", "is_error": True})  # noqa: E731
