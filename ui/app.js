@@ -4004,6 +4004,14 @@
             el("td", { text: m.state })]);
         })));
         if (pl.unplaced) c.appendChild(el("p", { "class": "np-warn", text: "枠に入りきらない本数: " + pl.unplaced + " 本（年間の枠は " + pl.capacity + " 本）" }));
+        // 部門ごと（FR-133）。見込みの真ん中を、過去の新商品の売れ方の割合で配る
+        if (x.by_dept && x.by_dept.length) {
+          c.appendChild(el("h3", { text: "部門ごとの見込み（真ん中 " + yen(x.p50) + " を、過去の新商品の売れ方の割合で配る）" }));
+          c.appendChild(table(["部門", "割合", "見込み"], x.by_dept.map(function (dd) {
+            return el("tr", null, [el("td", { text: dd.label + (dd.note ? "（" + dd.note + "）" : "") }),
+              el("td", { "class": "np-num", text: Math.round(dd.share * 1000) / 10 + "%" }), el("td", { "class": "np-num", text: yen(dd.yen) })]);
+          })));
+        }
         det.appendChild(c);
         b.appendChild(det);
       });

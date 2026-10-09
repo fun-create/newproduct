@@ -120,6 +120,41 @@ def place(n_releases: int, fy: int, effort_point: float | None) -> dict:
             "note": cap["note"], "capacity": sum((c["cap"] or 0) for c in cap["months"].values())}
 
 
+# 過去の表のチャネル → 経営管理の部門（config/departments.json のキー）。FR-133・ADR-074
+CHANNEL_DEPT = {"グッズ": "funcreate_goods", "うちわ": "funcreate_uchiwa", "楽天": "rakuten", "amazon": "amazon",
+                "Yahoo": "yahoo", "ギフトモール": "giftmall"}
+
+
+def _dept_labels() -> dict:
+    import os
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "departments.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return {k: v.get("label", k) for k, v in json.load(f).get("departments", {}).items()}
+    except (OSError, ValueError):
+        return {}
+
+
+def dept_shares() -> list[dict]:
+    """部門ごとの割合＝過去の新商品（12か月そろったもの）のチャネル別売上の割合（十文字さんの選択「過去の売れ方の割合で配る」）。
+    **Amazon は自社発送と FBA を分けられない**（過去の表が分けていない）ので、Amazon の部門にまとめて積み、そう書く。"""
+    tot = {}
+    for (cj,) in store.q("SELECT channels_json FROM past_product WHERE complete=1 AND channels_json IS NOT NULL"):
+        for k, v in json.loads(cj).items():
+            tot[k] = tot.get(k, 0) + (v or 0)
+    s = sum(tot.values())
+    if not s:
+        return []
+    lab = _dept_labels()
+    out = [{"channel": k, "dept": CHANNEL_DEPT.get(k), "label": lab.get(CHANNEL_DEPT.get(k), k),
+            "share": round(v / s, 4)} for k, v in tot.items() if v]
+    out.sort(key=lambda x: -x["share"])
+    for x in out:
+        if x["dept"] == "amazon":
+            x["note"] = "自社発送と FBA を分けていません（過去の表が分けていない）"
+    return out
+
+
 def mix(n_releases: int) -> dict:
     """商品タイプの構成（FR-127 の一部）。設定「うちわ以外：うちわ」の比で本数を分ける（端数は うちわ以外 へ）。
     **売上の見込みはタイプで分けていない**: 過去の表で12か月そろった「うちわ」の商品は6件しかなく、分布を分けると当てにならない。"""
@@ -153,6 +188,7 @@ def scenario(n_releases: int, target_yen: float | None, fy: int, effort_point: f
         out["need_each"] = round(target_yen / n_releases)
         out["need_x_median"] = round(target_yen / n_releases / d["median"], 1) if d["median"] else None
     out["mix"] = mix(n_releases)
+    out["by_dept"] = [{**x, "yen": round(out["p50"] * x["share"])} for x in dept_shares()]
     pl = out["placement"]
     out["feasible"] = pl["unplaced"] == 0 and not pl["over_months"]
     out["why_not"] = (([f"枠に入りきらない {pl['unplaced']} 本"] if pl["unplaced"] else [])

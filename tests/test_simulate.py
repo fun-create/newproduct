@@ -103,6 +103,19 @@ class Simulate(unittest.TestCase):
         self.assertEqual([(x["params"]["n_releases"], x["state"]) for x in v], [(36, "確定"), (24, "取消")])
         self.assertIn("10 商品", v[0]["data_range"])
 
+    def test_dept_shares_from_past_channels(self):
+        """FR-133。部門ごとの割合＝過去のチャネル別売上の割合。Amazon は自社発送と FBA を分けない。"""
+        import json as _j
+        with self.store.tx() as c:
+            c.execute("UPDATE past_product SET channels_json=? WHERE code='P001'",
+                      (_j.dumps({"グッズ": 30000, "amazon": 20000, "楽天": 0}),))
+        sh = {x["dept"]: x for x in self.m.dept_shares()}
+        self.assertEqual((sh["funcreate_goods"]["share"], sh["amazon"]["share"]), (0.6, 0.4))
+        self.assertNotIn("rakuten", sh, "0 のチャネルは出さない")
+        self.assertIn("FBA", sh["amazon"]["note"])
+        sc = self.m.scenario(12, None, 2026, 4.0)
+        self.assertEqual(sum(x["yen"] for x in sc["by_dept"]), sc["p50"])
+
     def test_mix_follows_ratio_setting(self):
         self.assertEqual({k: v for k, v in self.m.mix(36).items() if k in ("uchiwa", "other")}, {"uchiwa": 9, "other": 27})
         self.assertEqual(self.m.mix(10)["uchiwa"], 2, "端数は うちわ以外 へ")
