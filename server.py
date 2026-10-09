@@ -44,6 +44,7 @@ import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 
 
 from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
+from app import ai_draft as ai_draft_m  # noqa: E402
 from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
@@ -597,7 +598,22 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(404, {"error": "案件がありません"})
             d["ai_names"] = ai_name_m.proposals_of(parts[1])          # 商品名の案（ADR-082）
             d["schedule"] = sched_m.summary(parts[1])                  # タスクの目安（ADR-084）
+            d["ai_drafts"] = ai_draft_m.proposals_of(parts[1])        # LP依頼書・競合調査の下書き（ADR-087）
             return self.sendj(200, d)
+
+        # LP依頼書・競合調査の下書き（FR-149・ADR-087）。**AI は案を出すだけ。**人が直した文面を欄に足す
+        if (len(parts) == 4 and parts[0] == "projects" and parts[2] == "ai-drafts" and method == "POST"):
+            r = ai_draft_m.start_run(parts[1], parts[3], uid)
+            store.audit(uid, "project.ai_draft", parts[1], {"kind": parts[3], **r}, ip)
+            return self.sendj(200, r)
+        if (len(parts) == 5 and parts[0] == "projects" and parts[2] == "ai-draft-proposals"
+                and parts[4] in ("adopt", "reject") and method == "POST"):
+            d = self.body()
+            pid = int(parts[3])
+            r = (ai_draft_m.adopt(pid, uid, d.get("text", "")) if parts[4] == "adopt"
+                 else ai_draft_m.reject(pid, uid, d.get("note", "")))
+            store.audit(uid, f"project.ai_draft.{parts[4]}", parts[1], {"proposal": pid}, ip)
+            return self.sendj(200, r)
 
         # 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを F.name に足す
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "ai-names" and method == "POST":

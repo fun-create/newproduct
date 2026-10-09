@@ -495,6 +495,10 @@
         }
         b.appendChild(miss);
 
+        [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"]].forEach(function (k) {
+          if (((d.ai_drafts || {})[k[0]] || []).some(function (p) { return p.state === "提案"; }))
+            miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した" + k[1] + "が、確かめるのを待っています。 "), secBtn(k[2], k[3])]));
+        });
         if ((d.ai_names || []).some(function (p) { return p.state === "提案"; })) {
           miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した商品名の案が、選ぶのを待っています。 "),
             secBtn("np-sec-F", "F節へ")]));
@@ -518,6 +522,8 @@
           s.fields.forEach(function (fd) {
             c.appendChild(fieldForm(d.id, fd, h.editable));
             if (fd.key === "F.name") c.appendChild(namePanel(d, meta));      // 商品名の案出し（ADR-082）
+            if (fd.key === "F.lp") c.appendChild(draftPanel(d, meta, "lp"));          // LP依頼書の下書き（ADR-087）
+            if (fd.key === "C.competitor") c.appendChild(draftPanel(d, meta, "competitor"));
           });
           b.appendChild(c);
         });
@@ -2314,6 +2320,75 @@
     return box;
   }
 
+  // LP依頼書・競合調査の下書き（FR-149・ADR-087）。**AI は案を出すだけ。**直した文面だけを欄の末尾に足す
+  var DRAFT = {
+    lp: { title: "AI に LP依頼書の下書きを出させる", target: "LP依頼用",
+          about: "カルテの内容から、キャッチコピーの案・ページの構成案・よくある質問の案を出します。" },
+    competitor: { title: "AI に競合調査の進め方を出させる", target: "競合調査",
+          about: "比べる観点・探す競合の種類と検索語・いまの競合の表から読めることを出します。AI はウェブを見られないので、競合の店名・価格・URL は出しません（表に入れるのは人が調べた値だけです）。" }
+  };
+  function draftPanel(d, meta, kind) {
+    var a = meta.ai_scoring, h = d.header, K = DRAFT[kind];
+    var c = el("details", { "class": "np-more" });
+    var props = ((d.ai_drafts || {})[kind]) || [];
+    var open = props.filter(function (p) { return p.state === "提案"; })[0];
+    if (open) { c.setAttribute("open", "open"); c.setAttribute("data-np-attention", "1"); }
+    c.appendChild(el("summary", { text: K.title + (open ? "（確かめるのを待っている下書きがあります）" : "") }));
+    c.appendChild(el("p", { "class": "np-note", text: K.about + "直してから「" + K.target + "に足す」を押すと、欄の末尾に足します（書いてある文は消しません）。" }));
+    if (open) {
+      var f = el("form", { "class": "np-form" });
+      f.appendChild(el("h4", { text: "下書き（" + open.created_at + "・" + open.model + "）" }));
+      var ta = el("textarea", { rows: "16", name: "text", "aria-label": K.target + "に足す文面" });
+      ta.value = open.text;
+      f.appendChild(el("div", { "class": "np-field" }, [ta]));
+      if (open.unverified.length) {
+        f.appendChild(el("p", { "class": "np-sub", text: "未確認（AI が確かめられなかったこと）:" }));
+        f.appendChild(el("ul", null, open.unverified.map(function (u) { return el("li", { text: u }); })));
+      }
+      f.appendChild(el("p", { "class": "np-note", text: "渡した項目: " + ((open.inputs && open.inputs["項目"]) || []).join("・") }));
+      var msg = el("p", { "class": "np-note", role: "status" });
+      if (h.editable) {
+        var ok = el("button", { type: "submit", "class": "np-btn", text: K.target + "に足す" });
+        var no = el("button", { type: "button", text: "使わない" });
+        f.appendChild(btnRow([ok, no]));
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          post("/api/projects/" + encodeURIComponent(d.id) + "/ai-draft-proposals/" + open.id + "/adopt", { text: ta.value })
+            .then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        no.addEventListener("click", function () {
+          post("/api/projects/" + encodeURIComponent(d.id) + "/ai-draft-proposals/" + open.id + "/reject", {})
+            .then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+      }
+      f.appendChild(msg);
+      c.appendChild(f);
+    }
+    if (a.can_run && h.editable) {
+      var btn = el("button", { type: "button", "class": "np-btn", text: open ? "AI にもう一度出させる" : K.title });
+      if (!a.enabled) btn.setAttribute("disabled", "disabled");
+      var m2 = el("p", { "class": "np-note", role: "status" });
+      btn.addEventListener("click", function () {
+        btn.setAttribute("disabled", "disabled");
+        post("/api/projects/" + encodeURIComponent(d.id) + "/ai-drafts/" + kind, {}).then(function (r) {
+          if (!r.started) { m2.textContent = r.reason; btn.removeAttribute("disabled"); return; }
+          pollRun(r.run_id, m2, go);
+        }).catch(function (e) { m2.textContent = "できませんでした: " + e.message; btn.removeAttribute("disabled"); });
+      });
+      if (!a.enabled) c.appendChild(el("p", { "class": "np-warn", text: a.reason }));
+      c.appendChild(btnRow([btn])); c.appendChild(m2);
+    } else if (!a.can_run) {
+      c.appendChild(el("p", { "class": "np-note", text: "AI に案を出させられるのは、" + a.runners_label + "です。" }));
+    }
+    var past = props.filter(function (p) { return p.state !== "提案"; });
+    if (past.length) c.appendChild(el("div", { "class": "np-tablewrap" }, [table(["出した日時", "モデル", "結果", "決めた人", "メモ"],
+      past.map(function (p) {
+        return el("tr", null, [el("td", { text: p.created_at }), el("td", { text: p.model }), el("td", { text: p.state }),
+          el("td", { text: dash(p.decided_by) }), el("td", { text: dash(p.decided_note) })]);
+      }))]));
+    return c;
+  }
+
   // 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを上の欄に足す
   function namePanel(d, meta) {
     var a = meta.ai_scoring, h = d.header;
@@ -2466,7 +2541,7 @@
       else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "種類", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
         a.runs.map(function (r) {
           return el("tr", null, [el("td", { text: String(r.id) }),
-            el("td", { text: ({ idea_score: "採点", name: "商品名" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
+            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
             el("td", { text: r.requested_at }), el("td", { text: r.stage }),
             el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
             el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);
