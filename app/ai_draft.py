@@ -87,6 +87,26 @@ KINDS = {
                 "sections は次の4つ: 「ひとことで」、「なぜ作るか（ニーズと機会）」、「勝ち筋（差別化と競合）」、"
                 "「決まっていないこと」（カルテで空いている所・要確認の所）。"),
     },
+    "price": {
+        "label": "販売価格の案", "target": "D.price", "target_label": "販売価格",
+        "inputs": (("C.target", "ターゲット・使用シーン"), ("C.concept", "コンセプト"), ("C.diff", "差別化"),
+                   ("D.price", "これまでの販売価格のメモ")),
+        "facts": "price",
+        "ask": ("このカルテの新商品の販売価格の案を出してください。**数字は「計算した数字（アプリ）」にあるものだけを使う。**"
+                "新しい数字を作らない（足りなければ「（要確認）」と書く）。\n"
+                "sections は次の3つ: 「販売価格の案（税込・幅）」（下限・真ん中・上限と、そのときの粗利率）、"
+                "「理由」（原価・競合の価格・ターゲットとの関係）、「注意点」（原価の未確定・競合の値の古さなど）。"),
+    },
+    "goal": {
+        "label": "年間目標の案", "target": "D.goal", "target_label": "目標設定",
+        "inputs": (("C.target", "ターゲット・使用シーン"), ("C.concept", "コンセプト"), ("D.goal", "これまでの目標のメモ")),
+        "facts": "goal",
+        "ask": ("このカルテの新商品の「発売から1年の売上目標（税込の商品代）」の案を出してください。"
+                "**数字は「計算した数字（アプリ）」にあるものだけを使う。**新しい数字を作らない。\n"
+                "目標の決め方は 類似商品法・積み上げ法・逆算法 の3つ。どれで決めると良いかと、その根拠の書き方の例も出す。\n"
+                "sections は次の3つ: 「年間目標の案」（低め・真ん中・高めの3つと、それぞれの決め方）、"
+                "「理由」、「注意点」（過去の新商品は売上0の商品もあること・上位の少数が売上の大半を占めることなど）。"),
+    },
     "competitor": {
         "label": "競合調査の下書き", "target": "C.competitor", "target_label": "競合調査",
         "inputs": (("C.target", "ターゲット・使用シーン"), ("C.needs", "ニーズ"), ("C.diff", "差別化"),
@@ -121,11 +141,70 @@ def inputs(project_id: str, kind: str) -> dict:
     for key, lab in k["inputs"]:
         if secs.get(key):
             d[lab] = secs[key][:SECTION_LIMIT]
+    if k.get("facts"):
+        d["計算した数字（アプリ）"] = facts(project_id, k["facts"], p)
     rows = store.q("SELECT shop, item, channel, price_yen, spec, design, review_count, review_avg, checked_on "
                    "FROM competitor_item WHERE project_id=? ORDER BY id LIMIT 20", (project_id,))
     if rows:
         d["競合の表（人が調べた値）"] = [{kk: r[kk] for kk in r.keys() if r[kk] not in (None, "")} for r in rows]
     return d
+
+
+def _med(xs: list[float]) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def facts(project_id: str, which: str, p: dict) -> dict:
+    """**数字はアプリが計算して渡す**（AI に計算させない・作らせない）。無いものは「未確定」「無い」と書いて渡す。"""
+    from . import cost
+    out: dict = {}
+    if which == "price":
+        v = store.one("SELECT * FROM cost_version WHERE project_id=? ORDER BY version DESC LIMIT 1", (project_id,))
+        rate = cost.tax_rate()
+        out["消費税率（%）"] = rate
+        if v is None:
+            out["試算原価"] = "まだ作っていない（原価・調達で版を作ると出る）"
+        else:
+            lines = store.rows(store.q("SELECT * FROM cost_line WHERE version_id=?", (v["id"],)))
+            t = cost.totals(dict(v), lines)
+            direct = t["direct"]["yen"]
+            out["試算原価"] = {"版": v["version"], "確からしさ": v["confidence"] or "未記入",
+                           "直接費（材料＋外注・1個・税抜）": direct if direct is not None else "未確定",
+                           "未確定の行": t["direct"]["unknown"],
+                           "いまの販売価格（税込）": t["price_in_tax"] if t["price_in_tax"] is not None else "未確定",
+                           "いまの粗利率（%）": t["gross"]["rate"] if t["gross"]["rate"] is not None else "未確定"}
+            if direct:
+                out["粗利率ごとの販売価格（税込・アプリの計算）"] = {
+                    f"粗利率{g}%": round(direct / (1 - g / 100) * (1 + rate / 100)) for g in (40, 50, 60, 70)}
+        rows = store.rows(store.q("SELECT price_yen, checked_on, note FROM competitor_item WHERE project_id=? "
+                                  "AND price_yen IS NOT NULL", (project_id,)))
+        if rows:
+            ps = [r["price_yen"] for r in rows]
+            out["競合の表の価格（税込とは限らない）"] = {
+                "件数": len(ps), "最小": min(ps), "真ん中": _med(ps), "最大": max(ps),
+                "確認日の範囲": f"{min(r['checked_on'] for r in rows)}〜{max(r['checked_on'] for r in rows)}",
+                "AI調べの行": sum(1 for r in rows if (r["note"] or "").startswith("AI調べ"))}
+        else:
+            out["競合の表の価格"] = "表に価格の入った行が無い"
+    else:
+        from . import simulate, target
+        dist = simulate.distribution()
+        if dist.get("n"):
+            out["過去の新商品の発売から12か月の売上（税込）"] = {
+                "範囲": dist["range"], "下位25%": dist["p25"], "真ん中": dist["median"], "上位25%": dist["p75"],
+                "最大": dist["max"], "売上0の商品の割合": dist["zero_rate"],
+                "売上の80%を占める上位の商品数": dist["top80"]}
+        ref = simulate.plan_ref(p.get("launch_date"))
+        if ref and not ref.get("none"):
+            out["確定した販売計画の1本あたり（逆算法の材料）"] = {"金額": ref.get("each"), "どこから": ref.get("basis")}
+        else:
+            out["確定した販売計画"] = "発売日の年度で確定した販売計画が無い（逆算法の材料が無い）"
+        t = target.get(project_id)
+        if t:
+            out["いま入っている年間目標"] = {"方式": t.get("method"), "金額": t.get("annual_yen"), "根拠": t.get("basis")}
+    return out
 
 
 def build_prompt(kind: str, inp: dict) -> str:

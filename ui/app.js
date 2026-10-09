@@ -497,7 +497,8 @@
 
         [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"],
          ["concept", "コンセプトまとめの下書き", "np-sec-C", "C節へ"], ["diff", "差別化の下書き", "np-sec-C", "C節へ"],
-         ["share", "部内共有文の下書き", "np-sec-C", "C節へ"], ["quality", "「品質について」の下書き", "np-sec-E", "E節へ"]].forEach(function (k) {
+         ["share", "部内共有文の下書き", "np-sec-C", "C節へ"], ["quality", "「品質について」の下書き", "np-sec-E", "E節へ"],
+         ["price", "販売価格の案", "np-sec-D", "D節へ"], ["goal", "年間目標の案", "np-sec-D", "D節へ"]].forEach(function (k) {
           if (((d.ai_drafts || {})[k[0]] || []).some(function (p) { return p.state === "提案"; }))
             miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した" + k[1] + "が、確かめるのを待っています。 "), secBtn(k[2], k[3])]));
         });
@@ -530,6 +531,8 @@
             if (fd.key === "C.concept") { c.appendChild(draftPanel(d, meta, "concept")); c.appendChild(draftPanel(d, meta, "share")); }
             if (fd.key === "C.diff") c.appendChild(draftPanel(d, meta, "diff"));
             if (fd.key === "E.quality") c.appendChild(draftPanel(d, meta, "quality"));
+            if (fd.key === "D.price") c.appendChild(draftPanel(d, meta, "price"));       // 価格・目標の案（ADR-090）
+            if (fd.key === "D.goal") c.appendChild(draftPanel(d, meta, "goal"));
             if (fd.key === "C.competitor") c.appendChild(draftPanel(d, meta, "competitor"));
             if (fd.key === "C.competitor") c.appendChild(webCompetitorPanel(d, meta));   // ウェブで競合を探す（ADR-088）
           });
@@ -2333,6 +2336,10 @@
 
   // LP依頼書・競合調査の下書き（FR-149・ADR-087）。**AI は案を出すだけ。**直した文面だけを欄の末尾に足す
   var DRAFT = {
+    price: { title: "AI に販売価格の案を出させる", target: "販売価格",
+          about: "試算原価と競合の表の価格からアプリが計算した数字（粗利率ごとの価格・競合の価格の幅）をもとに、価格の幅と理由を出します。AI は数字を作りません。価格を決めるのは人です（原価・調達の版で入れます）。" },
+    goal: { title: "AI に年間目標の案を出させる", target: "目標設定",
+          about: "過去の新商品の売れ方（真ん中・上位/下位25%）と、確定した販売計画の1本あたりから、発売から1年の目標の案と決め方（類似商品法・積み上げ法・逆算法）を出します。目標を入れるのは人です（「年間目標」で根拠つきで入れます）。" },
     concept: { title: "AI にコンセプトまとめの下書きを出させる", target: "コンセプトまとめ",
           about: "ターゲット・ニーズ・差別化・競合のメモから、コンセプト（1文）の案・誰の何を解決するか・大事にすることを出します。" },
     share: { title: "AI に「商品決定の根拠」の部内共有文を出させる", target: "", copyOnly: true,
@@ -2717,7 +2724,7 @@
       else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "種類", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
         a.runs.map(function (r) {
           return el("tr", null, [el("td", { text: String(r.id) }),
-            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査", concept: "コンセプト", diff: "差別化", quality: "品質", share: "共有文", web_competitor: "競合（ウェブ）", web_demand: "需要（ウェブ）" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
+            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査", concept: "コンセプト", diff: "差別化", quality: "品質", share: "共有文", price: "価格", goal: "目標", web_competitor: "競合（ウェブ）", web_demand: "需要（ウェブ）" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
             el("td", { text: r.requested_at }), el("td", { text: r.stage }),
             el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
             el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);

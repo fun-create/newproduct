@@ -125,6 +125,32 @@ class AiDraft(unittest.TestCase):
             self.m.adopt(p["id"], "boss", p["text"])
             self.assertIn("── AI案（claude-sonnet-5・", self._sec(key))
 
+    def test_price_and_goal_get_numbers_from_the_app(self):
+        """価格・目標の案。**数字はアプリが計算して渡す**（粗利率ごとの価格・競合の価格の幅・過去の売れ方）。"""
+        import json as _j
+        from app import cost
+        with self.store.tx() as c:
+            vid = c.execute("INSERT INTO cost_version (project_id,version,price_ex_tax,tax_rate,created_at) VALUES (?,?,?,?,?)",
+                            (self.pid, 1, None, 10, self.store.now_s())).lastrowid
+            c.execute("INSERT INTO cost_line (version_id,part,name,qty,unit_price) VALUES (?,?,?,?,?)",
+                      (vid, "本体", "マグ", 1, 600))
+            c.execute("INSERT INTO past_product (code,name,launch_date,fy,first12_yen,months_seen,complete,source,imported_at) "
+                      "VALUES ('P1','x','2024-05-01',2024,100000,12,1,'t',?), ('P2','y','2024-06-01',2024,0,12,1,'t',?)",
+                      (self.store.now_s(), self.store.now_s()))
+        seen = {}
+        self.m.start_run(self.pid, "price", "u", sync=True, force=True,
+                         runner=self._runner([{"title": "販売価格の案（税込・幅）", "body": "1,650円〜"}], seen))
+        f = self.m.facts(self.pid, "price", dict(self.store.one("SELECT * FROM project WHERE id=?", (self.pid,))))
+        self.assertEqual(f["粗利率ごとの販売価格（税込・アプリの計算）"]["粗利率60%"], round(600 / 0.4 * 1.1))
+        self.assertEqual(f["競合の表の価格（税込とは限らない）"]["最小"], 2980)
+        self.assertIn("粗利率60%", seen["prompt"])
+        g = self.m.facts(self.pid, "goal", dict(self.store.one("SELECT * FROM project WHERE id=?", (self.pid,))))
+        self.assertEqual(g["過去の新商品の発売から12か月の売上（税込）"]["売上0の商品の割合"], 0.5)
+        self.assertIn("確定した販売計画", g)
+        p = self.m.proposals_of(self.pid)["price"][0]
+        self.m.adopt(p["id"], "boss", p["text"])
+        self.assertIn("1,650円", self._sec("D.price"))
+
     def test_not_logged_in_fails(self):
         from app import ai_score
         runner = lambda cmd, **kw: _proc({"result": "Not logged in · Please run /login", "is_error": True})  # noqa: E731
@@ -134,7 +160,7 @@ class AiDraft(unittest.TestCase):
 
     def test_unknown_kind_and_roles(self):
         with self.assertRaises(ValueError):
-            self.m.start_run(self.pid, "price", "u")
+            self.m.start_run(self.pid, "no-such-kind", "u")
         with self.assertRaises(PermissionError):
             self.m.start_run(self.pid, "lp", "誰でもない人")
 
