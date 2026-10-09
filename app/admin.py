@@ -186,7 +186,8 @@ def set_role(target: str, role: str, on: bool, user_id: str, app_role: str, ip: 
 
 
 # ── 全体に効く変更の記録（全員に見せる）────────────────────────────────
-LOG_ACTIONS = ("setting.%", "role.%", "event.%", "template.%", "ideas.import%", "flow.%", "plan.version.approve")
+LOG_ACTIONS = ("setting.%", "role.%", "event.%", "template.%", "ideas.import%", "flow.%", "plan.version.approve",
+               "plan.version.delete")
 ACTION_LABEL = {"role.grant": "業務ロールを付けた", "role.revoke": "業務ロールを外した", "plan.version.approve": "年間プランを承認",
                 "event.save": "イベントを登録・修正", "event.active": "イベントを使うに戻した", "event.inactive": "イベントを使わないにした",
                 "template.draft": "ひな形の下書きを作った", "template.discard": "ひな形の下書きを捨てた",

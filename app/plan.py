@@ -210,6 +210,40 @@ def approve(version_id: str, user_id: str) -> dict:
             "superseded": prev["id"] if prev else None}
 
 
+DELETE_ROLES = ("president", "admin")
+
+
+def can_delete(user_id: str) -> bool:
+    from app import gate
+    return bool(set(gate.roles_of(user_id)) & set(DELETE_ROLES))
+
+
+def delete_version(version_id: str, user_id: str) -> dict:
+    """策定中の版を消す（2026-10-09 十文字さん「版を消したい。消す機能が欲しい」・ADR-064）。
+
+    - **策定中だけ。**承認済み・失効の版は、その年に何を約束したかの記録なので消さない
+    - **案件になった枠がある版は消さない**（案件と年間プランのつながりが切れる）
+    - 消せるのは社長・管理者の業務ロール。枠と例外の理由も一緒に消え、監査と変更の記録に残る
+    """
+    if not can_delete(user_id):
+        raise PermissionError("年間プランの版を消せるのは、社長・管理者の業務ロールの人です")
+    v = store.one("SELECT * FROM plan_version WHERE id=?", (version_id,))
+    if v is None:
+        raise LookupError("その版がありません")
+    if v["state"] != "策定中":
+        raise ValueError(f"{v['state']}の版は消せません（その年に何を約束したかの記録として残します）")
+    conv = store.val("SELECT COUNT(*) FROM plan_slot WHERE version_id=? AND project_id IS NOT NULL", (version_id,), 0)
+    if conv:
+        raise ValueError(f"案件になった枠が {conv} 本あるため消せません（案件と年間プランのつながりが切れるため）")
+    slots = store.val("SELECT COUNT(*) FROM plan_slot WHERE version_id=?", (version_id,), 0)
+    with store.tx() as c:
+        c.execute("UPDATE plan_version SET based_on=NULL WHERE based_on=?", (version_id,))
+        c.execute("DELETE FROM plan_exception WHERE version_id=?", (version_id,))
+        c.execute("DELETE FROM plan_slot WHERE version_id=?", (version_id,))
+        c.execute("DELETE FROM plan_version WHERE id=?", (version_id,))
+    return {"ok": True, "id": version_id, "label": v["label"], "fiscal_year": v["fiscal_year"], "slots": slots}
+
+
 def versions(fiscal_year=None) -> list[dict]:
     sql = ("SELECT v.*, (SELECT COUNT(*) FROM plan_slot s WHERE s.version_id=v.id) "
            "AS slot_n FROM plan_version v")

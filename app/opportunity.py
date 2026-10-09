@@ -21,7 +21,8 @@ def _ym(y: int, m: int) -> str:
 
 def _target_version():
     """枠を足す先＝**策定中の版の、いちばん新しい年度**。無ければ None。"""
-    return store.one("SELECT * FROM plan_version WHERE state='策定中' ORDER BY fiscal_year DESC, id DESC LIMIT 1")
+    # id は乱数なので並びに使わない（2026-10-09 まで id 順で、新しい版を選べていなかった）。作った日時で選ぶ
+    return store.one("SELECT * FROM plan_version WHERE state='策定中' ORDER BY fiscal_year DESC, created_at DESC, id DESC LIMIT 1")
 
 
 def calendar() -> dict:

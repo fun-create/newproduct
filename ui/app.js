@@ -2316,7 +2316,7 @@
             .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
         });
         acts.appendChild(ap);
-      } else {
+      } else if (cur.state !== "策定中") {
         var rv = el("button", { type: "button", text: "改訂版を作る（枠ごと写す）" });
         rv.addEventListener("click", function () {
           post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/revise", {})
@@ -2324,6 +2324,19 @@
             .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
         });
         acts.appendChild(rv);
+      }
+      // 策定中の版を消す（ADR-064）。承認済み・失効は記録なので消さない。案件になった枠がある版はサーバーが断る
+      if (cur.state === "策定中" && d.can_delete) {
+        var n = (d.versions.filter(function (v) { return v.id === cur.id; })[0] || {}).slot_n || 0;
+        var del = el("button", { type: "button", text: "この版を消す" });
+        del.addEventListener("click", function () {
+          if (!window.confirm("「" + cur.label + "」を消します（枠 " + n + " 本も一緒に消えます）。元に戻せません。よろしいですか")) return;
+          post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/delete", {})
+            .then(function () { location.hash = "#/plan"; go(); })
+            .catch(function (e) { msg.textContent = "消せませんでした: " + e.message; });
+        });
+        acts.appendChild(txt(" "));
+        acts.appendChild(del);
       }
       box.appendChild(acts);
     }

@@ -54,6 +54,26 @@ class Base(unittest.TestCase):
         with _st.tx() as c:
             c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('president','tester')")
 
+    def test_delete_draft_only_and_not_with_converted_slots(self):
+        """策定中の版だけ消せる（ADR-064）。承認済みは記録として残す。案件になった枠がある版は消さない。"""
+        from app import store as _st
+        with _st.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('admin','kanri')")
+        empty = self.m.create_version("tester", 2027)["id"]
+        with self.assertRaises(PermissionError):
+            self.m.delete_version(empty, "someone")
+        r = self.m.delete_version(empty, "kanri")
+        self.assertEqual((r["slots"], _st.val("SELECT COUNT(*) FROM plan_version WHERE id=?", (empty,))), (0, 0))
+        sid = self.m.create_slot("tester", version_id=self.vid, launch_month="2026-06", product_kind="uchiwa")["id"]
+        self.m.convert(sid, "tester")
+        with self.assertRaises(ValueError):
+            self.m.delete_version(self.vid, "kanri")                 # 案件になった枠がある
+        other = self.m.create_version("tester", 2028)["id"]
+        self.m.create_slot("tester", version_id=other, launch_month="2028-05", product_kind="uchiwa")
+        self.m.approve(other, "tester")
+        with self.assertRaises(ValueError):
+            self.m.delete_version(other, "kanri")                    # 承認済みは消さない
+
     def test_only_president_can_approve(self):
         """2026-10-06 まで確認が無く、利用者の誰でも承認できた（ADR-058）。"""
         with self.assertRaises(PermissionError):

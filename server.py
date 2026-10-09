@@ -868,6 +868,7 @@ class H(BaseHTTPRequestHandler):
         if parts == ["plan"] and method == "GET":
             r = plan_m.overview(qs.get("fy") or None)
             r["can_approve"] = plan_m.can_approve(uid)            # 承認のボタンは社長にだけ出す（ADR-058）
+            r["can_delete"] = plan_m.can_delete(uid)              # 策定中の版を消す（ADR-064）
             return self.sendj(200, r)
         if parts == ["plan", "versions"] and method == "POST":
             d = self.body()
@@ -886,6 +887,11 @@ class H(BaseHTTPRequestHandler):
             if what == "approve":
                 r = plan_m.approve(vid, uid)
                 store.audit(uid, "plan.version.approve", vid, r, ip)
+                return self.sendj(200, r)
+            if what == "delete":
+                r = plan_m.delete_version(vid, uid)
+                store.audit(uid, "plan.version.delete", vid,
+                            {"label": f"年間プランの版を消した（{r['label']}・枠 {r['slots']} 本）"}, ip)
                 return self.sendj(200, r)
             if what == "revise":
                 r = plan_m.revise(vid, uid, d.get("label", ""))
