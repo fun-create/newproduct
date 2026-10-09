@@ -511,7 +511,8 @@ class H(BaseHTTPRequestHandler):
                     raise ValueError(f"{k} は数字で入れてください") from None
             fy = int(qs.get("fy") or sim_m.current_fy())
             cands = [int(x) for x in (qs.get("cands") or "").replace("、", ",").split(",") if x.strip().isdigit()]
-            r = sim_m.compare(fy, _f("target"), cands or None, _f("ep"))
+            depts = [x for x in (qs.get("depts") or "").split(",") if x.strip()]
+            r = sim_m.compare(fy, _f("target"), cands or None, _f("ep"), _f("share"), depts or None)
             r["can_confirm"] = sim_m.can_confirm(uid)
             r["versions"] = sim_m.versions(fy)
             return self.sendj(200, r)
@@ -521,7 +522,7 @@ class H(BaseHTTPRequestHandler):
             ep = (d.get("ep") or "").strip()
             return self.sendj(200, sim_m.confirm(int(d.get("fy") or sim_m.current_fy()), int(d.get("n") or 0),
                                                  float(tgt) if tgt else None, float(ep) if ep else None,
-                                                 d.get("note", ""), uid, ip))
+                                                 d.get("note", ""), uid, ip, d.get("basis", "")))
         if parts == ["opportunities"] and method == "GET":
             return self.sendj(200, opp_m.calendar())
         if parts == ["opportunities", "slot"] and method == "POST":

@@ -133,6 +133,39 @@ class Simulate(unittest.TestCase):
         self.assertEqual(r["each"], round(self.m.versions(2027)[0]["result"]["p50"] / 12))
         self.assertIn("見込みの真ん中", r["basis"])
 
+    def test_target_from_keiei_plan(self):
+        """FR-125・126。目標＝経営管理の承認済みの計画（選んだ部門の合計）× 割合。複製しない（読むだけ）。"""
+        from app import keiei
+        doc = {"fy": 2026, "version": "FY2026-v02", "approved_at": "2026-10-09",
+               "departments": [{"key": "funcreate_goods", "label": "ファンクリ（グッズ）"}, {"key": "rakuten", "label": "楽天市場"}],
+               "plan": [{"dept_key": "funcreate_goods", "metric": "revenue", "month": "2026-09", "value": 60000000},
+                        {"dept_key": "funcreate_goods", "metric": "revenue", "month": "2026-10", "value": 40000000},
+                        {"dept_key": "rakuten", "metric": "revenue", "month": "2026-09", "value": 20000000},
+                        {"dept_key": "rakuten", "metric": "margin", "month": "2026-09", "value": 999}]}
+        orig = keiei.plan
+        keiei.plan = lambda fy, opener=None: doc if fy == 2026 else {"fy": fy, "version": None, "plan": [], "reason": "未承認"}
+        self.addCleanup(setattr, keiei, "plan", orig)
+        r = self.m.compare(2026, None, [12], 5.0, 6, None)
+        self.assertEqual(r["target_yen"], 7200000, "1.2億 × 6%（売上だけを足す・粗利の行は足さない）")
+        self.assertIn("FY2026-v02", r["target_from_plan"]["basis"])
+        r = self.m.compare(2026, None, [12], 5.0, 10, ["funcreate_goods"])
+        self.assertEqual(r["target_yen"], 10000000)
+        with self.assertRaises(ValueError):
+            self.m.compare(2027, None, [12], 5.0, 6, None)            # 承認済みの版が無い年度
+        self.assertIsNone(self.m.compare(2027, None, [12], 5.0)["keiei"]["version"])
+        self.m.confirm(2026, 12, 6000000, 5.0, "計画の6%", "boss", "", "経営管理の計画の6%")
+        self.assertEqual(self.m.versions(2026)[0]["params"]["target_basis"], "経営管理の計画の6%")
+
+    def test_keiei_not_connected_is_said(self):
+        os.environ["NEWPRODUCT_KEIEI_TOKEN"] = "/nonexistent/keiei_token"
+        self.addCleanup(os.environ.pop, "NEWPRODUCT_KEIEI_TOKEN", None)
+        import importlib
+        from app import keiei
+        importlib.reload(keiei)
+        self.addCleanup(importlib.reload, keiei)
+        r = self.m.compare(2030, 1000000, [12], 5.0)
+        self.assertIn("つながっていません", r["keiei"]["why"])
+
 
 if __name__ == "__main__":
     unittest.main()

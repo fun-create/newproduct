@@ -197,12 +197,42 @@ def scenario(n_releases: int, target_yen: float | None, fy: int, effort_point: f
     return out
 
 
-def compare(fy: int, target_yen: float | None, candidates=None, effort_point=None) -> dict:
+def plan_target(fy: int, share_pct: float, depts: list[str] | None) -> dict:
+    """目標＝経営管理の承認済みの売上計画（選んだ部門の年度合計）× 新商品が担う割合（FR-125・FR-126・ADR-076）。"""
+    from app import keiei
+    if not 0 < share_pct <= 100:
+        raise ValueError("新商品が担う割合は 0 より大きく 100 以下の % で入れてください")
+    rb = keiei.revenue_by_dept(fy)
+    if not rb["version"]:
+        raise ValueError(f"{fy}年度の承認済みの計画が経営管理にありません（{rb.get('reason') or '理由不明'}）")
+    use = [d for d in rb["depts"] if not depts or d["key"] in depts]
+    if not use:
+        raise ValueError("選んだ部門の計画がありません")
+    base = sum(d["revenue"] for d in use)
+    months = rb["months"]
+    basis = (f"経営管理の{fy}年度の計画 {rb['version']}（{months[0]}〜{months[-1]}・{len(months)}か月）の "
+             f"{'・'.join(d['label'] for d in use)} の売上計画 {base:,.0f}円 × {share_pct:g}%")
+    return {"yen": round(base * share_pct / 100), "basis": basis, "base": base, "share_pct": share_pct,
+            "depts": [d["key"] for d in use], "version": rb["version"], "months": months}
+
+
+def compare(fy: int, target_yen: float | None, candidates=None, effort_point=None,
+            share_pct: float | None = None, depts: list[str] | None = None) -> dict:
     cands = sorted({int(x) for x in (candidates or DEFAULT_CANDIDATES) if 0 < int(x) <= 200})
     if not cands:
         raise ValueError("本数の候補を1つ以上入れてください（例 24,36,48）")
     ep = effort_point if effort_point is not None else default_effort_point()
-    return {"fy": fy, "target_yen": target_yen, "effort_point": ep, "effort_point_default": default_effort_point(),
+    from app import keiei
+    try:
+        kp = keiei.revenue_by_dept(fy)
+    except keiei.NotConnected as e:
+        kp = {"why": str(e)}
+    pt = None
+    if share_pct:
+        pt = plan_target(fy, share_pct, depts)
+        target_yen = pt["yen"]
+    return {"fy": fy, "target_yen": target_yen, "target_from_plan": pt, "keiei": kp,
+            "effort_point": ep, "effort_point_default": default_effort_point(),
             "distribution": distribution(), "scenarios": [scenario(n, target_yen, fy, ep) for n in cands],
             "draws": DRAWS, "computed_at": store.now_s(),
             "method": ("過去の新商品（発売から12か月がそろったもの）の売上を、本数ぶん無作為に引き直して足す計算を "
@@ -216,7 +246,8 @@ def can_confirm(user_id: str) -> bool:
     return bool(set(gate.roles_of(user_id)) & set(CONFIRMERS))
 
 
-def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_id: str, ip: str = "") -> dict:
+def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_id: str, ip: str = "",
+            target_basis: str = "") -> dict:
     """案を確定して版に残す（FR-131）。**確定は社長だけ。**前提・実績の範囲・試算日時ごと残す。"""
     if not can_confirm(user_id):
         raise PermissionError("販売計画を確定できるのは、社長の業務ロールの人だけです")
@@ -228,7 +259,8 @@ def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_
     d = distribution()
     pid = store.new_id("sim_plan")
     params = {"fiscal_year": fy, "n_releases": n_releases, "target_yen": target_yen, "effort_point": ep,
-              "draws": DRAWS, "seed": SEED + n_releases}
+              "draws": DRAWS, "seed": SEED + n_releases,
+              "target_basis": (target_basis or "").strip()[:300] or ("画面で入れた金額" if target_yen else "目標なし")}
     with store.tx() as c:
         c.execute("UPDATE sim_plan SET state='取消' WHERE fiscal_year=? AND state='確定'", (fy,))
         c.execute("INSERT INTO sim_plan (id,fiscal_year,label,params_json,result_json,data_range,state,decided_by,decided_at,note) "

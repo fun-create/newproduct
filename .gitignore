@@ -6,6 +6,8 @@ config/csrf_salt
 config/svc_token
 # カレンダーの会社休業日を読む専用の鍵（calfc が発行・0600）。**絶対に入れない**
 config/calfc_token
+# 経営管理の年度の計画を読む専用の鍵（keiei が発行・0600）。**絶対に入れない**
+config/keiei_token
 # ChatWork のAPIトークン（0600・十文字さんが置く）。**絶対に入れない**
 config/chatwork.env
 config/*.env

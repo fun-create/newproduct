@@ -3950,31 +3950,55 @@
   function viewSimulate() {
     loading();
     var q = hashQuery();
-    var qs = ["fy", "target", "cands", "ep"].filter(function (k) { return q.get(k); })
+    var qs = ["fy", "target", "share", "depts", "cands", "ep"].filter(function (k) { return q.get(k); })
       .map(function (k) { return k + "=" + encodeURIComponent(q.get(k)); });
     api("/api/simulate" + (qs.length ? "?" + qs.join("&") : "")).then(function (d) {
       var b = clear();
       setTitle("販売計画シミュレーション", "／ " + d.fy + "年度");
       b.appendChild(btnRow([navBtn("#/plan", "← プランへ戻る", "back")]));
-      b.appendChild(el("p", { "class": "np-sub", text: "新商品を年間に何本出せば、売上目標に届くかを試算します。案を並べて比べ、社長が確定します。目標は当面この画面で入れます（経営管理の計画を読む口ができたら切り替えます）。" }));
+      b.appendChild(el("p", { "class": "np-sub", text: "新商品を年間に何本出せば、売上目標に届くかを試算します。案を並べて比べ、社長が確定します。目標は、経営管理の承認済みの計画の○%として決めるか、金額で入れます。" }));
 
       // 入力
       var f = el("form", { "class": "np-inline" });
       function inp(name, label, size, val, ph) {
         return el("label", null, [label + " ", el("input", { name: name, size: size, value: val === null || val === undefined ? "" : String(val), placeholder: ph || "" })]);
       }
-      [inp("fy", "年度", 5, d.fy), inp("target", "新商品の売上目標（円・税込）", 12, d.target_yen, "例 12000000"),
+      var kp = d.keiei || {};
+      var fromPlan = d.target_from_plan;
+      [inp("fy", "年度", 5, d.fy), inp("share", "経営管理の計画の（%）", 4, fromPlan ? fromPlan.share_pct : q.get("share"), "例 6"),
+       inp("target", "または 目標の金額（円・税込）", 12, fromPlan ? "" : d.target_yen, "例 12000000"),
        inp("cands", "比べる本数", 14, d.scenarios.map(function (x) { return x.n; }).join(","), "24,36,48,52"),
        inp("ep", "1本あたりの工数ポイント", 5, d.effort_point, ""), el("button", { type: "submit", text: "試算する" })]
         .forEach(function (x) { f.appendChild(x); });
+      // 部門を選ぶ（経営管理の計画にある部門）。選ばなければ全部
+      var chosen = (q.get("depts") || "").split(",").filter(Boolean);
+      var dbox = el("div", { "class": "np-filters", role: "group", "aria-label": "目標の元にする部門" });
+      (kp.depts || []).forEach(function (dp) {
+        var cb = el("input", { type: "checkbox", name: "dept", value: dp.key });
+        if (!chosen.length || chosen.indexOf(dp.key) >= 0) cb.setAttribute("checked", "checked");
+        dbox.appendChild(el("label", null, [cb, " " + dp.label]));
+      });
       f.addEventListener("submit", function (ev) {
         ev.preventDefault();
-        var p = ["fy", "target", "cands", "ep"].map(function (k) { var v = f.elements[k].value.trim(); return v ? k + "=" + encodeURIComponent(v) : null; }).filter(Boolean);
+        var p = ["fy", "share", "target", "cands", "ep"].map(function (k) { var v = f.elements[k].value.trim(); return v ? k + "=" + encodeURIComponent(v) : null; }).filter(Boolean);
+        var ds = Array.prototype.filter.call(dbox.querySelectorAll("input[name=dept]"), function (x) { return x.checked; }).map(function (x) { return x.value; });
+        if (ds.length && ds.length < (kp.depts || []).length) p.push("depts=" + encodeURIComponent(ds.join(",")));
         location.hash = "#/simulate" + (p.length ? "?" + p.join("&") : "");
       });
       var ic = el("div", { "class": "np-card" });
       ic.appendChild(el("h2", { text: "前提" }));
       ic.appendChild(f);
+      // 経営管理の承認済みの計画（読むだけ・複製しない）
+      if (kp.why) ic.appendChild(el("p", { "class": "np-warn", text: kp.why }));
+      else if (!kp.version) ic.appendChild(el("p", { "class": "np-note", text: d.fy + "年度の承認済みの計画が経営管理にありません。" + (kp.reason ? "（" + kp.reason + "）" : "") + "目標は金額で入れてください。" }));
+      else {
+        ic.appendChild(el("p", { "class": "np-sub", text: "経営管理の" + d.fy + "年度の計画 " + kp.version + "（" + kp.months[0] + "〜" + kp.months[kp.months.length - 1] + "・" + kp.months.length + "か月）。目標の元にする部門を選んでください。" }));
+        ic.appendChild(dbox);
+        ic.appendChild(table(["部門", "売上計画（年度の合計）"], kp.depts.map(function (dp) {
+          return el("tr", null, [el("td", { text: dp.label }), el("td", { "class": "np-num", text: yen(dp.revenue) })]);
+        })));
+      }
+      if (fromPlan) ic.appendChild(el("p", { "class": "np-note", text: "目標: " + yen(fromPlan.yen) + "（" + fromPlan.basis + "）" }));
       ic.appendChild(el("p", { "class": "np-sub", text: "1本あたりの工数ポイントの既定は、開発タイプの係数の平均（" + dash(d.effort_point_default) + "）です。月の枠と工数の上下限は設定ページの値、連休月の枠はカレンダーの営業日から決まります。" }));
       b.appendChild(ic);
 
@@ -4012,7 +4036,8 @@
           bt.addEventListener("click", function () {
             var why = window.prompt(d.fy + "年度を " + x.n + " 本で確定します。理由（なぜこの本数か・必須）", "");
             if (!why) return;
-            post("/api/simulate/confirm", { fy: d.fy, n: x.n, target: d.target_yen || "", ep: d.effort_point === null ? "" : d.effort_point, note: why })
+            post("/api/simulate/confirm", { fy: d.fy, n: x.n, target: d.target_yen || "", ep: d.effort_point === null ? "" : d.effort_point, note: why,
+                                             basis: fromPlan ? fromPlan.basis : "" })
               .then(function () { viewSimulate(); }).catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
           });
           act.appendChild(bt);
@@ -4053,7 +4078,7 @@
       if (!d.versions.length) vc.appendChild(el("p", { "class": "np-note", text: "まだ確定していません。" }));
       else vc.appendChild(table(["確定日時", "本数", "目標", "見込み（真ん中）", "使った実績", "理由", "状態"], d.versions.map(function (v) {
         return el("tr", null, [el("td", { text: v.decided_at + " " + v.decided_by }), el("td", { "class": "np-num", text: v.params.n_releases + " 本" }),
-          el("td", { "class": "np-num", text: v.params.target_yen ? yen(v.params.target_yen) : "未入力" }),
+          el("td", { text: (v.params.target_yen ? yen(v.params.target_yen) : "未入力") + (v.params.target_basis ? "（" + v.params.target_basis + "）" : "") }),
           el("td", { "class": "np-num", text: v.result.p50 === undefined ? "—" : yen(v.result.p50) }),
           el("td", { text: v.data_range }), el("td", { text: dash(v.note) }), el("td", { text: v.state })]);
       })));
