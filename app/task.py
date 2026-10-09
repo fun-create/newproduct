@@ -156,6 +156,8 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "role_external": bool(r["role_external"]),
             "assignee": r["assignee"], "hours": r["hours"],
             "dept": r["dept"], "accepted_at": r["accepted_at"],
+            "created_at": r["created_at"], "received_at": r["received_at"],
+            "days": handoff_days(dict(r)) if r["kind"] == "他部署依頼" else None,
             "ai_used": False, "ai_reduction_rate": None,
         } for r in rs]
 
@@ -458,6 +460,32 @@ def create_work_item(f: dict, user_id: str) -> dict:
     return {"ok": True, "id": wid}
 
 
+def receive_work_item(wid: int, user_id: str) -> dict:
+    """他部署への依頼を、**受け側が受け取った**と記録する（FR-117・ADR-079）。完了とは別。二度押しても最初の日時のまま。"""
+    r = store.one("SELECT kind, received_at FROM work_item WHERE id=?", (wid,))
+    if r is None:
+        raise LookupError("その仕事はありません")
+    if r["kind"] != "他部署依頼":
+        raise ValueError("他部署への依頼だけに使います")
+    if r["received_at"]:
+        return {"ok": True, "received_at": r["received_at"]}
+    now = store.now_s()
+    with store.tx() as c:
+        c.execute("UPDATE work_item SET received_at=?, received_by=? WHERE id=?", (now, user_id, wid))
+    return {"ok": True, "received_at": now}
+
+
+def handoff_days(r: dict) -> dict:
+    """依頼から受領まで・受領から完了までの日数。まだなら今日までの日数（「n日たっても受け取られていない」を見せる）。"""
+    import datetime as _d
+    def day(s):
+        return _d.date.fromisoformat(s[:10]) if s else None
+    c, rv, a = day(r.get("created_at")), day(r.get("received_at")), day(r.get("accepted_at"))
+    t = store.today()
+    return {"to_receive": ((rv or t) - c).days if c else None, "received": bool(rv),
+            "to_finish": ((a or t) - (rv or c)).days if (rv or c) else None, "finished": bool(a)}
+
+
 def accept_work_item(wid: int, user_id: str) -> dict:
     """他部署への依頼を、**受け側が完了した**と記録して閉じる（FR-48）。"""
     r = store.one("SELECT kind FROM work_item WHERE id=?", (wid,))
@@ -467,8 +495,10 @@ def accept_work_item(wid: int, user_id: str) -> dict:
         raise ValueError("他部署への依頼だけに使います")
     now = store.now_s()
     with store.tx() as c:
-        c.execute("UPDATE work_item SET accepted_at=?, status='完了', done_at=? WHERE id=?",
-                  (now, now, wid))
+        # 受領を押さずに完了したときは、完了日を受領日にも入れる（受け取らずに終わることは無いため）
+        c.execute("UPDATE work_item SET accepted_at=?, status='完了', done_at=?, "
+                  "received_at=COALESCE(received_at, ?), received_by=COALESCE(received_by, ?) WHERE id=?",
+                  (now, now, now, user_id, wid))
     return {"ok": True}
 
 

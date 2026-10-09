@@ -1672,15 +1672,27 @@
   /** 他部署への依頼。**受け側の完了をもって完了**（FR-48）。送った側の進捗だけでは閉じない */
   function requestCell(t) {
     var w = el("span");
-    if (t.accepted_at) { w.appendChild(txt("完了（受け側 " + t.accepted_at + "）")); return w; }
+    // FR-117。依頼日・受領日・完了日。止まっている段を日数で見せる
+    var dy = t.days || {};
+    var line = "依頼 " + (t.created_at || "—").slice(0, 10)
+      + "／受領 " + (t.received_at ? t.received_at.slice(0, 10) + "（" + dy.to_receive + "日）" : "まだ（" + dash(dy.to_receive) + "日たっています）")
+      + "／完了 " + (t.accepted_at ? t.accepted_at.slice(0, 10) + "（受領から " + dy.to_finish + "日）" : "まだ");
+    if (t.accepted_at) { w.appendChild(txt(line)); return w; }
     w.appendChild(statusForm(t));
+    if (!t.received_at) {
+      var rb = el("button", { type: "button", text: "受け側が受け取った" });
+      rb.addEventListener("click", function () {
+        post("/api/work-items/" + t.id + "/receive", {}).then(function () { go(); }).catch(function (e) { alert(e.message); });
+      });
+      w.appendChild(txt(" ")); w.appendChild(rb);
+    }
     var bt = el("button", { type: "button", text: "受け側が完了" });
     bt.addEventListener("click", function () {
       if (!window.confirm("依頼先（" + (t.dept || "—") + "）が完了したことを記録して閉じます。よろしいですか")) return;
       post("/api/work-items/" + t.id + "/accept", {}).then(function () { go(); }).catch(function (e) { alert(e.message); });
     });
     w.appendChild(txt(" ")); w.appendChild(bt);
-    w.appendChild(el("span", { "class": "np-sub", text: " 依頼先: " + (t.dept || "—") }));
+    w.appendChild(el("span", { "class": "np-sub", text: " 依頼先: " + (t.dept || "—") + "　" + line }));
     return w;
   }
 

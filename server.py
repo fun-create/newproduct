@@ -843,6 +843,10 @@ class H(BaseHTTPRequestHandler):
             r = task_m.create_work_item(d, uid)
             store.audit(uid, "work_item.create", str(r["id"]), {k: d.get(k) for k in ("kind", "title", "dept")}, ip)
             return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "work-items" and parts[2] == "receive" and method == "POST":
+            r = task_m.receive_work_item(int(parts[1]), uid)
+            store.audit(uid, "work_item.receive", parts[1], None, ip)
+            return self.sendj(200, r)
         if len(parts) == 3 and parts[0] == "work-items" and parts[2] == "accept" and method == "POST":
             r = task_m.accept_work_item(int(parts[1]), uid)
             store.audit(uid, "work_item.accept", parts[1], None, ip)
