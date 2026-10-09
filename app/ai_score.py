@@ -165,6 +165,7 @@ SYSTEM = """あなたは FUN-CREATE株式会社（愛知県西尾市・2006年�
 守ること:
 - 根拠は、渡された文面と一般に知られていることだけから書く。売上・検索数・市場規模などの数字を作らない
 - ウェブも社内データも見られない。確かめないと言えないことは unverified に短く並べる（例:「競合の価格帯は未確認」）
+- 「ウェブで調べたこと（人が採用・出典つき）」があるアイデアは、それを根拠に使ってよい。使ったときは根拠にそう書く
 - 根拠が書けない軸は点を付けず null にする
 - 軸ごとの根拠は1〜2文・80字以内
 - 答えは JSON の配列だけ。前後に文章やコードブロックを付けない"""
@@ -182,10 +183,15 @@ INPUT_FIELDS = (("title", "商品案名"), ("summary", "概要"), ("target_scene
 
 
 def _inputs(idea: dict, theme_label: str) -> dict:
-    """渡す項目。**URL・人の名前・数字の推測材料は渡さない。**空欄は渡さない（「空」と書いて渡すと推測で埋める）。"""
+    """渡す項目。**台帳の URL・人の名前・数字の推測材料は渡さない**（人が採用したウェブの調べの出典は渡す・ADR-088）。
+    空欄は渡さない（「空」と書いて渡すと推測で埋める）。"""
     d = {lab: str(idea.get(k)).strip() for k, lab in INPUT_FIELDS
          if idea.get(k) is not None and str(idea.get(k)).strip()}
     d["テーマ"] = theme_label
+    from . import ai_web
+    w = ai_web.adopted_demand(idea["id"]) if idea.get("id") else None
+    if w:
+        d["ウェブで調べたこと（人が採用・出典つき）"] = w        # ADR-088
     return d
 
 

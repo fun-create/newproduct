@@ -45,6 +45,7 @@ import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 
 from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
 from app import ai_draft as ai_draft_m  # noqa: E402
+from app import ai_web as ai_web_m  # noqa: E402
 from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
@@ -599,6 +600,7 @@ class H(BaseHTTPRequestHandler):
             d["ai_names"] = ai_name_m.proposals_of(parts[1])          # 商品名の案（ADR-082）
             d["schedule"] = sched_m.summary(parts[1])                  # タスクの目安（ADR-084）
             d["ai_drafts"] = ai_draft_m.proposals_of(parts[1])        # LP依頼書・競合調査の下書き（ADR-087）
+            d["ai_web"] = ai_web_m.of("project", parts[1], "competitor")  # ウェブで調べた競合の候補（ADR-088）
             return self.sendj(200, d)
 
         # LP依頼書・競合調査の下書き（FR-149・ADR-087）。**AI は案を出すだけ。**人が直した文面を欄に足す
@@ -848,6 +850,10 @@ class H(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "projects" and method == "POST":
             pid, what = parts[1], parts[2]
             d = self.body()
+            if what == "ai-web":
+                r = ai_web_m.start_run("competitor", pid, uid)
+                store.audit(uid, "project.ai_web", pid, r, ip)
+                return self.sendj(200, r)
             if what in ("schedule", "schedule-adopt"):
                 # タスクの目安（FR-41・ADR-084）。**目安は期限ではない。**期限にするのは人が押したときだけ
                 pr = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
@@ -949,6 +955,7 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "アイデアがありません"})
             d["ai_proposals"] = ai_m.proposals_of(parts[1])        # AI採点の案（ADR-081）
+            d["ai_web"] = ai_web_m.of("idea", parts[1], "demand")    # ウェブで調べた需要・市場（ADR-088）
             return self.sendj(200, d)
         if len(parts) == 3 and parts[0] == "ideas" and method == "POST":
             iid, what = parts[1], parts[2]
@@ -962,6 +969,10 @@ class H(BaseHTTPRequestHandler):
                 r = idea_m.score_v2(iid, d, uid)
                 store.audit(uid, "idea.score", iid,
                             {"rubric_version": idea_m.V2_VERSION}, ip)
+                return self.sendj(200, r)
+            if what == "ai-web":
+                r = ai_web_m.start_run("demand", iid, uid)
+                store.audit(uid, "idea.ai_web", iid, r, ip)
                 return self.sendj(200, r)
             if what == "ai-score":
                 # F-1-11。**AI は案を出すだけ**（点にはしない・ADR-081）。この1件の案を出す回を起こす
@@ -979,6 +990,20 @@ class H(BaseHTTPRequestHandler):
             else:
                 r = ai_m.reject(pid, uid, d.get("note", ""))
             store.audit(uid, f"idea.ai_proposal.{parts[4]}", parts[1], {"proposal": pid, **d}, ip)
+            return self.sendj(200, r)
+
+        # ── /api/ai-web/<id>/adopt|reject（ウェブ調査の採用・ADR-088）──
+        if len(parts) == 3 and parts[0] == "ai-web" and parts[2] in ("adopt", "reject") and method == "POST":
+            d = self.body()
+            wid = int(parts[1])
+            if parts[2] == "adopt":
+                picks = d.get("picks")
+                if isinstance(picks, str):
+                    picks = [int(x) for x in picks.split(",") if x.strip()]
+                r = ai_web_m.adopt(wid, uid, picks or [])
+            else:
+                r = ai_web_m.reject(wid, uid, d.get("note", ""))
+            store.audit(uid, f"ai_web.{parts[2]}", str(wid), {"picks": d.get("picks")}, ip)
             return self.sendj(200, r)
 
         # ── /api/ai/score（AI採点の案・ADR-081）──

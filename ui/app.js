@@ -499,6 +499,8 @@
           if (((d.ai_drafts || {})[k[0]] || []).some(function (p) { return p.state === "提案"; }))
             miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した" + k[1] + "が、確かめるのを待っています。 "), secBtn(k[2], k[3])]));
         });
+        if ((d.ai_web || []).some(function (p) { return p.state === "提案"; }))
+          miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI がウェブで探した競合の候補が、選ぶのを待っています。 "), secBtn("np-sec-C", "C節へ")]));
         if ((d.ai_names || []).some(function (p) { return p.state === "提案"; })) {
           miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した商品名の案が、選ぶのを待っています。 "),
             secBtn("np-sec-F", "F節へ")]));
@@ -524,6 +526,7 @@
             if (fd.key === "F.name") c.appendChild(namePanel(d, meta));      // 商品名の案出し（ADR-082）
             if (fd.key === "F.lp") c.appendChild(draftPanel(d, meta, "lp"));          // LP依頼書の下書き（ADR-087）
             if (fd.key === "C.competitor") c.appendChild(draftPanel(d, meta, "competitor"));
+            if (fd.key === "C.competitor") c.appendChild(webCompetitorPanel(d, meta));   // ウェブで競合を探す（ADR-088）
           });
           b.appendChild(c);
         });
@@ -2087,6 +2090,9 @@
       // v2 の採点フォーム
       b.appendChild(scoreV2Form(d, meta));
 
+      // ウェブで需要・市場を調べる（ADR-088）。採用すると採点の案の根拠に渡す
+      b.appendChild(webDemandPanel(d, meta));
+
       // AI採点（F-1-11）。**既定 off**
       b.appendChild(aiPanel(d, meta));
 
@@ -2389,6 +2395,153 @@
     return c;
   }
 
+  // ── AI のウェブ調査（ADR-088）。**AI が検索した言葉と開いたページを全部見せる** ──
+  function traceBlock(t) {
+    t = t || {};
+    var calls = t.calls || [];
+    var det = el("details", { "class": "np-more" });
+    det.appendChild(el("summary", { text: "AI が検索した言葉・開いたページ（" + calls.length + " 回）" }));
+    det.appendChild(el("p", { "class": "np-sub", text: "カルテの文が検索語や URL にそのまま入っていないかを、ここで確かめられます。" }));
+    if (calls.length) det.appendChild(el("ol", null, calls.map(function (c) {
+      return el("li", null, [el("strong", { text: c.tool + ": " }), txt(c.what)]);
+    })));
+    return det;
+  }
+  var SEEN_WORD = { "開いた": "ページを開いて確かめた", "検索結果に出た": "検索結果に出た（ページは開いていない）", "見ていない": "AI が見ていない URL（使えません）" };
+  function webRunButton(path, label, a, editable, msgEl) {
+    if (!(a.can_run && editable)) return null;
+    var btn = el("button", { type: "button", "class": "np-btn", text: label });
+    if (!a.enabled) btn.setAttribute("disabled", "disabled");
+    btn.addEventListener("click", function () {
+      btn.setAttribute("disabled", "disabled");
+      post(path, {}).then(function (r) {
+        if (!r.started) { msgEl.textContent = r.reason; btn.removeAttribute("disabled"); return; }
+        pollRun(r.run_id, msgEl, go);
+      }).catch(function (e) { msgEl.textContent = "できませんでした: " + e.message; btn.removeAttribute("disabled"); });
+    });
+    return btn;
+  }
+  function webPast(props) {
+    var past = props.filter(function (p) { return p.state !== "提案"; });
+    if (!past.length) return null;
+    return el("div", { "class": "np-tablewrap" }, [table(["調べた日時", "モデル", "結果", "決めた人", "メモ"], past.map(function (p) {
+      return el("tr", null, [el("td", { text: p.created_at }), el("td", { text: p.model }), el("td", { text: p.state }),
+        el("td", { text: dash(p.decided_by) }), el("td", { text: dash(p.decided_note) })]);
+    }))]);
+  }
+
+  function webCompetitorPanel(d, meta) {
+    var a = meta.ai_scoring, h = d.header;
+    var c = el("details", { "class": "np-more" });
+    var props = d.ai_web || [];
+    var open = props.filter(function (p) { return p.state === "提案"; })[0];
+    if (open) { c.setAttribute("open", "open"); c.setAttribute("data-np-attention", "1"); }
+    c.appendChild(el("summary", { text: "AI にウェブで競合を探させる" + (open ? "（選ぶのを待っている候補があります）" : "") }));
+    c.appendChild(el("p", { "class": "np-note", text: "AI がウェブを検索し、ページを読んで、似た商品の店・価格・仕様・レビュー・出典 URL を候補として出します。"
+      + "選んだ行だけを下の競合の表に入れます（確認日は AI が調べた日、メモに「AI調べ」と残ります）。値は必ず人が出典で確かめてください。" }));
+    if (open) {
+      var rows = open.body.rows || [];
+      var f = el("form", { "class": "np-form" });
+      f.appendChild(el("h4", { text: "候補（" + open.created_at + "・" + open.model + "）" }));
+      f.appendChild(el("div", { "class": "np-tablewrap" }, [table(["", "店／商品", "販路", "価格", "仕様", "レビュー", "出典"], rows.map(function (x, i) {
+        var cb = el("input", { type: "checkbox", name: "pick", value: String(i), "aria-label": x.item + " を表に入れる" });
+        if (x.seen === "見ていない") cb.setAttribute("disabled", "disabled");
+        return el("tr", null, [el("td", null, [cb]), el("td", null, [el("strong", { text: x.shop }), el("br"), txt(x.item)]),
+          el("td", { "class": "np-nowrap", text: x.channel }),
+          el("td", { "class": "np-num np-nowrap", text: x.price_yen == null ? "未確認" : x.price_yen.toLocaleString() + "円" }),
+          el("td", { text: dash(x.spec) }),
+          el("td", { "class": "np-nowrap", text: (x.review_count == null ? "件数 未確認" : x.review_count + "件") + (x.review_avg == null ? "" : "・" + x.review_avg) }),
+          el("td", null, [el("a", { href: x.url, target: "_blank", rel: "noopener noreferrer", text: "開く" }), el("br"),
+            el("span", { "class": "np-sub", text: SEEN_WORD[x.seen] || x.seen })])]);
+      }))]));
+      if (open.unverified.length) {
+        f.appendChild(el("p", { "class": "np-sub", text: "未確認（AI が確かめきれなかったこと）:" }));
+        f.appendChild(el("ul", null, open.unverified.map(function (u) { return el("li", { text: u }); })));
+      }
+      f.appendChild(traceBlock(open.trace));
+      var msg = el("p", { "class": "np-note", role: "status" });
+      if (h.editable) {
+        var ok = el("button", { type: "submit", "class": "np-btn", text: "選んだ行を競合の表に入れる" });
+        var no = el("button", { type: "button", text: "どれも使わない" });
+        f.appendChild(btnRow([ok, no]));
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var picks = Array.prototype.filter.call(f.querySelectorAll("input[name=pick]"), function (x) { return x.checked; }).map(function (x) { return x.value; });
+          if (!picks.length) { msg.textContent = "表に入れる行を1つ以上選んでください"; return; }
+          post("/api/ai-web/" + open.id + "/adopt", { picks: picks.join(",") }).then(function () { go(); })
+            .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        no.addEventListener("click", function () {
+          post("/api/ai-web/" + open.id + "/reject", {}).then(function () { go(); })
+            .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+      }
+      f.appendChild(msg);
+      c.appendChild(f);
+    }
+    var m2 = el("p", { "class": "np-note", role: "status" });
+    var btn = webRunButton("/api/projects/" + encodeURIComponent(d.id) + "/ai-web", open ? "AI にもう一度探させる" : "AI にウェブで競合を探させる", a, h.editable, m2);
+    if (btn) {
+      if (!a.enabled) c.appendChild(el("p", { "class": "np-warn", text: a.reason }));
+      c.appendChild(el("p", { "class": "np-sub", text: "1回に数分かかります。費用の目安は 1回 $0.1〜0.3 です。" }));
+      c.appendChild(btnRow([btn])); c.appendChild(m2);
+    } else if (!a.can_run) c.appendChild(el("p", { "class": "np-note", text: "AI に調べさせられるのは、" + a.runners_label + "です。" }));
+    var p = webPast(props);
+    if (p) c.appendChild(p);
+    return c;
+  }
+
+  function webDemandPanel(d, meta) {
+    var a = meta.ai_scoring;
+    var c = el("div", { "class": "np-card" });
+    c.appendChild(el("h3", { text: "ウェブで調べた需要・市場" }));
+    c.appendChild(el("p", { "class": "np-note", text: "AI がウェブを検索し、このアイデアの需要や市場の様子を、出典つきの要点で出します。"
+      + "「採点の根拠に使う」を押すと、AI に採点の案を出させるときに一緒に渡します（AI が見ていない出典の要点は渡しません）。" }));
+    var props = d.ai_web || [];
+    var open = props.filter(function (p) { return p.state === "提案"; })[0];
+    var used = props.filter(function (p) { return p.state === "採用"; })[0];
+    function show(w, label) {
+      var box = el("div", { "class": "np-card" });
+      box.appendChild(el("h4", { text: label + "（" + w.created_at + "・" + w.model + "）" }));
+      if (w.body.summary) box.appendChild(el("p", { text: w.body.summary }));
+      box.appendChild(el("ul", null, (w.body.findings || []).map(function (x) {
+        return el("li", null, [txt(x.point + " "), el("a", { href: x.url, target: "_blank", rel: "noopener noreferrer", text: "出典" }),
+          el("span", { "class": "np-sub", text: "（" + (SEEN_WORD[x.seen] || x.seen) + "）" })]);
+      })));
+      if (w.unverified.length) {
+        box.appendChild(el("p", { "class": "np-sub", text: "未確認: " + w.unverified.join("；") }));
+      }
+      box.appendChild(traceBlock(w.trace));
+      return box;
+    }
+    if (open) {
+      var bx = show(open, "確認待ちの調べ");
+      var msg = el("p", { "class": "np-note", role: "status" });
+      var ok = el("button", { type: "button", "class": "np-btn", text: "採点の根拠に使う" });
+      var no = el("button", { type: "button", text: "使わない" });
+      ok.addEventListener("click", function () {
+        post("/api/ai-web/" + open.id + "/adopt", {}).then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+      });
+      no.addEventListener("click", function () {
+        post("/api/ai-web/" + open.id + "/reject", {}).then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+      });
+      bx.appendChild(btnRow([ok, no])); bx.appendChild(msg);
+      c.appendChild(bx);
+    } else if (used) {
+      c.appendChild(show(used, "採点の根拠に使っている調べ"));
+    }
+    var m2 = el("p", { "class": "np-note", role: "status" });
+    var btn = webRunButton("/api/ideas/" + encodeURIComponent(d.id) + "/ai-web", (open || used) ? "AI にもう一度調べさせる" : "AI にウェブで需要を調べさせる", a, true, m2);
+    if (btn) {
+      if (!a.enabled) c.appendChild(el("p", { "class": "np-warn", text: a.reason }));
+      c.appendChild(el("p", { "class": "np-sub", text: "1回に数分かかります。費用の目安は 1回 $0.1〜0.3 です。" }));
+      c.appendChild(btnRow([btn])); c.appendChild(m2);
+    } else if (!a.can_run) c.appendChild(el("p", { "class": "np-note", text: "AI に調べさせられるのは、" + a.runners_label + "です。" }));
+    var p = webPast(props);
+    if (p) c.appendChild(p);
+    return c;
+  }
+
   // 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを上の欄に足す
   function namePanel(d, meta) {
     var a = meta.ai_scoring, h = d.header;
@@ -2541,7 +2694,7 @@
       else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "種類", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
         a.runs.map(function (r) {
           return el("tr", null, [el("td", { text: String(r.id) }),
-            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
+            el("td", { text: ({ idea_score: "採点", name: "商品名", lp: "LP依頼書", competitor: "競合調査", web_competitor: "競合（ウェブ）", web_demand: "需要（ウェブ）" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
             el("td", { text: r.requested_at }), el("td", { text: r.stage }),
             el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
             el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);

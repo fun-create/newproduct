@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -93,16 +94,49 @@ def answered_by(usage: dict, asked: str) -> str:
     return ",".join(hit or keys) or asked
 
 
+URL_RE = re.compile(r"https?://[^\s\"'<>()\[\]]+")
+WEB_TOOLS = ("WebSearch", "WebFetch")
+WEB_TIMEOUT_SEC = int(os.environ.get("NEWPRODUCT_AI_WEB_TIMEOUT", "600"))
+
+
+def _trace(lines: list[dict]) -> dict:
+    """道具の使い方の記録。**検索した言葉・開いた URL・検索結果に出た URL** を全部拾う（後から見られるように）。"""
+    calls, opened, seen = [], [], []
+    for d in lines:
+        msg = d.get("message") or {}
+        content = msg.get("content") if isinstance(msg.get("content"), list) else []
+        for c in content:
+            if d.get("type") == "assistant" and c.get("type") == "tool_use":
+                inp = c.get("input") or {}
+                if c.get("name") == "WebSearch":
+                    calls.append({"tool": "検索", "what": str(inp.get("query") or "")[:300]})
+                elif c.get("name") == "WebFetch":
+                    u = str(inp.get("url") or "")[:500]
+                    calls.append({"tool": "ページを開く", "what": u})
+                    opened.append(u)
+                else:
+                    calls.append({"tool": str(c.get("name")), "what": json.dumps(inp, ensure_ascii=False)[:300]})
+            elif d.get("type") == "user" and c.get("type") == "tool_result":
+                body = c.get("content")
+                body = json.dumps(body, ensure_ascii=False) if not isinstance(body, str) else body
+                seen += [u.rstrip(".,;:") for u in URL_RE.findall(body)]
+    return {"calls": calls, "opened": list(dict.fromkeys(opened)), "seen": list(dict.fromkeys(seen + opened))[:300]}
+
+
 def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | None = None,
-        runner=None) -> dict:
+        runner=None, web: bool = False) -> dict:
     """`claude -p` を1回。返り値は必ず
-    {"ok", "text", "error", "error_kind", "cost_usd", "model", "duration_ms"}。
+    {"ok", "text", "error", "error_kind", "cost_usd", "model", "duration_ms"}（web のときは "trace" も）。
+
+    `web=True` のときだけ、検索（WebSearch）とページの読み取り（WebFetch）を渡す（2026-10-09 十文字さんの選択
+    「検索＋どのページでも読む」・ADR-088）。**それ以外の道具は渡さない**（ファイル・コマンド・コネクタは使えない）。
+    道具の使い方は stream-json で受け取り、検索した言葉・開いた URL を全部返す（呼んだ側が記録して画面に出す）。
 
     `error_kind` が `env`（資格情報・書き込み・時間切れ・形の崩れ）なら**環境側の失敗**で、
     呼んだ側はその回を打ち切る（入力の不備とは分ける・HUB rules/apps-common.md §2）。
     """
     mdl = model or DEFAULT_MODEL
-    lim = timeout or TIMEOUT_SEC
+    lim = timeout or (WEB_TIMEOUT_SEC if web else TIMEOUT_SEC)
 
     def bad(kind, msg, cost=0.0, ms=0):
         return {"ok": False, "text": "", "error": msg, "error_kind": kind,
@@ -112,8 +146,13 @@ def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | No
         pre = preflight()
         if not pre["ok"]:
             return bad("env", pre["ng"][0]["why"])
-    cmd = [CLAUDE_BIN, "-p", prompt, "--output-format", "json", "--model", mdl,
-           "--tools", "", "--system-prompt", system, "--no-session-persistence", "--strict-mcp-config"]
+    cmd = [CLAUDE_BIN, "-p", prompt, "--model", mdl, "--system-prompt", system,
+           "--no-session-persistence", "--strict-mcp-config"]
+    if web:
+        cmd += ["--output-format", "stream-json", "--verbose", "--tools", ",".join(WEB_TOOLS),
+                "--allowedTools", *WEB_TOOLS]
+    else:
+        cmd += ["--output-format", "json", "--tools", ""]
     env = {"HOME": AI_HOME, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "ja_JP.UTF-8",
            "ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
     try:
@@ -126,15 +165,17 @@ def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | No
     raw = (r.stdout or "").strip()
     if not raw:
         return bad("env", (r.stderr or "").strip()[:300] or "何も返りませんでした")
-    d = None
+    d, parsed = None, []
     for line in raw.splitlines():                       # 結果の JSON は1行。後ろに別の記録が付くことがある
         try:
             x = json.loads(line)
         except ValueError:
             continue
-        if isinstance(x, dict) and ("result" in x or "is_error" in x):
+        if not isinstance(x, dict):
+            continue
+        parsed.append(x)
+        if d is None and (x.get("type") == "result" or ("type" not in x and ("result" in x or "is_error" in x))):
             d = x
-            break
     if d is None:
         return bad("env", f"返事が JSON ではありません（末尾200字）: {raw[-200:]}")
     text = str(d.get("result") or "")
@@ -145,5 +186,8 @@ def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | No
         return {**bad("env", text[:300] or "AI が失敗を返しました", cost, ms), "model": real_model}
     if not text.strip():
         return {**bad("env", "答えが空で返りました", cost, ms), "model": real_model}
-    return {"ok": True, "text": text, "error": "", "error_kind": "", "cost_usd": cost,
-            "model": real_model, "duration_ms": ms}
+    out = {"ok": True, "text": text, "error": "", "error_kind": "", "cost_usd": cost,
+           "model": real_model, "duration_ms": ms}
+    if web:
+        out["trace"] = _trace(parsed)
+    return out
