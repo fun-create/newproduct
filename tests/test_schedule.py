@@ -109,6 +109,28 @@ class Schedule(unittest.TestCase):
         self.assertFalse(r["ok"])
         self.assertIn("標準工数", r["why"])
 
+    def test_set_launch_date_needs_reason_and_recalcs(self):
+        """ADR-085。理由が要る。前→後と理由を履歴に残し、目安を出し直す（期限は触らない）。"""
+        from app import project, calfc
+        with self.assertRaises(ValueError):
+            project.set_launch_date(self.pid, "2026-11-20", "", "boss")
+        with self.assertRaises(ValueError):
+            project.set_launch_date(self.pid, "11/20", "延期", "boss")
+        self.store.ex("UPDATE task SET due_on='2026-11-04' WHERE project_id=? AND seq=2", (self.pid,))
+        self.store.conn().commit()
+        orig = calfc.fetch
+        calfc.fetch = lambda fr, to, opener=None: _doc("2026-11-01", "2026-12-31")
+        self.addCleanup(setattr, calfc, "fetch", orig)
+        r = project.set_launch_date(self.pid, "2026-11-20", "資材の入荷が遅れるため", "boss")
+        self.assertTrue(r["changed"] and r["schedule"]["ok"])
+        t = self._tasks()
+        self.assertEqual(t[4]["plan_due"], "2026-11-19", "最後の目安は新しい発売日の前日")
+        self.assertEqual(t[2]["due_on"], "2026-11-04", "期限は触らない")
+        rev = self.store.one("SELECT * FROM project_revision WHERE project_id=? AND what='発売予定日'", (self.pid,))
+        self.assertIn("2026-11-12 → 2026-11-20", rev["detail"])
+        self.assertIn("資材の入荷", rev["detail"])
+        self.assertFalse(project.set_launch_date(self.pid, "2026-11-20", "同じ", "boss")["changed"])
+
 
 if __name__ == "__main__":
     unittest.main()

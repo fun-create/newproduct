@@ -850,6 +850,10 @@ class H(BaseHTTPRequestHandler):
                 r = project_m.move_stage(pid, d.get("action", ""), uid, d.get("reason_code", ""), d.get("note", ""))
                 store.audit(uid, "project.stage", pid, {k: d.get(k) for k in ("action", "reason_code")}, ip)
                 return self.sendj(200, r)
+            if what == "launch-date":
+                r = project_m.set_launch_date(pid, d.get("launch_date", ""), d.get("reason", ""), uid)
+                store.audit(uid, "project.launch_date", pid, {k: d.get(k) for k in ("launch_date", "reason")}, ip)
+                return self.sendj(200, r)
             if what == "revenue":
                 r = project_m.set_revenue(pid, d.get("counted") in ("1", "true", "on"), d.get("basis", ""), uid)
                 store.audit(uid, "project.revenue", pid, {"counted": d.get("counted"), "basis": d.get("basis")}, ip)

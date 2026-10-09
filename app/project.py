@@ -554,3 +554,41 @@ def set_revenue(pid: str, counted: bool, basis: str, user_id: str) -> dict:
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                   (pid, store.now_s(), user_id, "売上計上", f"含める（{basis}）" if counted else "含めない"))
     return {"ok": True}
+
+
+# ── 発売予定日（2026-10-09 十文字さんの選択・ADR-085）。**理由を必ず残す**（前→後を履歴に）──
+def set_launch_date(pid: str, date: str, reason: str, user_id: str) -> dict:
+    """カルテで発売予定日を入れる・変える。変えたらタスクの目安を計算し直す（**期限は触らない**）。
+
+    年間プランの枠の日付は変えない（枠は承認した版の約束で、版を通して直す）。
+    """
+    import datetime as _d
+    p = store.one("SELECT source_of_truth, launch_date FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+    date = (date or "").strip() or None
+    if date:
+        try:
+            date = _d.date.fromisoformat(date).isoformat()
+        except ValueError:
+            raise ValueError("発売予定日は 2026-12-01 の形で入れてください") from None
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("発売予定日を入れる・変える理由を書いてください（履歴に残ります）")
+    if date == p["launch_date"]:
+        return {"ok": True, "changed": False}
+    with store.tx() as c:
+        c.execute("UPDATE project SET launch_date=?, updated_at=?, updated_by=? WHERE id=?",
+                  (date, store.now_s(), user_id, pid))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                  (pid, store.now_s(), user_id, "発売予定日",
+                   f"{p['launch_date'] or '未定'} → {date or '未定'}。理由: {reason}"))
+    from app import schedule
+    try:
+        sc = schedule.refresh(pid, user_id)
+    except Exception as e:                      # noqa: BLE001 日付は変わった。目安が出ないだけ
+        sc = {"ok": False, "why": f"目安を計算できませんでした（{type(e).__name__}）"}
+    return {"ok": True, "changed": True, "launch_date": date, "schedule": sc}
+

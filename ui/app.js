@@ -460,6 +460,7 @@
         head.appendChild(gateChips(d.gates));
         if (h.editable) head.appendChild(stageControl(d, meta));
         if (h.editable) head.appendChild(revenueControl(d));
+        if (h.editable) head.appendChild(launchControl(d));
         b.appendChild(head);
 
         // B. いま欠けているもの（最上段）
@@ -802,6 +803,28 @@
       ev.preventDefault();
       post("/api/projects/" + encodeURIComponent(d.id) + "/revenue", { counted: sel.value === "0" ? "0" : "1", basis: sel.value === "0" ? "" : sel.value })
         .then(function () { go(); }).catch(function (e) { f.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+    });
+    return f;
+  }
+
+  // 発売予定日（ADR-085）。**理由が要る。**変えるとタスクの目安を計算し直す（期限は変えない）
+  function launchControl(d) {
+    var f = el("form", { "class": "np-inline" });
+    var di = el("input", { type: "date", name: "launch_date", "aria-label": "発売予定日" });
+    if (d.header.launch_date) di.setAttribute("value", d.header.launch_date);
+    var ri = el("input", { name: "reason", maxlength: "200", placeholder: "理由（必須）", "aria-label": "発売予定日を変える理由" });
+    [txt("発売予定日: "), di, txt(" "), ri, txt(" "), el("button", { type: "submit", text: d.header.launch_date ? "変える" : "入れる" })]
+      .forEach(function (x) { f.appendChild(x); });
+    var msg = el("span", { "class": "np-sub", role: "status" });
+    f.appendChild(msg);
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/projects/" + encodeURIComponent(d.id) + "/launch-date", { launch_date: di.value, reason: ri.value })
+        .then(function (r) {
+          if (r.schedule && !r.schedule.ok) window.alert("発売予定日を保存しました。タスクの目安は出せませんでした: " + r.schedule.why);
+          go();
+        })
+        .catch(function (e) { msg.textContent = " " + e.message; });
     });
     return f;
   }
