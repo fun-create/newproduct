@@ -113,7 +113,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 | **名前の揺れ6件**（「入園入学」と「入学式」など） | 十文字さん | **2026-09-23 から** | FR-78。「販売可能性が高い」の印が6件付かない。`tools/import_events.py --review` |
 | **提案3件**（外形監視／枠外の案件／空のときの導線） | 十文字さん | **2026-09-23 から** | 承認まで要件表にも設計にも入れない |
 | **本番画面の目視** | 十文字さん | **2026-09-22 から** | **`実装済` 72件が `検証済` へ上がらない** |
-| calfc `service_tokens.json` への追加 | calfc セッション | **未依頼** | FR-41（営業日の自動割付）・FR-121 |
+| calfc の休業日の鍵 | — | **2026-10-09 解消** | `/api/svc/holidays` だけを通す NEW PRODUCT 専用の鍵を calfc が発行・設置（c6283b8・十文字さん確認済み）。年間プランの連休月の判定に使う（ADR-065）。FR-41（営業日の自動割付）・FR-121（予定を書く）は別の道なので**未依頼のまま** |
 | keiei `keiei-ingest-newproduct` | keiei セッション | **未依頼** | FR-124（第4段） |
 | **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。枠 `newproduct-*: 5.0` は入った（**image と text で分け合う**・ADR-037）。契約は確定（超過は断る／`request_id` で冪等／`remaining` を返す）。**Auto GROWTH は十文字さんの返事待ち**（夜間に新しい経路を開けてよいか）。**口ができるまで着手しない。**`newproduct-` で始まらない job 名は枠に入らないので、呼ぶ前に弾くこと |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。**減衰は上流がかける**（2026-10-05 訂正・ADR-055） |
