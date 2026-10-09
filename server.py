@@ -1030,7 +1030,7 @@ def gates_board(user_id: str) -> dict:
         who = ("／".join(role_label.get(x, x) for x in nx["approver_role"])
                if nx else "—")
         rows.append({
-            "id": p["id"], "product": project_m.product_label(p),
+            "id": p["id"], "product": project_m.display_name(p),
             "flow_label": flow_label.get(p["flow_type"] or "", "—"),
             "next_gate": (f"{nx['gate']} {nx['name']}" if nx else "—"),
             "who": who,

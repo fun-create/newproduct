@@ -94,7 +94,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             extra += " AND t.assignee=?"; ep.append(assignee)
         rs = store.q(
             "SELECT t.*, r.label AS role_label, r.external AS role_external, "
-            "p.cat1,p.cat2,p.cat3,p.size,p.launch_date "
+            "p.cat1,p.cat2,p.cat3,p.size,p.launch_date,p.internal_name "
             "FROM task t LEFT JOIN role r ON r.code=t.role "
             "LEFT JOIN project p ON p.id=t.project_id "
             f"WHERE {sql}{extra} "
@@ -106,7 +106,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "id": r["id"], "kind": "task", "status": r["status"],
             "due_on": r["due_on"], "start_on": r["start_on"],
             "project_id": r["project_id"],
-            "project": _p.product_label(dict(r)),
+            "project": _p.display_name(dict(r)),
             "title": r["title"], "role": r["role"],
             "role_label": r["role_label"] or "—",
             "role_external": bool(r["role_external"]),
@@ -322,7 +322,7 @@ def dashboard(user_id: str) -> dict:
         for rc in g["approver_role"]:
             by_role[rc] = by_role.get(rc, 0) + 1
         if my_roles & set(g["approver_role"]):
-            waiting.append({"project_id": p["id"], "product": _p.product_label(p),
+            waiting.append({"project_id": p["id"], "product": _p.display_name(p),
                             "gate": g["gate"], "name": g["name"],
                             "state": g["state"], "missing_n": len(g["missing"])})
     role_label = {x["code"]: x["label"] for x in store.rows(
@@ -342,10 +342,10 @@ def dashboard(user_id: str) -> dict:
         where = (f"t.status NOT IN ('完了','対象外') AND t.due_on IS NOT NULL AND t.due_on <= ? "
                  f"AND ({' OR '.join(cond)})")
         my_n = store.val(f"SELECT COUNT(*) FROM task t WHERE {where}", [until] + cp, 0)
-        for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size FROM task t "
+        for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size, p.internal_name FROM task t "
                          f"LEFT JOIN project p ON p.id=t.project_id WHERE {where} "
                          f"ORDER BY t.due_on, t.project_id, t.seq LIMIT 12", [until] + cp):
-            my_tasks.append({"project_id": r["project_id"], "product": _p.product_label(dict(r)),
+            my_tasks.append({"project_id": r["project_id"], "product": _p.display_name(dict(r)),
                              "seq": r["seq"], "title": r["title"], "due_on": r["due_on"],
                              "status": r["status"], "overdue": r["due_on"] < t.isoformat(),
                              "role_label": role_label.get(r["role"], r["role"] or "—"),

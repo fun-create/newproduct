@@ -423,7 +423,7 @@ def board() -> list[dict]:
         if v is not None:
             lines = store.rows(store.q("SELECT * FROM cost_line WHERE version_id=?", (v["id"],)))
             t = totals(dict(v), lines)
-        out.append({"id": p["id"], "product": project_m.product_label(p),
+        out.append({"id": p["id"], "product": project_m.display_name(p),
                     "internal_name": p["internal_name"], "stage": p["stage"],
                     "launch_date": p["launch_date"], "deadline": d,
                     "candidates": len(cands), "adopted": sum(1 for c in cands if c["adopted"]),

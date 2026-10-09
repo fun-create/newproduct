@@ -678,13 +678,17 @@ class TestGateBoardShape(Base):
         mine = [r["mine"] for r in d["rows"]]
         self.assertEqual(mine, sorted(mine, reverse=True))
 
-    def test_board_does_not_leak_product_names(self):
-        """**商品名を表示しない**（N-6-2）。分類で表す。"""
+    def test_board_shows_internal_name_not_cip_product_names(self):
+        """案件は**社内呼称**で見分ける（2026-10-09 十文字さん「案件の区別がつくように」）。
+        N-6-2 が出さないのは CIP の商品名（お客さまの名入れが混じる）で、社内呼称は社内の呼び名。
+        社内呼称が空の案件は分類で代える。"""
         import server
+        from app import project
         d = server.gates_board("shacho")
         row = next(r for r in d["rows"] if r["id"] == self.nm["id"])
-        self.assertNotIn("機種追加", row["product"])
-        self.assertIn("スキンシール", row["product"])
+        p = project.detail(self.nm["id"])["header"]
+        self.assertEqual(row["product"], p["internal_name"] or p["product"])
+        self.assertEqual(project.display_name({"internal_name": " ", "cat1": "スキンシール"}), "スキンシール / — / —")
 
 
 class TestAudit(Base):

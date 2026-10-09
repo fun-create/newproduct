@@ -274,13 +274,13 @@
       if (!d.upcoming.length) {
         b.appendChild(el("p", { "class": "np-note", text: "4週以内の発売予定はありません。" }));
       } else {
-        b.appendChild(table(["発売予定日", "商品（分類）", "ステージ", ""],
+        b.appendChild(table(["発売予定日", "案件（社内呼称）", "分類", "ステージ"],
           d.upcoming.map(function (u) {
             return el("tr", null, [
               el("td", { text: dash(u.launch_date) }),
+              el("td", null, [el("a", { href: "#/projects/" + u.id, text: u.name })]),
               el("td", { text: u.product }),
-              el("td", { text: u.stage }),
-              el("td", null, [el("a", { href: "#/projects/" + u.id, text: "カルテ" })])
+              el("td", { text: u.stage })
             ]);
           })));
       }
@@ -358,16 +358,17 @@
         b.appendChild(btnRow([navBtn("#/plan", "年間プランを開く")]));
       } else {
         b.appendChild(table(
-          ["ステージ", "ゲート", "次のゲート", "発売予定日", "商品（分類・サイズ）",
+          ["案件（社内呼称）", "ステージ", "ゲート", "次のゲート", "発売予定日", "分類・サイズ",
            "開発タイプ", "売上計上", "工数ポイント", "担当", "欠けているもの",
            "正本"],
           d.rows.map(function (r) {
             return el("tr", null, [
+              el("td", { "class": "np-name" }, [el("a", { href: "#/projects/" + r.id, text: r.name })]),
               el("td", { text: r.stage }),
               el("td", null, [gateChips(r.gates)]),
               el("td", { text: r.next_gate }),
               el("td", { text: dash(r.launch_date) }),
-              el("td", null, [el("a", { href: "#/projects/" + r.id, text: r.product })]),
+              el("td", { text: r.product }),
               el("td", { text: r.flow_label }),
               el("td", { text: r.revenue }),
               el("td", { "class": "np-num",
@@ -435,13 +436,14 @@
         var d = r[0], meta = r[1];
         var b = clear();
         var h = d.header;
-        setTitle("案件 " + d.id, "／ " + h.product);
+        setTitle(h.name, "／ 案件 " + d.id);
 
         // A. ヘッダ（常時固定）。**商品名は出さない**（N-6-2）
         var head = el("div", { "class": "np-card", id: "np-sec-A" });     // 「A節へ」の飛び先
-        head.appendChild(el("h2", { text: "A. " + h.product }));
+        head.appendChild(el("h2", { text: "A. " + h.name }));
         head.appendChild(table(["項目", "値"], [
           row("社内呼称", dash(h.internal_name)),
+          row("分類・サイズ", h.product),
           row("開発タイプ", h.flow_label),
           row("発売予定日", dash(h.launch_date)),
           row("機会（なぜその日か）", dash(h.occasion)),
@@ -1687,7 +1689,7 @@
           text: "案件がありません。" + (d.passed_30d !== null
             ? "直近30日で通過したゲートは " + d.passed_30d + " 件です。" : "") }));
       } else {
-        var head = ["商品（分類）", "開発タイプ", "次の判定", "誰の番か"]
+        var head = ["案件（社内呼称）", "開発タイプ", "次の判定", "誰の番か"]
           .concat(d.gates.map(function (g) { return g.gate + " " + g.name; }));
         b.appendChild(table(head, d.rows.map(function (r) {
           var tds = [

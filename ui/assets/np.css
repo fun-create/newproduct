@@ -243,3 +243,6 @@ details.np-more > summary { cursor: pointer; color: var(--fca-muted); font-size:
 /* 横並びのフォームも親の幅を超えない（中の部品は縮んで折り返す） */
 form.np-inline { max-width: 100%; }
 form.np-inline > * { min-width: 0; max-width: 100%; }
+
+/* 案件の名前（社内呼称）は一覧の先頭で太く。長い名前は折り返す（2026-10-09 十文字さん「案件の区別がつくように」） */
+table.np td.np-name { font-weight: 600; min-width: 10rem; }

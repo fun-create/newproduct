@@ -5,8 +5,9 @@
 **17枚をタブにしない。判断の順で6節に畳む**（C→D→E→F が G1→G3→G4→G5 と同順）。
 **現行の壊れた採番（⑤が2枚・⑥⑦欠番）は保存しない**（B-11）。
 
-**商品名を表示しない**（N-6-2）。画面に出すのは `cat1 / cat2 / cat3 + size`。
-`internal_name` は社内の呼び名であって顧客データではない。
+**CIP の商品名を表示しない**（N-6-2・名入れにお客さまの名前が混じる）。分類は `cat1 / cat2 / cat3 + size`。
+案件の名前として画面に出すのは `internal_name`（社内呼称・`display_name()`）。社内の呼び名であって顧客データではない
+（2026-10-09 十文字さん「案件の区別がつくように」。移行した20件は分類が空で、分類だけでは見分けられなかった）。
 """
 from __future__ import annotations
 
@@ -68,6 +69,17 @@ def product_label(p: dict) -> str:
     if s.strip(" /—") == "":
         return "分類 未設定"
     return s
+
+
+def display_name(p: dict) -> str:
+    """**案件の名前として画面に出すもの**＝社内呼称（2026-10-06 十文字さん「案件の区別がつくように」）。
+
+    分類（cat1〜3）は移行した20件すべてで空だったため、一覧が「分類 未設定」ばかりになり見分けられなかった。
+    社内呼称は社内の呼び名で、お客さまの情報ではない（N-6-2 が出さないのは CIP の商品名＝お客さま由来の名前）。
+    社内呼称が空なら分類で代える。
+    """
+    n = (p.get("internal_name") or "").strip()
+    return n if n else product_label(p)
 
 
 def flow_types() -> list[dict]:
@@ -202,6 +214,7 @@ def listing(args: dict | None = None) -> dict:
             "next_gate": (f"{nx['gate']} {nx['name']}" if nx else "—"),
             "launch_date": p["launch_date"],
             "product": product_label(p),
+            "name": display_name(p),
             "internal_name": p["internal_name"],
             "flow_type": p["flow_type"],
             "flow_label": f["label"] if f else "—",
@@ -272,6 +285,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         "id": p["id"],
         "header": {
             "product": product_label(p),
+            "name": display_name(p),
             "internal_name": p["internal_name"],
             "flow_type": p["flow_type"],
             "flow_label": fl["label"] if fl else "—",
@@ -370,7 +384,7 @@ def upcoming(weeks: int = 4) -> list[dict]:
                  "AND launch_date >= ? AND launch_date <= ? "
                  "ORDER BY launch_date", (t.isoformat(), end))
     return [{"id": r["id"], "launch_date": r["launch_date"],
-             "product": product_label(dict(r)), "stage": r["stage"]} for r in rs]
+             "product": product_label(dict(r)), "name": display_name(dict(r)), "stage": r["stage"]} for r in rs]
 
 
 # ── ステージの遷移（FR-33・F-4-7）──────────────────────────────
