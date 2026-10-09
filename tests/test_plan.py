@@ -54,35 +54,6 @@ class Base(unittest.TestCase):
         with _st.tx() as c:
             c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('president','tester')")
 
-    def test_delete_draft_only_and_not_with_converted_slots(self):
-        """策定中の版だけ消せる（ADR-064）。承認済みは記録として残す。案件になった枠がある版は消さない。"""
-        from app import store as _st
-        with _st.tx() as c:
-            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('admin','kanri')")
-        empty = self.m.create_version("tester", 2027)["id"]
-        with self.assertRaises(PermissionError):
-            self.m.delete_version(empty, "someone")
-        r = self.m.delete_version(empty, "kanri")
-        self.assertEqual((r["slots"], _st.val("SELECT COUNT(*) FROM plan_version WHERE id=?", (empty,))), (0, 0))
-        sid = self.m.create_slot("tester", version_id=self.vid, launch_month="2026-06", product_kind="uchiwa")["id"]
-        self.m.convert(sid, "tester")
-        with self.assertRaises(ValueError):
-            self.m.delete_version(self.vid, "kanri")                 # 案件になった枠がある
-        other = self.m.create_version("tester", 2028)["id"]
-        self.m.create_slot("tester", version_id=other, launch_month="2028-05", product_kind="uchiwa")
-        self.m.approve(other, "tester")
-        with self.assertRaises(ValueError):
-            self.m.delete_version(other, "kanri")                    # 承認済みは消さない
-
-    def test_only_president_can_approve(self):
-        """2026-10-06 まで確認が無く、利用者の誰でも承認できた（ADR-058）。"""
-        with self.assertRaises(PermissionError):
-            self.m.approve(self.vid, "someone")
-        from app import store as _st
-        self.assertEqual(_st.val("SELECT state FROM plan_version WHERE id=?", (self.vid,)), "策定中")
-        self.assertFalse(self.m.can_approve("someone"))
-        self.assertTrue(self.m.can_approve("tester"))
-
     def tearDown(self):
         from app import store
         store.close()
@@ -317,6 +288,54 @@ class TestRules(Base):
 
 
 # ══════════════════════════════════════════════════════════
+    def test_delete_draft_only_and_not_with_converted_slots(self):
+        """策定中の版だけ消せる（ADR-064）。承認済みは記録として残す。案件になった枠がある版は消さない。"""
+        from app import store as _st
+        with _st.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('admin','kanri')")
+        empty = self.m.create_version("tester", 2027)["id"]
+        with self.assertRaises(PermissionError):
+            self.m.delete_version(empty, "someone")
+        r = self.m.delete_version(empty, "kanri")
+        self.assertEqual((r["slots"], _st.val("SELECT COUNT(*) FROM plan_version WHERE id=?", (empty,))), (0, 0))
+        sid = self.m.create_slot("tester", version_id=self.vid, launch_month="2026-06", product_kind="uchiwa")["id"]
+        self.m.convert(sid, "tester")
+        with self.assertRaises(ValueError):
+            self.m.delete_version(self.vid, "kanri")                 # 案件になった枠がある
+        other = self.m.create_version("tester", 2028)["id"]
+        self.m.create_slot("tester", version_id=other, launch_month="2028-05", product_kind="uchiwa")
+        self.m.approve(other, "tester")
+        with self.assertRaises(ValueError):
+            self.m.delete_version(other, "kanri")                    # 承認済みは消さない
+
+    def test_approved_version_keeps_the_rules_it_was_approved_with(self):
+        """承認後に設定を変えても、承認済みの版の判定は変わらない（ADR-069）。違いは並べて出す。"""
+        from app import store as _st
+        for _ in range(3):
+            self.slot(month="2026-05")
+        self.assertEqual(self.rule("count", "2026-05")["level"], "ok")          # 目標3本
+        self.m.approve(self.vid, "tester")
+        _st.ex("UPDATE setting SET value='4' WHERE key='plan.monthly_launch_slots'")
+        _st.conn().commit()
+        ck = self.m.check(self.vid)
+        r = next(x for x in ck["results"] if x["rule"] == "count" and x["scope"] == "2026-05")
+        self.assertEqual(r["level"], "ok", "承認時の目標（3本）で判定する")
+        self.assertEqual(ck["basis"]["mode"], "承認時の値")
+        self.assertEqual([(d["key"], d["approved"], d["now"]) for d in ck["basis"]["diff"]],
+                         [("plan.monthly_launch_slots", "3", "4")])
+        new = self.m.revise(self.vid, "tester")["id"]
+        r2 = next(x for x in self.m.check(new)["results"] if x["rule"] == "count" and x["scope"] == "2026-05")
+        self.assertEqual(r2["level"], "warn", "改訂版（策定中）はいまの設定（4本）で判定する")
+
+    def test_only_president_can_approve(self):
+        """2026-10-06 まで確認が無く、利用者の誰でも承認できた（ADR-058）。"""
+        with self.assertRaises(PermissionError):
+            self.m.approve(self.vid, "someone")
+        from app import store as _st
+        self.assertEqual(_st.val("SELECT state FROM plan_version WHERE id=?", (self.vid,)), "策定中")
+        self.assertFalse(self.m.can_approve("someone"))
+        self.assertTrue(self.m.can_approve("tester"))
+
 class TestExceptions(Base):
     def test_ack_needs_a_reason_and_does_not_hide_the_warning(self):
         """**消える作りにすると、理由を書かずに消すほうが速くなる**（F-3-3）。"""

@@ -63,6 +63,15 @@ class MyWork(unittest.TestCase):
         self.assertEqual([t["by"] for t in my["tasks"]], ["ロール", "担当", "ロール"])
         self.assertEqual(my["roles"], ["商品開発部"])
 
+    def test_task_list_mine_next7_matches_dashboard(self):
+        """「ほか N 件」の先（タスク一覧・7日先まで・自分の分だけ）が、ダッシュボードと同じ範囲を出す。"""
+        dash = {t["title"] for t in self.task.dashboard("dev")["my"]["tasks"]}
+        lst = self.task.listing("next7", "project", mine="dev")
+        self.assertEqual({r["title"] for r in lst["rows"]}, dash)
+        self.assertTrue(lst["mine"])
+        everyone = {r["title"] for r in self.task.listing("next7", "project")["rows"]}
+        self.assertIn("生産・明日", everyone, "全員の分には他のロールも出る")
+
     def test_no_roles_sees_only_assigned(self):
         my = self.task.dashboard("nobody")["my"]
         self.assertEqual(my["tasks"], [])

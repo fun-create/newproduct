@@ -801,7 +801,8 @@ class H(BaseHTTPRequestHandler):
         if parts == ["tasks"] and method == "GET":
             return self.sendj(200, task_m.listing(
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
-                qs.get("role", ""), qs.get("assignee", "")))
+                qs.get("role", ""), qs.get("assignee", ""),
+                mine=uid if qs.get("mine") == "1" else ""))
         if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "status" \
                 and method == "POST":
             d = self.body()

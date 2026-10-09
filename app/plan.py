@@ -27,6 +27,8 @@
 """
 from __future__ import annotations
 
+import json
+
 import calendar
 import datetime as _dt
 
@@ -105,7 +107,20 @@ def seed() -> dict:
     return {"product_kind": len(PRODUCT_KINDS), "setting": len(SETTINGS)}
 
 
+import contextvars as _cv
+
+# 承認済み・失効の版を判定するときだけ、承認時の値で上書きする（ADR-069）。スレッドごとに分かれる
+_RULES_OVERRIDE: _cv.ContextVar[dict | None] = _cv.ContextVar("plan_rules_override", default=None)
+# 承認時に写す設定（挿入ルールの判定に使うもの）。長期連休の月そのものはカレンダーが正なので写さない
+RULE_KEYS = ("plan.ratio_original_to_uchiwa", "plan.ratio_tolerance_slots", "plan.effort_min",
+             "plan.effort_max", "plan.monthly_launch_slots")
+
+
 def _setting(key: str, default=None):
+    ov = _RULES_OVERRIDE.get()
+    if ov is not None and key in ov:
+        v = ov[key]
+        return default if v in (None, "") else v
     r = store.one("SELECT value FROM setting WHERE key=?", (key,))
     if r is None or r["value"] in (None, ""):
         return default
@@ -203,9 +218,12 @@ def approve(version_id: str, user_id: str) -> dict:
             c.execute("UPDATE plan_version SET state='失効',updated_at=?,"
                       "updated_by=? WHERE id=?",
                       (store.now_s(), user_id, prev["id"]))
+        # 承認した時点の挿入ルールの値を写す。以後この版はこの値で判定する（ADR-069）
+        snap = {k: store.val("SELECT value FROM setting WHERE key=?", (k,)) for k in RULE_KEYS}
         c.execute("UPDATE plan_version SET state='承認済',approved_by=?,"
-                  "approved_at=?,updated_at=?,updated_by=? WHERE id=?",
-                  (user_id, store.now_s(), store.now_s(), user_id, version_id))
+                  "approved_at=?,updated_at=?,updated_by=?,rules_snapshot=? WHERE id=?",
+                  (user_id, store.now_s(), store.now_s(), user_id,
+                   json.dumps(snap, ensure_ascii=False), version_id))
     return {"id": version_id, "state": "承認済", "changed": True,
             "superseded": prev["id"] if prev else None}
 
@@ -581,11 +599,32 @@ def _rule_holiday(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _basis(version_id: str) -> dict:
+    """この版をどの値で判定するか。承認済み・失効で承認時の値があれば、それ（ADR-069）。"""
+    v = store.one("SELECT state, approved_at, rules_snapshot FROM plan_version WHERE id=?", (version_id,))
+    if v is None or v["state"] == "策定中" or not v["rules_snapshot"]:
+        return {"mode": "いまの設定", "snapshot": None, "diff": []}
+    snap = json.loads(v["rules_snapshot"])
+    labels = {r["key"]: r["label"] for r in store.q("SELECT key, label FROM setting")}
+    diff = []
+    for k, was in snap.items():
+        now = store.val("SELECT value FROM setting WHERE key=?", (k,))
+        if (was or None) != (now or None):
+            diff.append({"key": k, "label": labels.get(k, k), "approved": was, "now": now})
+    return {"mode": "承認時の値", "approved_at": v["approved_at"], "snapshot": snap, "diff": diff}
+
+
 def check(version_id: str) -> dict:
-    """挿入ルールを機械で検査する（FR-83）。**保存は止めない**（FR-84）。"""
+    """挿入ルールを機械で検査する（FR-83）。**保存は止めない**（FR-84）。
+    承認済み・失効の版は**承認した時点の値**で判定する（ADR-069）。"""
     rows = slots(version_id)
-    res = (_rule_ratio(rows) + _rule_effort(rows)
-           + _rule_count(rows) + _rule_holiday(rows))
+    basis = _basis(version_id)
+    tok = _RULES_OVERRIDE.set(basis["snapshot"])
+    try:
+        res = (_rule_ratio(rows) + _rule_effort(rows)
+               + _rule_count(rows) + _rule_holiday(rows))
+    finally:
+        _RULES_OVERRIDE.reset(tok)
     acks = _acks(version_id)
     for r in res:
         a = acks.get((r["rule"], r["scope"]))
@@ -596,7 +635,7 @@ def check(version_id: str) -> dict:
     for r in res:
         n[r["level"]] = n.get(r["level"], 0) + 1
     return {
-        "results": res, "counts": n,
+        "results": res, "counts": n, "basis": basis,
         "warn_unacked": sum(1 for r in res if r["level"] == "warn" and not r["acked"]),
         "note": "警告は保存を止めません。例外は理由を付けて承知できますが、"
                 "承知しても警告は消えません。消せる作りにすると理由が書かれなくなります。",

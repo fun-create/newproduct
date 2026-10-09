@@ -57,6 +57,10 @@ def _bounds(when: str, t: _dt.date, pfx: str = ""):
     if when == "week":
         return (f"{due} >= ? AND {due} <= ?",
                 [d, (t + _dt.timedelta(days=6)).isoformat()])
+    if when == "next7":
+        # 期限切れ（未完）＋7日先まで（未完）。ダッシュボードの「自分のやること」と同じ範囲（2026-10-09）
+        return (f"{due} IS NOT NULL AND {due} <= ? AND {st} NOT IN ('完了','対象外')",
+                [(t + _dt.timedelta(days=7)).isoformat()])
     if when == "none":
         return (f"{due} IS NULL", [])
     if when == "all":
@@ -69,7 +73,7 @@ def counts() -> dict:
     t = store.today()
     out = {}
     for w in ["overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6",
-              "week", "none", "all"]:
+              "week", "next7", "none", "all"]:
         sql, pr = _bounds(w, t)
         n = store.val(f"SELECT COUNT(*) FROM task WHERE {sql}", pr, 0)
         n += store.val(f"SELECT COUNT(*) FROM work_item WHERE {sql}", pr, 0)
@@ -81,8 +85,19 @@ def counts() -> dict:
     return out
 
 
+def _mine(user_id: str, pfx: str):
+    """「自分の分だけ」＝ 担当者が自分 ＋ 自分の業務ロール（ダッシュボードの「自分のやること」と同じ）。"""
+    from . import gate
+    roles = sorted(set(gate.roles_of(user_id)))
+    cond, prm = [f"{pfx}assignee=?"], [user_id]
+    if roles:
+        cond.append(f"{pfx}role IN ({','.join('?' * len(roles))})")
+        prm += roles
+    return " AND (" + " OR ".join(cond) + ")", prm
+
+
 def listing(when: str = DEFAULT_WHEN, tab: str = "project",
-            role: str = "", assignee: str = "") -> dict:
+            role: str = "", assignee: str = "", mine: str = "") -> dict:
     t = store.today()
     ep: list = []
     if tab == "project":
@@ -92,6 +107,8 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             extra += " AND t.role=?"; ep.append(role)
         if assignee:
             extra += " AND t.assignee=?"; ep.append(assignee)
+        if mine:
+            x, xp = _mine(mine, "t."); extra += x; ep += xp
         rs = store.q(
             "SELECT t.*, r.label AS role_label, r.external AS role_external, "
             "p.cat1,p.cat2,p.cat3,p.size,p.launch_date,p.internal_name "
@@ -121,6 +138,8 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             extra += " AND w.role=?"; ep.append(role)
         if assignee:
             extra += " AND w.assignee=?"; ep.append(assignee)
+        if mine:
+            x, xp = _mine(mine, "w."); extra += x; ep += xp
         kind = "案件外" if tab == "work" else "他部署依頼"
         rs = store.q(
             "SELECT w.*, r.label AS role_label, r.external AS role_external "
@@ -142,7 +161,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
 
     c = counts()
     return {
-        "when": when or DEFAULT_WHEN, "tab": tab, "today": t.isoformat(),
+        "when": when or DEFAULT_WHEN, "tab": tab, "today": t.isoformat(), "mine": bool(mine),
         "rows": rows, "counts": c,
         "no_due_total": c["none"],
         "overdue_total": c["overdue"],

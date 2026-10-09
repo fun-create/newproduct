@@ -190,7 +190,7 @@
             el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
         })));
-        if (my.tasks_n > my.tasks.length) mc.appendChild(el("p", { "class": "np-sub", text: "ほか " + (my.tasks_n - my.tasks.length) + " 件あります（タスクの一覧で、期間を「今週」「すべて」にすると見られます）。" }));
+        if (my.tasks_n > my.tasks.length) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - my.tasks.length) + " 件も含めて、自分のタスクをすべて見る")]));
       }
       if (my.gates.length) {
         mc.appendChild(el("h3", { text: "あなたが判定するゲート（" + my.gates_n + "件）" }));
@@ -1468,7 +1468,7 @@
   var WHEN_LABEL = {
     "overdue+today": "期限切れ＋今日（既定）", "overdue": "期限切れ", "today": "今日",
     "+1": "+1", "+2": "+2", "+3": "+3", "+4": "+4", "+5": "+5", "+6": "+6",
-    "week": "今週", "none": "期限なし", "all": "すべて"
+    "week": "今週", "next7": "7日先まで（未完）", "none": "期限なし", "all": "すべて"
   };
   var TAB_LABEL = { project: "案件タスク", work: "案件外の仕事", request: "他部署への依頼" };
 
@@ -1477,7 +1477,9 @@
     var q = hashQuery();
     var when = q.get("when") || "overdue+today";
     var tab = q.get("tab") || "project";
-    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab))
+    var mine = q.get("mine") === "1";
+    var mq = mine ? "&mine=1" : "";
+    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab) + mq)
       .then(function (d) {
         var b = clear();
         setTitle("タスク", "／ " + (WHEN_LABEL[when] || when));
@@ -1486,7 +1488,7 @@
         var tabs = el("div", { "class": "np-filters", role: "tablist" });
         Object.keys(TAB_LABEL).forEach(function (k) {
           tabs.appendChild(el("a", {
-            href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + k,
+            href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + k + mq,
             text: TAB_LABEL[k], "aria-current": k === tab ? "true" : null
           }));
         });
@@ -1495,15 +1497,20 @@
         // 期間フィルタ。**「期限なし」を常設ボタンに**
         var fl = el("div", { "class": "np-filters" });
         ["overdue+today", "overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6",
-         "week", "none", "all"].forEach(function (k) {
-          var n = d.counts[k];
+         "week", "next7", "none", "all"].forEach(function (k) {
+          var n = mine ? undefined : d.counts[k];        // 件数は全員分なので、自分の分だけのときは出さない
           fl.appendChild(el("a", {
-            href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab,
+            href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq,
             text: WHEN_LABEL[k] + (n === undefined ? "" : " " + n),
             "aria-current": k === when ? "true" : null
           }));
         });
         b.appendChild(fl);
+        // 自分の分だけ（担当者が自分＋自分の業務ロール）。ダッシュボードの「自分のやること」の続き
+        var mf = el("div", { "class": "np-filters" });
+        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab, text: "全員の分", "aria-current": mine ? null : "true" }));
+        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1", text: "自分の分だけ", "aria-current": mine ? "true" : null }));
+        b.appendChild(mf);
         b.appendChild(el("p", { "class": "np-note",
           text: "きょうは " + d.today + " です。期限切れ " + d.overdue_total
             + " 件／期限なし " + d.no_due_total + " 件。" }));
@@ -2352,6 +2359,17 @@
       text: "適合 " + (c.ok || 0) + " ／ 警告 " + (c.warn || 0)
             + "（うち理由未記入 " + cur.rules.warn_unacked + "） ／ 未計測 "
             + (c.unavailable || 0) }));
+    // 判定の基準（ADR-069）。承認済みの版は承認した時点の値で判定する。いまの設定と違えば並べて出す
+    var bs = cur.rules.basis;
+    if (bs && bs.mode === "承認時の値") {
+      box.appendChild(el("p", { "class": bs.diff.length ? "np-warn" : "np-note",
+        text: "この版は承認した時点（" + bs.approved_at + "）の値で判定しています。"
+          + (bs.diff.length ? "いまの設定と違うもの: " + bs.diff.map(function (x) {
+              return x.label + " 承認時 " + dash(x.approved) + " → いま " + dash(x.now); }).join("、")
+              + "。いまの値で直したいときは「改訂版を作る」で写してから見直します。" : "いまの設定とも同じです。") }));
+    } else if (bs) {
+      box.appendChild(el("p", { "class": "np-note", text: "策定中なので、いまの設定（設定ページ）の値で判定しています。承認すると、その時点の値がこの版に残ります。" }));
+    }
     box.appendChild(el("p", { "class": "np-note", text: cur.rules.note }));
     box.appendChild(el("p", { "class": "np-note", text: cur.rules.effort_unit_note }));
     var rows = cur.rules.results.map(function (r) {
