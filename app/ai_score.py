@@ -90,7 +90,7 @@ def can_run(user_id: str) -> bool:
 
 def reason_off(budget: dict | None = None, pre: dict | None = None) -> str:
     if not setting_on():
-        return ("AI採点は設定で off です（ai_scoring_enabled）。"
+        return ("AI の案出し（採点・商品名）は設定で off です（ai_scoring_enabled）。"
                 "予算枠は 2026-09-24 に付きました（newproduct-* 5.0）。"
                 "使うなら設定で on にしてください。")
     pre = pre or ai_cli.preflight()

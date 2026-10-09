@@ -494,6 +494,11 @@
         }
         b.appendChild(miss);
 
+        if ((d.ai_names || []).some(function (p) { return p.state === "提案"; })) {
+          miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した商品名の案が、選ぶのを待っています。 "),
+            secBtn("np-sec-F", "F節へ")]));
+        }
+
         // 止めずに知らせる（FR-101）。**通過は止めない**が、判定する人の目に入る場所に置く
         (d.warnings || []).forEach(function (w) {
           miss.appendChild(el("p", { "class": "np-warn" }, [txt(w.text + " "),
@@ -511,6 +516,7 @@
             text: s.progress + (s.gate_pending ? "　｜　" + s.gate_pending : "") }));
           s.fields.forEach(function (fd) {
             c.appendChild(fieldForm(d.id, fd, h.editable));
+            if (fd.key === "F.name") c.appendChild(namePanel(d, meta));      // 商品名の案出し（ADR-082）
           });
           b.appendChild(c);
         });
@@ -734,6 +740,7 @@
       var open = null;
       try { open = localStorage.getItem(FOLD_KEY + c.id); } catch (e) { /* 使えなくても開いたまま */ }
       if (open === "1") det.setAttribute("open", "open");          // 既定は閉じる（目次から開く）
+      if (c.querySelector("[data-np-attention]")) det.setAttribute("open", "open");   // 人の判断を待つ案がある節は開く
       det.appendChild(el("summary", { text: title }));
       det.addEventListener("toggle", function () {
         try { localStorage.setItem(FOLD_KEY + c.id, det.open ? "1" : "0"); } catch (e) { /* 覚えないだけ */ }
@@ -2249,6 +2256,76 @@
     return box;
   }
 
+  // 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを上の欄に足す
+  function namePanel(d, meta) {
+    var a = meta.ai_scoring, h = d.header;
+    var c = el("details", { "class": "np-more" });
+    var props = d.ai_names || [];
+    var open = props.filter(function (p) { return p.state === "提案"; })[0];
+    if (open) { c.setAttribute("open", "open"); c.setAttribute("data-np-attention", "1"); }
+    c.appendChild(el("summary", { text: "AI に商品名の案を出させる" + (open ? "（選ぶのを待っている案があります）" : "") }));
+    c.appendChild(el("p", { "class": "np-note",
+      text: "カルテの分類・概要・ターゲット・ニーズ・差別化・コンセプト・これまでの検討から、AI が名前の案と理由を出します。"
+          + "選んだ名前だけを上の欄に1行ずつ足します（書いてある行は消しません）。商標の登録状況は AI には確かめられないので、必ず調べてください。" }));
+    if (open) {
+      var f = el("form", { "class": "np-form" });
+      f.appendChild(el("h4", { text: "案（" + open.created_at + "・" + open.model + "）" }));
+      open.candidates.forEach(function (x, i) {
+        var cb = el("input", { type: "checkbox", name: "pick", value: String(i), id: "np-nm-" + open.id + "-" + i });
+        f.appendChild(el("div", { "class": "np-pick" }, [cb,
+          el("label", { "for": "np-nm-" + open.id + "-" + i }, [el("strong", { text: x.name }), txt("　" + x.why)])]));
+      });
+      if (open.unverified.length) {
+        f.appendChild(el("p", { "class": "np-sub", text: "未確認（AI が確かめられなかったこと）:" }));
+        f.appendChild(el("ul", null, open.unverified.map(function (u) { return el("li", { text: u }); })));
+      }
+      f.appendChild(el("p", { "class": "np-note", text: "渡した項目: " + ((open.inputs && open.inputs["項目"]) || []).join("・") }));
+      var msg = el("p", { "class": "np-note", role: "status" });
+      if (h.editable) {
+        var ok = el("button", { type: "submit", "class": "np-btn", text: "選んだ名前を欄に足す" });
+        var no = el("button", { type: "button", text: "どれも使わない" });
+        f.appendChild(btnRow([ok, no]));
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var picks = Array.prototype.filter.call(f.querySelectorAll("input[name=pick]"), function (x) { return x.checked; })
+            .map(function (x) { return x.value; });
+          if (!picks.length) { msg.textContent = "名前を1つ以上選んでください"; return; }
+          post("/api/projects/" + encodeURIComponent(d.id) + "/ai-names/" + open.id + "/adopt", { picks: picks.join(",") })
+            .then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        no.addEventListener("click", function () {
+          post("/api/projects/" + encodeURIComponent(d.id) + "/ai-names/" + open.id + "/reject", {})
+            .then(function () { go(); }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+      }
+      f.appendChild(msg);
+      c.appendChild(f);
+    }
+    if (a.can_run && h.editable) {
+      var btn = el("button", { type: "button", "class": "np-btn", text: open ? "AI にもう一度出させる" : "AI に名前の案を出させる" });
+      if (!a.enabled) btn.setAttribute("disabled", "disabled");
+      var m2 = el("p", { "class": "np-note", role: "status" });
+      btn.addEventListener("click", function () {
+        btn.setAttribute("disabled", "disabled");
+        post("/api/projects/" + encodeURIComponent(d.id) + "/ai-names", {}).then(function (r) {
+          if (!r.started) { m2.textContent = r.reason; btn.removeAttribute("disabled"); return; }
+          pollRun(r.run_id, m2, go);
+        }).catch(function (e) { m2.textContent = "できませんでした: " + e.message; btn.removeAttribute("disabled"); });
+      });
+      if (!a.enabled) c.appendChild(el("p", { "class": "np-warn", text: a.reason }));
+      c.appendChild(btnRow([btn])); c.appendChild(m2);
+    } else if (!a.can_run) {
+      c.appendChild(el("p", { "class": "np-note", text: "AI に案を出させられるのは、" + a.runners_label + "です。" }));
+    }
+    var past = props.filter(function (p) { return p.state !== "提案"; });
+    if (past.length) c.appendChild(el("div", { "class": "np-tablewrap" }, [table(["出した日時", "モデル", "結果", "決めた人", "メモ"],
+      past.map(function (p) {
+        return el("tr", null, [el("td", { text: p.created_at }), el("td", { text: p.model }), el("td", { text: p.state }),
+          el("td", { text: dash(p.decided_by) }), el("td", { text: dash(p.decided_note) })]);
+      }))]));
+    return c;
+  }
+
   // AI の回を見守る。**画面を離れたら止める**（別の画面で書き換えない）
   function pollRun(id, msg, done) {
     var here = location.hash;
@@ -2269,7 +2346,7 @@
     tick();
   }
 
-  function viewAiScore() {
+  function viewAiScore() {   // 採点の案の一覧。商品名の案の回もここの「最近の回」に並ぶ
     loading();
     api("/api/ai/score").then(function (a) {
       var b = clear();
@@ -2328,9 +2405,10 @@
 
       b.appendChild(el("h2", { text: "最近の回" }));
       if (!a.runs.length) b.appendChild(el("p", { "class": "np-note", text: "まだ一度も走らせていません。" }));
-      else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
+      else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "種類", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
         a.runs.map(function (r) {
-          return el("tr", null, [el("td", { text: String(r.id) }), el("td", { text: r.requested_by }),
+          return el("tr", null, [el("td", { text: String(r.id) }),
+            el("td", { text: ({ idea_score: "採点", name: "商品名" })[r.kind] || r.kind }), el("td", { text: r.requested_by }),
             el("td", { text: r.requested_at }), el("td", { text: r.stage }),
             el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
             el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);

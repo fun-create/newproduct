@@ -249,3 +249,7 @@ table.np td.np-name { font-weight: 600; min-width: 10rem; }
 /* サーバで打つコマンド（AI のログインなど）。折り返して横にはみ出させない */
 .np-pre { white-space: pre-wrap; word-break: break-all; margin: 4px 0 8px; padding: 8px 10px;
   border: 1px solid var(--fca-line); border-radius: 6px; background: var(--fca-bg); color: var(--fca-ink); }
+/* 選ぶ案（チェックと名前を1行に）。.np-form の入力欄の幅指定を受けない */
+.np-form .np-pick { display: flex; align-items: flex-start; gap: .5rem; margin: .4rem 0; }
+.np-form .np-pick input[type=checkbox] { width: auto; flex: none; margin: .3rem 0 0; }
+.np-form .np-pick label { display: block; margin: 0; }

@@ -43,6 +43,7 @@ sys.path.insert(0, str(BASE))
 import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 参照）
 
 from app import ai_score as ai_m  # noqa: E402
+from app import ai_name as ai_name_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
 from app import idea as idea_m   # noqa: E402
@@ -593,7 +594,27 @@ class H(BaseHTTPRequestHandler):
             d = project_m.detail(parts[1], uid)
             if d is None:
                 return self.sendj(404, {"error": "案件がありません"})
+            d["ai_names"] = ai_name_m.proposals_of(parts[1])          # 商品名の案（ADR-082）
             return self.sendj(200, d)
+
+        # 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを F.name に足す
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "ai-names" and method == "POST":
+            r = ai_name_m.start_run(parts[1], uid)
+            store.audit(uid, "project.ai_names", parts[1], r, ip)
+            return self.sendj(200, r)
+        if (len(parts) == 5 and parts[0] == "projects" and parts[2] == "ai-names"
+                and parts[4] in ("adopt", "reject") and method == "POST"):
+            d = self.body()
+            pid = int(parts[3])
+            if parts[4] == "adopt":
+                picks = d.get("picks")
+                if isinstance(picks, str):
+                    picks = [int(x) for x in picks.split(",") if x.strip()]
+                r = ai_name_m.adopt(pid, uid, picks or [])
+            else:
+                r = ai_name_m.reject(pid, uid, d.get("note", ""))
+            store.audit(uid, f"project.ai_names.{parts[4]}", parts[1], {"proposal": pid, **d}, ip)
+            return self.sendj(200, r)
 
         # 対応確認（FR-102）。ひな形は商品開発部が作る（項目の中身は発明しない）
         if parts == ["compat", "templates"] and method == "POST":

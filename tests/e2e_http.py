@@ -160,6 +160,10 @@ def main() -> int:
              str([m["key"] for m in d["missing"]]))
         keys = [s["key"] for s in d["sections"]]
         note(keys == ["C", "D", "E", "F"], "17枚が判断の順の節に畳まれている", str(keys))
+        note(d.get("ai_names") == [], "カルテに商品名の AI の案（まだ無い）が付く（ADR-082）", str(d.get("ai_names")))
+        st, d = cl.post(f"/api/projects/{pid}/ai-names", {})
+        note((st == 403) or (st == 200 and d.get("started") is False and d.get("reason")),
+             "商品名の案は、ロールか設定・ログイン・予算がそろうまで走らない", str(d.get("reason") or d.get("error"))[:60])
 
         st, d = cl.post(f"/api/projects/{pid}/section",
                         {"key": "C.target", "body": "七五三の記念撮影"})

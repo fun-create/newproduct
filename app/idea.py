@@ -283,8 +283,8 @@ SETTINGS = [
     ("competitor_review_rate", "競合の売上推計に使うレビュー率", "number", "%",
      "未設定です。買った人のうちレビューを書く人の割合。商品開発部が決めます。"
      "決まるまで競合調査の売上推計（レビュー件数 ÷ レビュー率 × 価格）は出しません"),
-    ("ai_scoring_enabled", "AI採点を使う", "bool", None,
-     "既定は使わない。AI採点を呼ぶ仕組みがまだ無いため"),
+    ("ai_scoring_enabled", "AI に案を出させる（採点・商品名）", "bool", None,
+     "既定は使わない。使うにはサーバで claude にログインしてあることと、AI予算の残りが要る（ADR-081）"),
 ]
 
 SETTING_DEFAULTS = {"concept_stock_floor": "6", "ai_scoring_enabled": "0",

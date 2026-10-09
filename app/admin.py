@@ -136,7 +136,7 @@ DESC = {
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
     "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",
-    "ai_scoring_enabled": "アイデアの採点の案を AI に出させるか（1=使う・0=使わない）。使うには、サーバで claude にログインしてあることと、AI予算の残りが要ります",
+    "ai_scoring_enabled": "AI に案を出させるか（アイデアの採点・商品名。1=使う・0=使わない）。使うには、サーバで claude にログインしてあることと、AI予算の残りが要ります",
 }
 
 
