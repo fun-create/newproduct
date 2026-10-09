@@ -2,6 +2,14 @@
 """
 ChatWork への投稿（F-15-6 ／ FR-171〜）。2026-09-24 十文字さんの選択C。
 
+## 2026-10-09 の例外（ADR-067・十文字さんの選択）
+
+送り主は **FUN-CREATE BOT**。Auto GROWTH が持つ BOT のトークンと同じ値を `config/chatwork.env` に置く
+（十文字さんが「NEW PRODUCT 専用アカウントを作る」「個人アカウント」より BOT を選んだ）。下の「写さない」の例外。
+代わりに**本文の題に「NEW PRODUCT より」を付けて、どのアプリが投げたか分かるようにする**。
+BOT の鍵を作り直したら、Auto GROWTH と両方を揃えること（片方だけだと NEW PRODUCT が黙って送れなくなる）。
+送り先は「Lucky Field×FUN-CREATE」（設定 `automation.chatwork_room_id`）。
+
 ## 守っていること
 
 **トークンをこのアプリに写さない。**他のアプリ（Auto GROWTH・secretary・lpscope）が

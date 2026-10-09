@@ -397,7 +397,8 @@ def chatwork_text(request_id: str) -> str:
         raise ValueError("その依頼がありません")
     r, e = d["request"], d["effort"]
     base = (_setting(BASE_URL_SETTING) or "").rstrip("/")
-    lines = [f"[info][title]自動化の依頼: {r['title']}[/title]",
+    # 送り主は FUN-CREATE BOT（Auto GROWTH の FCTR 通知と同じ）。**どのアプリからか分かるよう名乗る**（ADR-067）
+    lines = [f"[info][title]NEW PRODUCT より・自動化の依頼: {r['title']}[/title]",
              f"出した人: {r['requester'] or '—'}（{r['dept'] or '—'}）",
              "標準タスク: " + (d["template"]["title"] if d["template"]
                             else "178行のどれにも当たりません（表が現場に追いついていない）"),
