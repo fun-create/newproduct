@@ -402,6 +402,9 @@ def check_stage2_screens():
          "app.js が「AI は案を出すだけ・点は人が採用したとき」と出している",
          "FR-145。AI の点をそのまま点にしない（ADR-081）")
     cli = (BASE / "app" / "ai_cli.py").read_text(encoding="utf-8")
+    note(OK if '"--strict-mcp-config"' in cli and '"ENABLE_CLAUDEAI_MCP_SERVERS": "false"' in cli else NG,
+         "AI: claude.ai のコネクタ（Drive・Notion など）を読み込ませない",
+         "定額プランのログインで自動で付く。付くと AI が触れられ、毎回約17万トークン（2026-10-09 実測）")
     note(OK if '"--tools", ""' in cli and '"--system-prompt"' in cli and 'd.get("is_error")' in cli else NG,
          "AI: claude にツールを渡さず、is_error で成否を見る",
          "未ログインでも終了コード0（keiei の実測）。ツールを渡すとサーバのファイルを読める")

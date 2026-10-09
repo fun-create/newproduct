@@ -488,12 +488,16 @@ class TestAiScoring(Base):
         seen = {}
 
         def runner(cmd, **kw):
-            seen["cmd"] = cmd
+            seen["cmd"], seen["env"] = cmd, kw.get("env") or {}
             ans = [{"id": i, "demand": 8, "market_size": 4, "advantage": 6, "theme_fit": 9,
                     "reasons": {"demand": "a", "market_size": "b", "advantage": "c", "theme_fit": "d"},
                     "unverified": []}]
-            return self._proc({"result": "```json\n" + _j.dumps(ans) + "\n```", "is_error": False,
-                               "total_cost_usd": 0.0123, "modelUsage": {"claude-sonnet-5-5": {}}})
+            p = self._proc({"result": "```json\n" + _j.dumps(ans) + "\n```", "is_error": False,
+                            "total_cost_usd": 0.0123,
+                            "modelUsage": {"claude-haiku-4-5": {"canonicalModel": "claude-haiku-4-5"},
+                                           "claude-sonnet-5-5": {"canonicalModel": "claude-sonnet-5-5"}}})
+            p.stdout += "\nClient.listTools() called but server does not advertise tools capability"
+            return p
         r = ai_score.start_run([i], "tester", scorer=ai_score.ClaudeScorer(runner=runner), sync=True, force=True)
         p = ai_score.proposals_of(i)[0]
         self.assertEqual((p["model"], p["axes"]["theme_fit"]), ("claude-sonnet-5-5", 9))
@@ -501,6 +505,8 @@ class TestAiScoring(Base):
         self.assertEqual(c[c.index("--tools") + 1], "", "ツールを渡さない")
         self.assertIn("--system-prompt", c)
         self.assertIn("--no-session-persistence", c)
+        self.assertIn("--strict-mcp-config", c, "claude.ai のコネクタを読み込まない")
+        self.assertEqual(seen["env"].get("ENABLE_CLAUDEAI_MCP_SERVERS"), "false")
         self.assertAlmostEqual(ai_score.run_view(r["run_id"])["cost_usd"], 0.0123)
 
     def test_is_error_with_exit_zero_stops_the_run(self):
