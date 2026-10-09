@@ -32,7 +32,14 @@ def main() -> int:
         return 1 if problems else 0
     r = report.save(m, "timer")
     print(f"月次レポート {m} を保存しました" + (f"（作れなかった節 {len(r['problems'])}: {r['problems']}）" if r["problems"] else ""))
-    return 1 if r["problems"] else 0     # 一部が作れなかったら失敗として残す（落ちない失敗にしない）
+    # HUB へ指標を書き出す（FR-123・ADR-091）。送っていない点だけ送る
+    from app import hubmetrics
+    h = hubmetrics.push()
+    print(f"HUB の指標: 新しく送った {h['sent']} 点／値が変わった点 {len(h['changed'])}（送っていない）"
+          + (f"／{h['error']}" if h["error"] else ""))
+    for n in h["notes"]:
+        print("  " + n)
+    return 1 if (r["problems"] or h["error"] or h["changed"]) else 0     # 落ちない失敗にしない
 
 
 if __name__ == "__main__":

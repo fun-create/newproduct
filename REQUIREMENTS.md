@@ -188,7 +188,7 @@
 | FR-120 | keiei の部門マスタを写し、sha256 で照合する（5か所目の独自定義を作らない） | 実装済 | F-12 ／ 2026-10-02 正本（fun-create-ec-agents `docs/keiei/departments.json`）を `config/departments.json` に配置（644・newproduct）。sha256 `fc90e0fe…` が正本・keiei・Auto GROWTH の写しと一致。`/api/health` の `departments_sha` で照合できる |
 | FR-121 | calfc へ予定を書く（試作日・サンプル納期・発売日・MTG・社長確認） | 未着手 | F-12 ／ 設計書 §3-5・第11章 ⑧ が未依頼 |
 | FR-122 | AutoGrowth の分類別実績（`insight_products_latest.json`）を読む | 見送り | 設計書 §3-2 ／ 2026-10-09 十文字さん選択。売上フィードを直接読む作り（売上・原価の画面・商品ABC・ADR-045/050）で代わっている。同じ売上を別の経路で二重に読まない |
-| FR-123 | HUB へ指標と「理由」を書く（`hub metric` ／ `insights/selling-products.md`） | 未着手 | 設計書 §3-6 |
+| FR-123 | HUB へ指標と「理由」を書く（`hub metric` ／ `insights/selling-products.md`） | 実装済 | 設計書 §3-6 ／ **2026-10-09 実装**（ADR-091・十文字さんの選択で4指標）。Auto GROWTH の `/api/metrics` へ source `newproduct`: 新商品の月別売上・発売本数・起票数・コンセプト在庫（未計測は書かない）。毎月2日の月次の後に流す。送った点は覚えて二度送らない。「理由」（insights/selling-products.md）は人が書く（自動で理由を作らない） |
 | FR-124 | keiei へ新商品分の `plan` と `kpi_target` を `basis_json` つきで渡す | 実装中 | F-12・F-14-8 ／ 2026-10-09 十文字さん選択（ADR-078）。確定したら目標の金額を部門×月に配り、根拠つきで送る中身を作って残す。**経営管理の受け口が未設置**（依頼中）なので未送信のまま。kpi_target はまだ |
 
 ## 11. 販売計画シミュレーション（F-14）
@@ -297,9 +297,9 @@
 | 状態 | 件数 |
 |---|---|
 | 検証済 | 2 |
-| 実装済 | 159 |
+| 実装済 | 160 |
 | 実装中 | 4 |
-| 未着手 | 11 |
+| 未着手 | 10 |
 | 見送り | 13 |
 | **合計** | **189** |
 
