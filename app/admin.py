@@ -52,6 +52,15 @@ def _room(v, label):
     return v.strip()
 
 
+def _onoff(v, label):
+    t = v.strip().lower()
+    if t in ("1", "on", "true", "使う"):
+        return "1"
+    if t in ("0", "off", "false", "使わない"):
+        return "0"
+    raise ValueError(f"{label}は「使う」か「使わない」（1 か 0）で入れてください")
+
+
 def _url(v, label):
     if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::\d+)?(/[^\s]*)?", v.strip()):
         raise ValueError(f"{label}は https:// で始まる URL で入れてください")
@@ -71,13 +80,13 @@ EDITABLE = {
     "plan.task_setup_lead_months":  (BIZ_DEV, _num(0, 12, integer=True), "年間プランの挿入ルール"),
     "automation.chatwork_room_id":  (APP_ADMIN, _room, "接続先"),
     "automation.app_base_url":      (APP_ADMIN, _url, "接続先"),
+    "ai_scoring_enabled":           (APP_ADMIN, _onoff, "接続先"),
 }
 # 変えさせないもの（理由は画面に出す）
 LOCKED = {
     "plan.holiday_months": "カレンダーアプリの会社休業日から自動で決まります（連続5日以上の休みがかかる月）。ここでは入れません",
     "plan.holiday_month_max_slots": "カレンダーの営業日から自動で決まります（その月の営業日 ÷ 通常月の平均営業日 × 月あたりの発売枠・切り捨て）。ここでは入れません",
     "plan.fiscal_year_start_month": "このアプリでは使っていません",
-    "ai_scoring_enabled": "AI採点を呼ぶ実装がまだありません。押しても動きません",
     "ai.usage_endpoint": "書き換えると別のものにつながるため、画面からは変えません",
 }
 GROUP_ORDER = ("原価・価格", "競合の推計", "在庫と目標", "年間プランの挿入ルール", "接続先", "変えないもの")
@@ -127,7 +136,7 @@ DESC = {
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
     "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",
-    "ai_scoring_enabled": "アイデアの採点に AI を使うか",
+    "ai_scoring_enabled": "アイデアの採点の案を AI に出させるか（1=使う・0=使わない）。使うには、サーバで claude にログインしてあることと、AI予算の残りが要ります",
 }
 
 

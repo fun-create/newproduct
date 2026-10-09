@@ -246,3 +246,6 @@ form.np-inline > * { min-width: 0; max-width: 100%; }
 
 /* 案件の名前（社内呼称）は一覧の先頭で太く。長い名前は折り返す（2026-10-09 十文字さん「案件の区別がつくように」） */
 table.np td.np-name { font-weight: 600; min-width: 10rem; }
+/* サーバで打つコマンド（AI のログインなど）。折り返して横にはみ出させない */
+.np-pre { white-space: pre-wrap; word-break: break-all; margin: 4px 0 8px; padding: 8px 10px;
+  border: 1px solid var(--fca-line); border-radius: 6px; background: var(--fca-bg); color: var(--fca-ink); }

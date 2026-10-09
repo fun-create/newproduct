@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -1824,7 +1824,9 @@
         var t = f.querySelector("input[name=title]");
         if (t) t.focus({ preventScroll: true });
       });
-      b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する")]));
+      var ai = meta.ai_scoring || {};
+      b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
+        navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : ""))]));
 
       // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
       var f = el("form", { "class": "np-filters", id: "np-ifilter" });
@@ -2153,49 +2155,187 @@
     return box;
   }
 
+  // AI採点の案（ADR-081）。**AI は案を出すだけ。**点になるのは人が「採用」を押したとき
   function aiPanel(d, meta) {
     var a = meta.ai_scoring;
     var c = el("div", { "class": "np-card" });
-    c.appendChild(el("h3", { text: "AI採点" }));
-    c.appendChild(el("p", { "class": a.enabled ? "np-note" : "np-warn",
-      text: a.enabled ? "有効です。" : a.reason }));
+    c.appendChild(el("h3", { text: "AI採点の案" }));
     c.appendChild(el("p", { "class": "np-note",
-      text: "採点結果には rubric版・実行日時・モデル名を残します（" + a.records.kept.join("／") + "）。" }));
-    c.appendChild(el("p", { "class": "np-note",
-      text: "AI が付けた点は現在 " + a.ai_scored + " 件です。" }));
-    // **予算の状態をそのまま出す。**使えない理由が「設定」なのか「予算」なのかを分ける
-    if (a.budget) {
-      var b = a.budget;
-      var bc = el("div");
-      bc.appendChild(el("h3", { text: "AIの予算（Auto GROWTH が正本）" }));
-      if (b.state === "ok") {
-        bc.appendChild(el("p", { "class": "np-sub",
-          // **「image の使用額」と書かない。**枠の合算なので（Auto GROWTH の申し送り）
-          text: b.spent_label + ": " + b.spent + " / 上限 " + b.cap
-                + "（残り " + b.remaining + "）" }));
-        bc.appendChild(el("p", { "class": "np-sub", text: b.note }));
-      } else {
-        // **未計測と 0 を混ぜない。**状態を語で出す（N-11）
-        bc.appendChild(el("span", { "class": "np-big np-big-unmeasured",
-          text: { unavailable: "確かめられません", over_cap: "使い切りました",
-                  no_cap: "枠がありません", bad_job: "設定の誤り",
-                  refused: "断られました" }[b.state] || b.state }));
-        bc.appendChild(el("p", { "class": "np-sub", text: b.why || "" }));
-      }
-      c.appendChild(bc);
+      text: "AI は4つの軸（購買意欲・ターゲット規模・競合優位性・テーマ適合）に、点の案と根拠を出すだけです。"
+          + "点になるのは、人が「採用」を押したときです。想定粗利額と生産方法は人が入れます。" }));
+    var props = d.ai_proposals || [];
+    var open = props.filter(function (p) { return p.state === "提案"; })[0];
+    if (open) c.appendChild(proposalForm(d, open));
+    if (!a.enabled) c.appendChild(el("p", { "class": "np-warn", text: a.reason }));
+    if (a.can_run) {
+      var btn = el("button", { type: "button", "class": "np-btn",
+        text: open ? "AI にもう一度出させる" : "この案の採点の案を AI に出させる" });
+      if (!a.enabled) btn.setAttribute("disabled", "disabled");
+      var msg = el("p", { "class": "np-note", role: "status" });
+      btn.addEventListener("click", function () {
+        btn.setAttribute("disabled", "disabled");
+        post("/api/ideas/" + encodeURIComponent(d.id) + "/ai-score", {}).then(function (r) {
+          if (!r.started) { msg.textContent = r.reason; btn.removeAttribute("disabled"); return; }
+          pollRun(r.run_id, msg, go);
+        }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; btn.removeAttribute("disabled"); });
+      });
+      c.appendChild(btnRow([btn])); c.appendChild(msg);
+    } else {
+      c.appendChild(el("p", { "class": "np-note", text: "AI に案を出させられるのは、" + a.runners_label + "です。" }));
     }
-    if (a.scorer_note) c.appendChild(el("p", { "class": "np-warn", text: a.scorer_note }));
-    var btn = el("button", { type: "button", text: "AI採点を実行する" });
-    if (!a.enabled) btn.setAttribute("disabled", "disabled");
-    var msg = el("p", { "class": "np-note" });
-    btn.addEventListener("click", function () {
-      post("/api/ideas/" + encodeURIComponent(d.id) + "/ai-score", {}).then(function (r) {
-        msg.textContent = r.enabled ? ("採点 " + r.scored + " 件／見送り " + r.skipped + " 件") : r.reason;
-        if (r.enabled) go();
+    var past = props.filter(function (p) { return p.state !== "提案"; });
+    if (past.length) {
+      c.appendChild(el("h4", { text: "これまでの案" }));
+      c.appendChild(el("div", { "class": "np-tablewrap" }, [table(["出した日時", "モデル", "結果", "決めた人", "メモ"],
+        past.map(function (p) {
+          return el("tr", null, [el("td", { text: p.created_at }), el("td", { text: p.model }),
+            el("td", { text: p.state }), el("td", { text: dash(p.decided_by) }), el("td", { text: dash(p.decided_note) })]);
+        }))]));
+    }
+    c.appendChild(btnRow([navBtn("#/ai-score", "AI採点の案の一覧と状態")]));
+    return c;
+  }
+
+  function proposalForm(d, p) {
+    var box = el("div", { "class": "np-card" });
+    box.appendChild(el("h4", { text: "確認待ちの案（" + p.created_at + "）" }));
+    box.appendChild(el("div", { "class": "np-tablewrap" }, [table(["軸", "案の点（1〜10）", "根拠"],
+      p.axes_view.map(function (x) {
+        return el("tr", null, [el("td", { text: x.label }),
+          el("td", { text: x.value == null ? "点なし（根拠が書けなかった）" : String(x.value) }),
+          el("td", { text: dash(x.reason) })]);
+      }))]));
+    if (p.unverified && p.unverified.length) {
+      box.appendChild(el("p", { "class": "np-sub", text: "未確認（AI が確かめられなかったこと）:" }));
+      box.appendChild(el("ul", null, p.unverified.map(function (u) { return el("li", { text: u }); })));
+    }
+    var items = (p.inputs && p.inputs["項目"]) ? Object.keys(p.inputs["項目"]).join("・") : "—";
+    box.appendChild(el("p", { "class": "np-note",
+      text: "モデル: " + p.model + "／出した日時: " + p.created_at + "／渡した項目: " + items
+          + "（出所: " + ((p.inputs && p.inputs["出所"]) || "—") + "）" }));
+    if (!d.v2_ready) {
+      box.appendChild(el("p", { "class": "np-warn",
+        text: "採用の前に、下の「項目を足す・直す」で入れてください: " + (d.v2_blockers || []).join("、") }));
+    }
+    var f = el("form", { "class": "np-form" });
+    p.axes_view.forEach(function (x) {
+      var i = el("input", { type: "number", name: x.code, min: "1", max: "10", step: "1",
+        "aria-label": x.label + "（直すときだけ）" });
+      if (x.value != null) i.setAttribute("value", String(x.value));
+      f.appendChild(el("label", null, [document.createTextNode(x.label + " "), i]));
+    });
+    f.appendChild(el("label", null, [document.createTextNode("メモ（任意） "),
+      el("input", { name: "note", maxlength: "200", "aria-label": "メモ" })]));
+    var ok = el("button", { type: "submit", "class": "np-btn", text: "この点で採用する" });
+    var no = el("button", { type: "button", text: "見送る" });
+    var msg = el("p", { "class": "np-note", role: "status" });
+    f.appendChild(btnRow([ok, no]));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var body = {};
+      Array.prototype.forEach.call(f.elements, function (x) { if (x.name) body[x.name] = x.value; });
+      post("/api/ideas/" + encodeURIComponent(d.id) + "/ai-proposals/" + p.id + "/adopt", body).then(function (r) {
+        msg.textContent = r.changed ? "直した点で採用しました（人の採点として残ります）" : "そのまま採用しました";
+        go();
       }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
     });
-    c.appendChild(btn); c.appendChild(msg);
-    return c;
+    no.addEventListener("click", function () {
+      var note = f.elements.namedItem("note").value;
+      post("/api/ideas/" + encodeURIComponent(d.id) + "/ai-proposals/" + p.id + "/reject", { note: note })
+        .then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  // AI の回を見守る。**画面を離れたら止める**（別の画面で書き換えない）
+  function pollRun(id, msg, done) {
+    var here = location.hash;
+    function tick() {
+      if (location.hash !== here) return;
+      api("/api/ai/score-runs/" + id).then(function (r) {
+        if (r.stage === "待ち" || r.stage === "実行中") {
+          msg.textContent = "AI が考えています（" + r.n + " 件・回" + r.id + "）。数十秒〜数分かかります。";
+          setTimeout(tick, 3000);
+          return;
+        }
+        msg.textContent = r.stage === "完了"
+          ? ("案が出ました: " + r.n_ok + " 件" + (r.n_ng ? "／出せなかった " + r.n_ng + " 件" : ""))
+          : ("止まりました（" + r.stage + "）: " + (r.error || ""));
+        if (done && r.stage === "完了") setTimeout(done, 800);
+      }).catch(function (e) { msg.textContent = "様子を見られませんでした: " + e.message; });
+    }
+    tick();
+  }
+
+  function viewAiScore() {
+    loading();
+    api("/api/ai/score").then(function (a) {
+      var b = clear();
+      setTitle("AI採点の案");
+      b.appendChild(btnRow([navBtn("#/ideas", "アイデアへ戻る")]));
+      b.appendChild(el("p", { "class": "np-note",
+        text: "これまで claude.ai に貼って採点していた作業を、ここで行います。AI は点の案と根拠を出すだけで、"
+            + "点になるのは各アイデアで人が「採用」を押したときです（rubric版・日時・モデル名・渡した項目を残します）。" }));
+
+      var st = el("div", { "class": "np-card" });
+      st.appendChild(el("h3", { text: "使える状態か" }));
+      st.appendChild(el("p", { "class": a.enabled ? "np-note" : "np-warn", text: a.enabled ? "使えます。" : a.reason }));
+      (a.preflight.ng || []).forEach(function (n) {
+        st.appendChild(el("p", { "class": "np-sub", text: n.label + (n.who ? "（" + n.who + "）" : "") + ": " + n.why }));
+        if (n.how) st.appendChild(el("pre", { "class": "np-pre", text: n.how }));
+      });
+      var bu = a.budget || {};
+      st.appendChild(el("p", { "class": "np-sub", text: bu.state === "ok"
+        ? (bu.spent_label + ": " + bu.spent + " / 上限 " + bu.cap + "（残り " + bu.remaining + "）")
+        : ("AI予算: " + ({ unavailable: "確かめられません", over_cap: "使い切りました", no_cap: "枠がありません",
+                          bad_job: "設定の誤り", refused: "断られました" }[bu.state] || bu.state) + "。" + (bu.why || "")) }));
+      if (a.cost_note) st.appendChild(el("p", { "class": "np-sub", text: a.cost_note }));
+      b.appendChild(st);
+
+      var run = el("div", { "class": "np-card" });
+      run.appendChild(el("h3", { text: "まとめて出させる" }));
+      run.appendChild(el("p", { "class": "np-note",
+        text: "対象は、起票のままで一度も採点していないアイデアです（いま " + a.candidates + " 件）。1回に " + a.max_per_run
+            + " 件まで。移行した v1 の点を持つアイデアは対象にしません（個別のアイデアからは1件ずつ出せます）。" }));
+      if (a.can_run) {
+        var btn = el("button", { type: "button", "class": "np-btn", text: "起票のまま " + a.candidates + " 件に案を出させる" });
+        if (!a.enabled || !a.candidates || a.running) btn.setAttribute("disabled", "disabled");
+        var msg = el("p", { "class": "np-note", role: "status" });
+        btn.addEventListener("click", function () {
+          btn.setAttribute("disabled", "disabled");
+          post("/api/ai/score-runs", {}).then(function (r) {
+            if (!r.started) { msg.textContent = r.reason; return; }
+            pollRun(r.run_id, msg, viewAiScore);
+          }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+        });
+        run.appendChild(btnRow([btn])); run.appendChild(msg);
+      } else {
+        run.appendChild(el("p", { "class": "np-note", text: "出させられるのは、" + a.runners_label + "です。" }));
+      }
+      b.appendChild(run);
+
+      b.appendChild(el("h2", { text: "確認待ちの案（" + a.pending + " 件）" }));
+      if (!a.pending_rows.length) b.appendChild(el("p", { "class": "np-note", text: "確認待ちの案はありません。" }));
+      else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["アイデア", "購買意欲", "規模", "優位性", "テーマ適合", "未確認", "出した日時"],
+        a.pending_rows.map(function (p) {
+          function v(code) { var x = p.axes[code]; return x == null ? "点なし" : String(x); }
+          return el("tr", null, [el("td", null, [el("a", { href: "#/ideas/" + p.idea_id, text: p.idea_title })]),
+            el("td", { text: v("demand") }), el("td", { text: v("market_size") }), el("td", { text: v("advantage") }),
+            el("td", { text: v("theme_fit") }), el("td", { text: p.unverified.length + " 件" }), el("td", { text: p.created_at })]);
+        }))]));
+
+      b.appendChild(el("h2", { text: "最近の回" }));
+      if (!a.runs.length) b.appendChild(el("p", { "class": "np-note", text: "まだ一度も走らせていません。" }));
+      else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["回", "依頼した人", "依頼日時", "状態", "案／出せず", "モデル", a.cost_label, "止まった理由"],
+        a.runs.map(function (r) {
+          return el("tr", null, [el("td", { text: String(r.id) }), el("td", { text: r.requested_by }),
+            el("td", { text: r.requested_at }), el("td", { text: r.stage }),
+            el("td", { text: r.n_ok + "／" + r.n_ng }), el("td", { text: dash(r.model) }),
+            el("td", { text: r.cost_usd == null ? "—" : "$" + r.cost_usd }), el("td", { text: dash(r.error) })]);
+        }))]));
+    }).catch(fail);
   }
 
   function ideaFieldsForm(d, meta) {
@@ -4197,6 +4337,7 @@
     if (path === "#/reports") return viewReports();
     if (path === "#/settings") return viewSettings();
     if (path === "#/simulate") return viewSimulate();
+    if (path === "#/ai-score") return viewAiScore();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();

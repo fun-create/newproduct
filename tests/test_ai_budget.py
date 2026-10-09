@@ -192,10 +192,19 @@ class TestScoringGate(Base):
         self.assertIn(st["budget"]["state"], ("unavailable", "refused"))
         self.assertTrue(st["reason"])
 
-    def test_the_scorer_itself_is_still_absent(self):
-        """**予算が付いた＝採点できる、ではない。**モデルを呼ぶ実装はまだ無い。"""
-        from app import ai_score
-        self.assertFalse(ai_score.status()["scorer_implemented"])
+    def test_scorer_exists_but_needs_login(self):
+        """**予算が付いた＝採点できる、ではない。**claude にログインしていなければ使わない（ADR-081）。"""
+        from app import ai_cli, ai_score, store
+        store.ex("UPDATE setting SET value='1' WHERE key='ai_scoring_enabled'")
+        store.conn().commit()
+        import sys
+        for k, v in (("LOGIN_FILE", "/nonexistent/.credentials.json"), ("CLAUDE_BIN", sys.executable)):
+            self.addCleanup(setattr, ai_cli, k, getattr(ai_cli, k))
+            setattr(ai_cli, k, v)
+        st = ai_score.status()
+        self.assertTrue(st["scorer_implemented"])
+        self.assertFalse(st["enabled"])
+        self.assertIn("ログイン", st["reason"])
 
     def test_the_scoring_job_starts_with_the_prefix(self):
         from app import ai_score

@@ -398,9 +398,13 @@ def check_stage2_screens():
     note(OK if "枠（" in ab and "の今月の使用額" in ab else NG,
          "AI予算: 金額を「枠の合算」と書いている",
          "image と text が同じ 5.0 を分け合う（ADR-037）")
-    note(OK if "スコアラー" not in js and "scorer_note" in js else NG,
-         "app.js が「モデルを呼ぶ実装はまだ無い」と出している",
-         "予算が付いた＝採点できる、ではない")
+    note(OK if "スコアラー" not in js and "点になるのは、人が「採用」を押したとき" in js else NG,
+         "app.js が「AI は案を出すだけ・点は人が採用したとき」と出している",
+         "FR-145。AI の点をそのまま点にしない（ADR-081）")
+    cli = (BASE / "app" / "ai_cli.py").read_text(encoding="utf-8")
+    note(OK if '"--tools", ""' in cli and '"--system-prompt"' in cli and 'd.get("is_error")' in cli else NG,
+         "AI: claude にツールを渡さず、is_error で成否を見る",
+         "未ログインでも終了コード0（keiei の実測）。ツールを渡すとサーバのファイルを読める")
 
     # ChatWork へ渡す（F-15-6 ／ 2026-09-24 選択C）。**自動送信しない**
     for s5, why in [

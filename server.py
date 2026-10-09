@@ -484,7 +484,7 @@ class H(BaseHTTPRequestHandler):
                     "v2_version": idea_m.V2_VERSION,
                     "margin_bands_note": idea_m.MARGIN_BANDS_NOTE,
                 },
-                "ai_scoring": ai_m.status(),
+                "ai_scoring": ai_m.status(uid),
                 # 自動化依頼（F-15）。**質問は固定。サーバの1か所に置く**
                 "automation": {"questions": auto_m.questions(),
                                "stages": auto_m.STAGES},
@@ -890,11 +890,12 @@ class H(BaseHTTPRequestHandler):
             return self.sendj(200, {"rows": rows, "roles": admin_m.roles_view(user.get("role")),
                                     "log": admin_m.change_log(app_role=user.get("role") or ""),
                                     "concept_stock": idea_m.concept_stock(),
-                                    "ai_scoring": ai_m.status()})
+                                    "ai_scoring": ai_m.status(uid)})
         if len(parts) == 2 and parts[0] == "ideas" and method == "GET":
             d = idea_m.detail(parts[1])
             if d is None:
                 return self.sendj(404, {"error": "アイデアがありません"})
+            d["ai_proposals"] = ai_m.proposals_of(parts[1])        # AI採点の案（ADR-081）
             return self.sendj(200, d)
         if len(parts) == 3 and parts[0] == "ideas" and method == "POST":
             iid, what = parts[1], parts[2]
@@ -910,12 +911,36 @@ class H(BaseHTTPRequestHandler):
                             {"rubric_version": idea_m.V2_VERSION}, ip)
                 return self.sendj(200, r)
             if what == "ai-score":
-                # F-1-11。**既定 off。**予算枠が未取得のあいだは呼ばない
-                r = ai_m.run_batch([iid], uid)
-                store.audit(uid, "idea.ai_score", iid,
-                            {"enabled": r.get("enabled")}, ip)
+                # F-1-11。**AI は案を出すだけ**（点にはしない・ADR-081）。この1件の案を出す回を起こす
+                r = ai_m.start_run([iid], uid)
+                store.audit(uid, "idea.ai_score", iid, r, ip)
                 return self.sendj(200, r)
             return self.sendj(404, {"error": "not found"})
+        if (len(parts) == 5 and parts[0] == "ideas" and parts[2] == "ai-proposals"
+                and parts[4] in ("adopt", "reject") and method == "POST"):
+            d = self.body()
+            pid = int(parts[3])
+            if parts[4] == "adopt":
+                axes = d.get("axes") if isinstance(d.get("axes"), dict) else {a: d.get(a) for a in ai_m.AXES}
+                r = ai_m.adopt(pid, uid, axes, d.get("note", ""))
+            else:
+                r = ai_m.reject(pid, uid, d.get("note", ""))
+            store.audit(uid, f"idea.ai_proposal.{parts[4]}", parts[1], {"proposal": pid, **d}, ip)
+            return self.sendj(200, r)
+
+        # ── /api/ai/score（AI採点の案・ADR-081）──
+        if parts == ["ai", "score"] and method == "GET":
+            return self.sendj(200, {**ai_m.status(uid), "runs": ai_m.runs(), "pending_rows": ai_m.pending()})
+        if parts == ["ai", "score-runs"] and method == "POST":
+            d = self.body()
+            ids = d.get("idea_ids") or None
+            if isinstance(ids, str):
+                ids = [x.strip() for x in ids.split(",") if x.strip()] or None
+            r = ai_m.start_run(ids, uid)
+            store.audit(uid, "ai.score_run", str(r.get("run_id") or ""), {**r, "idea_ids": d.get("idea_ids")}, ip)
+            return self.sendj(200, r)
+        if len(parts) == 3 and parts[:2] == ["ai", "score-runs"] and method == "GET":
+            return self.sendj(200, ai_m.run_view(int(parts[2])))
 
         # ── /api/plan（第1段の残り・F-3 ／ FR-82〜FR-86）──
         #
@@ -1229,6 +1254,9 @@ def main():
     # **起動のたびに流す。**何度流しても同じ結果になるように書いてある
     counts = seed_m.run()
     sys.stderr.write(f"[db] {db_path_note()} {counts}\n")
+    n = ai_m.abandon_running()                  # 走ったまま残った AI の回を「中断」に倒す（ADR-081）
+    if n:
+        sys.stderr.write(f"[ai] 走ったまま残っていた回 {n} 件を中断にしました\n")
     (DATA_DIR / "export").mkdir(parents=True, exist_ok=True)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     svc_token()

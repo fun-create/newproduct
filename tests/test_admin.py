@@ -84,7 +84,7 @@ class Admin(unittest.TestCase):
         self.assertEqual(r["note"], "根拠: 経営判断")
         self.assertNotIn("未確定", r["desc"] + r["note"], "値を入れた後に「未確定」を残さない")
         self.assertEqual(row("cost_tax_rate")["note"], "初期値です（変更の記録はありません）")
-        self.assertIn("呼ぶ実装", row("ai_scoring_enabled")["note"], "変えられないものは、その理由")
+        self.assertIn("カレンダー", row("plan.holiday_months")["note"], "変えられないものは、その理由")
 
     def test_connection_values_hidden_in_log_for_non_admin(self):
         self.m.set_value("automation.chatwork_room_id", "123456", "部屋を作った", "x", "admin")

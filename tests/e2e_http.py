@@ -340,8 +340,16 @@ def main() -> int:
              "/api/rubrics が5版（v1×4＋v2）", str(st))
 
         st, d = cl.post(f"/api/ideas/{iid}/ai-score", {})
-        note(st == 200 and d["enabled"] is False and d["scored"] == 0,
-             "AI採点は呼んでも動かない（予算枠が未取得）", str(d.get("reason"))[:60])
+        note((st == 403 and "業務ロール" in d.get("error", ""))
+             or (st == 200 and d.get("started") is False and d.get("reason")),
+             "AI採点の案は、ロールか設定・ログイン・予算がそろうまで走らない（ADR-081）",
+             str(d.get("reason") or d.get("error"))[:60])
+        st, d = cl.get("/api/ai/score")
+        note(st == 200 and d["scorer_implemented"] is True and d["enabled"] is False
+             and isinstance(d["runs"], list) and isinstance(d["pending_rows"], list),
+             "/api/ai/score が状態・回・出ている案を返す", str(d.get("reason"))[:60])
+        st, d = cl.get(f"/api/ideas/{iid}")
+        note(st == 200 and d.get("ai_proposals") == [], "アイデアの詳細に AI の案（まだ無い）が付く", str(st))
 
         st, d = cl.get("/api/settings")
         note(st == 200 and d["concept_stock"]["value"] is None

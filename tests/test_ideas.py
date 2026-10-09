@@ -373,7 +373,23 @@ class TestVersionsDoNotMix(Base):
 
 # ══════════════════════════════════════════════════════════
 class TestAiScoring(Base):
-    """F-1-11・第11章 ⑩。**呼べる形まで。既定 off。外部APIを呼ばない。**"""
+    """F-1-11・ADR-081。**AI は案を出すだけ。**点には人が「採用」したときだけなる。tests は claude を呼ばない。"""
+
+    class Stub:
+        pass
+
+    def _stub(self, axes=None, reasons=None):
+        from app import ai_score
+
+        class Stub(ai_score.Scorer):
+            model = "stub-model/1"
+
+            def score(self, idea):
+                return {"axes": axes or {"demand": 7, "market_size": 6, "advantage": 5, "theme_fit": 4},
+                        "reasons": reasons if reasons is not None else
+                        {"demand": "根拠d", "market_size": "根拠m", "advantage": "根拠a", "theme_fit": "根拠t"},
+                        "unverified": ["競合の価格帯は未確認"]}
+        return Stub()
 
     def test_off_by_default(self):
         from app import ai_score
@@ -382,38 +398,132 @@ class TestAiScoring(Base):
         self.assertFalse(st["enabled"])
         self.assertIn("予算枠", st["reason"])
 
-    def test_batch_does_nothing_while_off(self):
+    def test_only_business_roles_can_start(self):
         from app import ai_score
-        i = _idea("AI採点の対象", production_feasibility=5,
-                  expected_margin_yen=4000)
-        r = ai_score.run_batch([i], "tester")
-        self.assertFalse(r["enabled"])
-        self.assertEqual(r["scored"], 0)
+        i = _idea("AI採点の対象")
+        with self.assertRaises(PermissionError):
+            ai_score.start_run([i], "誰でもない人")
 
-    def test_scorer_is_replaceable_and_records_model(self):
-        """差し替えられる形になっていること。**ここでも通信はしない。**"""
+    def test_proposal_is_not_a_score(self):
+        """**案は点に入れない。**採用するまで v2 の点は無いまま。"""
         from app import ai_score, idea as m
+        i = _idea("案だけ出る", production_feasibility=4, expected_margin_yen=1500)
+        r = ai_score.start_run([i], "tester", scorer=self._stub(), sync=True, force=True)
+        self.assertTrue(r["started"])
+        ps = ai_score.proposals_of(i)
+        self.assertEqual((len(ps), ps[0]["state"], ps[0]["model"]), (1, "提案", "stub-model/1"))
+        self.assertEqual(ps[0]["unverified"], ["競合の価格帯は未確認"])
+        self.assertIn("項目", ps[0]["inputs"])                     # 渡した項目を残す（FR-147）
+        self.assertIsNone(m.score_of(i, "v2"))
+        run = ai_score.run_view(r["run_id"])
+        self.assertEqual((run["stage"], run["n_ok"]), ("完了", 1))
 
-        class Stub(ai_score.Scorer):
-            model = "stub-model/1"
-
-            def score(self, idea):
-                return {"demand": 7, "market_size": 6, "advantage": 5,
-                        "theme_fit": 4}
-
-        i = _idea("AIが採点する案", production_feasibility=4,
-                  expected_margin_yen=1500)
-        r = ai_score.run_batch([i], "tester", scorer=Stub(), force=True)
-        self.assertTrue(r["enabled"])
-        self.assertEqual(r["scored"], 1)
+    def test_adopt_as_is_records_ai_and_model(self):
+        from app import ai_score, idea as m
+        i = _idea("そのまま採用", production_feasibility=4, expected_margin_yen=1500)
+        ai_score.start_run([i], "tester", scorer=self._stub(), sync=True, force=True)
+        pid = ai_score.proposals_of(i)[0]["id"]
+        r = ai_score.adopt(pid, "tester")
+        self.assertFalse(r["changed"])
         s = m.score_of(i, "v2")
-        self.assertEqual(s["scored_by"], "ai")
-        self.assertEqual(s["model"], "stub-model/1")
-        self.assertEqual(s["rubric_version"], "v2")
-        self.assertTrue(s["scored_at"])
+        self.assertEqual((s["scored_by"], s["model"], s["rubric_version"]), ("ai", "stub-model/1", "v2"))
+        self.assertIn("そのまま採用", s["source_note"])
+        self.assertEqual(ai_score.proposals_of(i)[0]["state"], "採用")
+        with self.assertRaises(ValueError):
+            ai_score.adopt(pid, "tester")                           # 二度は採用しない
+
+    def test_adopt_with_edit_is_a_human_score(self):
+        from app import ai_score, idea as m
+        i = _idea("直して採用", production_feasibility=4, expected_margin_yen=1500)
+        ai_score.start_run([i], "tester", scorer=self._stub(), sync=True, force=True)
+        pid = ai_score.proposals_of(i)[0]["id"]
+        r = ai_score.adopt(pid, "tester", {"demand": 9})
+        self.assertTrue(r["changed"])
+        s = m.score_of(i, "v2")
+        self.assertEqual((s["scored_by"], s["axes"]["demand"]), ("human", 9))
+
+    def test_adopt_needs_human_inputs(self):
+        """**想定粗利額は AI に付けさせない。**入っていなければ採用できず、案は残る。"""
+        from app import ai_score
+        i = _idea("粗利が未入力", production_feasibility=4)
+        ai_score.start_run([i], "tester", scorer=self._stub(), sync=True, force=True)
+        pid = ai_score.proposals_of(i)[0]["id"]
+        with self.assertRaises(ValueError) as cm:
+            ai_score.adopt(pid, "tester")
+        self.assertIn("想定粗利額", str(cm.exception))
+        self.assertEqual(ai_score.proposals_of(i)[0]["state"], "提案")
+
+    def test_axis_without_reason_is_dropped(self):
+        """**根拠の無い点は案にしない**（FR-148）。未確認として並べる。"""
+        from app import ai_score
+        i = _idea("根拠が欠ける", production_feasibility=4, expected_margin_yen=1500)
+        ai_score.start_run([i], "tester", sync=True, force=True,
+                           scorer=self._stub(reasons={"demand": "d", "market_size": "m", "theme_fit": "t"}))
+        p = ai_score.proposals_of(i)[0]
+        self.assertNotIn("advantage", p["axes"])
+        self.assertTrue(any("advantage" in u for u in p["unverified"]))
+        with self.assertRaises(ValueError):
+            ai_score.adopt(p["id"], "tester")
+        ai_score.adopt(p["id"], "tester", {"advantage": 3})
+
+    def test_new_proposal_replaces_pending_one(self):
+        from app import ai_score
+        i = _idea("2回出す", production_feasibility=4, expected_margin_yen=1500)
+        for _ in range(2):
+            ai_score.start_run([i], "tester", scorer=self._stub(), sync=True, force=True)
+        st = [p["state"] for p in ai_score.proposals_of(i)]
+        self.assertEqual(st, ["提案", "見送り"])
+        self.assertNotIn(i, ai_score.candidates())
+
+    def _proc(self, payload, code=0):
+        import json as _j
+        import types
+        return types.SimpleNamespace(stdout=_j.dumps(payload, ensure_ascii=False), stderr="", returncode=code)
+
+    def test_claude_scorer_reads_the_answer_and_model(self):
+        """`claude` の返事（コードブロックで包まれていても）から案を読み、実際のモデル名を残す。"""
+        import json as _j
+        from app import ai_score
+        i = _idea("claude の形", production_feasibility=4, expected_margin_yen=1500)
+        seen = {}
+
+        def runner(cmd, **kw):
+            seen["cmd"] = cmd
+            ans = [{"id": i, "demand": 8, "market_size": 4, "advantage": 6, "theme_fit": 9,
+                    "reasons": {"demand": "a", "market_size": "b", "advantage": "c", "theme_fit": "d"},
+                    "unverified": []}]
+            return self._proc({"result": "```json\n" + _j.dumps(ans) + "\n```", "is_error": False,
+                               "total_cost_usd": 0.0123, "modelUsage": {"claude-sonnet-5-5": {}}})
+        r = ai_score.start_run([i], "tester", scorer=ai_score.ClaudeScorer(runner=runner), sync=True, force=True)
+        p = ai_score.proposals_of(i)[0]
+        self.assertEqual((p["model"], p["axes"]["theme_fit"]), ("claude-sonnet-5-5", 9))
+        c = seen["cmd"]
+        self.assertEqual(c[c.index("--tools") + 1], "", "ツールを渡さない")
+        self.assertIn("--system-prompt", c)
+        self.assertIn("--no-session-persistence", c)
+        self.assertAlmostEqual(ai_score.run_view(r["run_id"])["cost_usd"], 0.0123)
+
+    def test_is_error_with_exit_zero_stops_the_run(self):
+        """**終了コード0でも is_error なら失敗。**その回を打ち切り、案は作らない。"""
+        from app import ai_score
+        i = _idea("未ログイン", production_feasibility=4, expected_margin_yen=1500)
+        runner = lambda cmd, **kw: self._proc({"result": "Not logged in · Please run /login", "is_error": True})  # noqa: E731
+        r = ai_score.start_run([i], "tester", scorer=ai_score.ClaudeScorer(runner=runner), sync=True, force=True)
+        run = ai_score.run_view(r["run_id"])
+        self.assertEqual((run["stage"], run["error_kind"]), ("失敗", "env"))
+        self.assertIn("Not logged in", run["error"])
+        self.assertEqual(ai_score.proposals_of(i), [])
+
+    def test_running_rows_are_abandoned_on_restart(self):
+        from app import ai_score, store
+        store.ex("INSERT INTO ai_run (job,kind,stage,target_json,requested_by,requested_at) "
+                 "VALUES ('newproduct-text','idea_score','実行中','[]','t',?)", (store.now_s(),))
+        store.conn().commit()
+        self.assertGreaterEqual(ai_score.abandon_running(), 1)
+        self.assertEqual(store.val("SELECT COUNT(*) FROM ai_run WHERE stage='実行中'", (), 0), 0)
 
     def test_module_has_no_network_imports(self):
-        """**外部通信の部品を持たない。**予算枠が付くまで呼べる口を開けない。"""
+        """**外部通信の部品を持たない。**呼ぶのは ai_cli（claude を子プロセスで起動）。"""
         src = (BASE / "app" / "ai_score.py").read_text(encoding="utf-8")
         for bad in ("import urllib", "import http", "import socket",
                     "import requests", "from urllib", "from http"):

@@ -13,11 +13,13 @@
 | 本番 | <https://newproduct.fun-create.co.jp> ／ `127.0.0.1:8794` ／ `51b3638` |
 | サービス | `newproduct.service` **active (running) / enabled**（uid 988・`/opt/newproduct` 750） |
 | Caddy | **`/api/svc/* /api/health` だけを外から 404。**`/api/*` 全部を塞いでいて画面が全滅していた（ADR-026・09-22 修正） |
-| DB | `data/newproduct.db`（SQLite・WAL）。migrations 001〜027 適用済み |
+| DB | `data/newproduct.db`（SQLite・WAL）。migrations 001〜033 適用済み |
 | マイグレーション | **未適用のものだけ流す**（ADR-031）。`ALTER TABLE` に `IF NOT EXISTS` が無いため。**流した後にファイルを直しても流れない**。直すなら新しい番号 |
 | 種データ | 6フロー **実作業178タスク ＋ 予備12行**（予備は旧表の半分・1人分／ADR-028） |
 | 実データ | アイデア **881件**・機会 **年間53＋ライフ31件**（採点19）・自動化依頼15件。**2026-09-26 移行**: 年間プラン2026年度 **26枠（策定中）**・案件 **20件**（発売済2・開発中18）・実タスク **310件**・案件外の仕事 **74件**。**準備シートの本文: 2026-10-09 に5案件・51節を移行**（ADR-080） |
-| 〜~~`/api/ai-usage` の口~~ | — | **2026-09-25 解消** | FR-146 実装済。`app/ai_budget.py` で疎通済（cap 5.0）。**モデルを呼ぶ実装はまだ無い** |
+| 〜~~`/api/ai-usage` の口~~ | — | **2026-09-25 解消** | FR-146 実装済。`app/ai_budget.py` で疎通済（cap 5.0）。**2026-10-09 にモデルを呼ぶ実装を足した**（ADR-081） |
+| **AI採点の claude ログイン** | 十文字さん（ブラウザが要る） | **2026-10-09 から** | ADR-081。サーバで1回だけ `sudo -u newproduct HOME=/opt/newproduct/data/aihome claude` → `/login`。**HOME を付け忘れない**（付けないとサービスから読めない）。済めば アイデア →「AI採点の案」で「使えます」と出る |
+| 想定粗利額の入力 | 商品開発部 | 2026-10-09 から | v2 の点には想定粗利額（円）が要るが、入っているアイデアは0件。AI の案は出せても、これが無いと採用できない |
 | ChatWork | **設定済み（2026-10-09）。**FUN-CREATE BOT から Lucky Field×FUN-CREATE へ。人が押したときだけ送る（ADR-067） |
 | 利用者 | **13名**（2026-09-27 十文字さん指示「tsubasa以外はuserで」）。`admin` は `masateru`・`tsubasa`、他11名は `user`。**2026-09-28 から正は共通台帳 `roles/newproduct.json`（カレンダー「人とアプリ」で付け外し）**（ADR-044） |
 | バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に**5世代** |
