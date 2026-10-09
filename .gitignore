@@ -4,6 +4,8 @@ config/users.json.*
 config/.sessions.json
 config/csrf_salt
 config/svc_token
+# カレンダーの会社休業日を読む専用の鍵（calfc が発行・0600）。**絶対に入れない**
+config/calfc_token
 # ChatWork のAPIトークン（0600・十文字さんが置く）。**絶対に入れない**
 config/chatwork.env
 config/*.env

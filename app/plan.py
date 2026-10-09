@@ -514,25 +514,41 @@ def _rule_count(rows: list[dict]) -> list[dict]:
 
 
 def _rule_holiday(rows: list[dict]) -> list[dict]:
-    months = str(_setting("plan.holiday_months") or "").strip()
-    cap = _num("plan.holiday_month_max_slots")
-    if not months or cap is None:
-        return [_r("holiday", "FY", "unavailable",
-                   "長期連休のある月が未設定です。元になるのはカレンダーの"
-                   "会社休業日で、まだつないでいません。推測で埋めていませんので、"
-                   "この月は人が見てください")]
+    """連休月は多くしない（挿入ルール）。**長期連休のある月はカレンダーアプリの会社休業日から決める**
+    （2026-10-09 十文字さん「B」・ADR-065）。連続5日以上の休みがかかる月を連休月とする（`calfc.LONG_RUN`）。
+    つながっていない・登録の外の月は「未計測」。推測で 1・5・8月と置かない（N-10）。"""
+    import datetime as _d
+    from app import calfc
+    months = sorted({r["launch_month"] for r in rows if r.get("launch_month")})
+    if not months:
+        return []
+    fr = _d.date.fromisoformat(months[0] + "-01")
+    y, m = int(months[-1][:4]), int(months[-1][5:7])
+    to = _d.date(y + (m == 12), m % 12 + 1, 1) - _d.timedelta(days=1)
     try:
-        hm = {int(x) for x in months.replace("　", " ").replace(",", " ").split()}
-    except ValueError:
+        hm = calfc.long_holiday_months(fr, to)
+    except calfc.NotConnected as e:
         return [_r("holiday", "FY", "unavailable",
-                   f"長期連休の月が読めません（{months!r}）。「1 5 8」の形で入れてください")]
+                   f"長期連休のある月が分かりません（{e}）。元になるのはカレンダーアプリの会社休業日です。"
+                   "推測で埋めていませんので、この月は人が見てください")]
+    long_m = [k for k, v in sorted(hm.items()) if v]
+    unknown = [k for k, v in sorted(hm.items()) if v is None]
+    cap = _num("plan.holiday_month_max_slots")
     out = []
-    for m, rs in _by_month(rows).items():
-        if int(m[5:7]) not in hm:
+    if unknown:
+        out.append(_r("holiday", "FY", "unavailable",
+                      f"カレンダーアプリに会社休業日が登録されていない月があります（{'・'.join(unknown)}）。この月は人が見てください"))
+    if cap is None:
+        out.append(_r("holiday", "FY", "unavailable",
+                      f"長期連休のある月（カレンダーの会社休業日から）: {'・'.join(long_m) or 'なし'}。"
+                      "連休月の枠の上限が未設定なので判定していません（設定ページで社長が入れます）"))
+        return out
+    for mo, rs in _by_month(rows).items():
+        if mo not in long_m:
             continue
         n = sum(1 for r in rs if _counts_as_launch(r))
         lvl = "ok" if n <= cap else "warn"
-        out.append(_r("holiday", m, lvl,
+        out.append(_r("holiday", mo, lvl,
                       f"長期連休のある月に {n} 本（上限 {cap:.0f} 本）", n=n, cap=cap))
     return out
 

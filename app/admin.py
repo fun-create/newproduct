@@ -75,7 +75,7 @@ EDITABLE = {
 }
 # 変えさせないもの（理由は画面に出す）
 LOCKED = {
-    "plan.holiday_months": "正本は Calendar の会社休業日です（まだ連携していません）。ここで入れると写しになります",
+    "plan.holiday_months": "カレンダーアプリの会社休業日から自動で決まります（連続5日以上の休みがかかる月）。ここでは入れません",
     "plan.fiscal_year_start_month": "このアプリでは使っていません",
     "ai_scoring_enabled": "AI採点を呼ぶ実装がまだありません。押しても動きません",
     "ai.usage_endpoint": "書き換えると別のものにつながるため、画面からは変えません",
@@ -122,7 +122,7 @@ DESC = {
     "plan.ratio_tolerance_slots": "比率のずれを何枠まで警告しないか",
     "plan.task_setup_lead_months": "枠を案件にしたとき、発売の何か月前をタスクを組み終える期限にするか",
     "plan.holiday_month_max_slots": "長期連休のある月に置ける枠の数の上限",
-    "plan.holiday_months": "長期連休のある月（連休ルールの判定に使う）",
+    "plan.holiday_months": "長期連休のある月（連休ルールの判定に使う）。カレンダーアプリの会社休業日から決める",
     "plan.fiscal_year_start_month": "年度の開始月",
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",

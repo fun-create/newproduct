@@ -267,22 +267,34 @@ class TestRules(Base):
         self.assertEqual(r["level"], "warn")
 
     def test_holiday_rule_reports_unavailable_instead_of_passing(self):
-        """**N-10。**正本（Calendar の会社休業日）が未連携。推測で 1・5・8月と置かない。"""
+        """**N-10。**カレンダーとつながっていなければ「未計測」。推測で 1・5・8月と置かない。"""
+        import os
+        os.environ["NEWPRODUCT_CALFC_TOKEN"] = "/nonexistent/calfc_token"
+        self.addCleanup(os.environ.pop, "NEWPRODUCT_CALFC_TOKEN", None)
         self.slot(month="2026-05")
         r = self.rule("holiday", "FY")
         self.assertEqual(r["level"], "unavailable")
         self.assertIn("カレンダー", r["message"])
         self.assertEqual(self.m.check(self.vid)["counts"]["unavailable"], 1)
 
-    def test_holiday_rule_works_once_the_months_are_filled_in(self):
-        from app import store
-        store.ex("UPDATE setting SET value='1 5 8' WHERE key='plan.holiday_months'")
-        store.ex("UPDATE setting SET value='2' "
-                 "WHERE key='plan.holiday_month_max_slots'")
-        store.conn().commit()
+    def test_holiday_rule_uses_calendar_long_breaks(self):
+        """連続5日以上の休みがかかる月が連休月（ADR-065）。土日を足さない・登録の外は分からない。"""
+        import datetime as d
+        from app import calfc, store
+        closed = ["2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",   # GW 5連休
+                  "2026-07-18", "2026-07-19", "2026-07-20"]                                  # 3連休は長期ではない
+        doc = {"closed": closed, "covered": [{"from": "2026-04-01", "to": "2026-07-31"}]}
+        orig = calfc.fetch
+        calfc.fetch = lambda fr, to, opener=None: doc
+        self.addCleanup(setattr, calfc, "fetch", orig)
+        hm = calfc.long_holiday_months(d.date(2026, 5, 1), d.date(2026, 8, 31))
+        self.assertEqual(hm, {"2026-05": True, "2026-06": False, "2026-07": False, "2026-08": None})
         for _ in range(3):
             self.slot(month="2026-05")
         self.slot(month="2026-07")
+        self.assertIn("2026-05", self.rule("holiday", "FY")["message"], "上限が未設定でも連休月は示す")
+        store.ex("UPDATE setting SET value='2' WHERE key='plan.holiday_month_max_slots'")
+        store.conn().commit()
         self.assertEqual(self.rule("holiday", "2026-05")["level"], "warn")
         self.assertIsNone(self.rule("holiday", "2026-07"), "連休でない月は出さない")
 
