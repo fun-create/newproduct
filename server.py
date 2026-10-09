@@ -59,6 +59,7 @@ from app import events as events_m  # noqa: E402
 from app import templates as tpl_m  # noqa: E402
 from app import idea_import as imp_m  # noqa: E402
 from app import simulate as sim_m  # noqa: E402
+from app import mallreq as mall_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -707,6 +708,10 @@ class H(BaseHTTPRequestHandler):
             r = report_m.save(parts[1], uid)
             store.audit(uid, "report.build", parts[1], {"problems": len(r["problems"])}, ip)
             return self.sendj(200, r)
+
+        # 4モールの出品依頼（FR-119・ADR-075）。**作るだけ。送らない**
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "mall-request" and method == "GET":
+            return self.sendj(200, mall_m.build(parts[1]))
 
         # LP依頼書（FR-118）。**作るだけ。送らない**
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "lp-request" and method == "GET":

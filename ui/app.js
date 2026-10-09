@@ -537,6 +537,37 @@
         });
         b.appendChild(lp);
 
+        // 4モールの出品依頼（FR-119・ADR-075）。カルテから作る。**送らない**（人が見て渡す）
+        var mr = el("div", { "class": "np-card", id: "np-sec-mallreq" });
+        mr.appendChild(el("h2", { text: "モールの出品依頼" }));
+        mr.appendChild(el("p", { "class": "np-sub", text: "楽天市場・Amazon・Yahoo!ショッピング・ギフトモールに出品するための依頼文を、カルテの項目から作ります。送りません。文字数の上限などは、登録の前に各モールの最新の規定で確かめてください。" }));
+        var mrb = el("button", { type: "button", "class": "np-btn", text: "カルテから出品依頼を作る" });
+        var mrOut = el("div");
+        mrb.addEventListener("click", function () {
+          mrOut.textContent = "";
+          api("/api/projects/" + encodeURIComponent(d.id) + "/mall-request").then(function (r) {
+            if (r.missing.length) mrOut.appendChild(el("p", { "class": "np-warn", text: "カルテで埋まっていない項目: " + r.missing.join("、") }));
+            r.malls.forEach(function (m) {
+              var det = el("details", { "class": "np-more" });
+              det.appendChild(el("summary", { text: m.label + (m.store_codes.length ? "（店の商品番号 " + m.store_codes.join("、") + "）" : "") }));
+              var ta = el("textarea", { rows: "16", readonly: "readonly", "aria-label": m.label + " の出品依頼" });
+              ta.value = m.text;
+              var cp = el("button", { type: "button", text: "写す" });
+              cp.addEventListener("click", function () {
+                ta.select();
+                (navigator.clipboard ? navigator.clipboard.writeText(m.text) : Promise.reject()).then(function () { cp.textContent = "写しました"; })
+                  .catch(function () { cp.textContent = "選んであります。⌘C / Ctrl+C で写してください"; });
+              });
+              det.appendChild(el("div", { "class": "np-field" }, [ta]));
+              det.appendChild(el("p", null, [cp]));
+              mrOut.appendChild(det);
+            });
+          }).catch(function (e) { mrOut.appendChild(el("p", { "class": "np-err", text: e.message })); });
+        });
+        mr.appendChild(el("p", { "class": "np-btnrow" }, [mrb]));
+        mr.appendChild(mrOut);
+        b.appendChild(mr);
+
         // 競合調査（FR-141〜143）。**出典と確認日が必須**。カルテ C の自由記述はメモとして残す
         var cm = el("div", { "class": "np-card", id: "np-sec-competitor" });
         cm.appendChild(el("h2", { text: "競合調査" }));
