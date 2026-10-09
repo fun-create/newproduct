@@ -178,6 +178,38 @@ class Simulate(unittest.TestCase):
         self.assertEqual((rv["old_each"], rv["new_each"]), (500000, 600000))
         self.assertEqual([(x["name"], x["diff"]) for x in rv["projects"]], [("未発売の案件", 100000)])
 
+    def test_handoff_spreads_target_over_months_and_depts(self):
+        """FR-124。目標を発売月×売れ方の形×部門の割合で配る。受け口が無ければ中身を残して「未送信」。"""
+        import json as _j
+        from app import handoff
+        with self.store.tx() as c:
+            c.execute("UPDATE past_product SET months_json=?, channels_json=?",
+                      (_j.dumps([1] * 12), _j.dumps({"グッズ": 3, "amazon": 1})))
+        r = self.m.confirm(2026, 12, 1200000, 4.0, "検査", "boss")
+        self.assertTrue(r["handoff"]["queued"])
+        self.assertEqual(r["handoff"]["state"], "未送信", "受け口が無いので送らない（中身は残す）")
+        pl = handoff.build(r["id"])
+        self.assertAlmostEqual(pl["total"], 1200000, delta=len(pl["rows"]))     # 丸めの誤差だけ
+        goods = sum(x["value"] for x in pl["rows"] if x["dept_key"] == "funcreate_goods")
+        self.assertAlmostEqual(goods / pl["total"], 0.75, places=2)
+        self.assertIn(2027, {x["fy"] for x in pl["rows"]}, "年度の終わりに出した商品の売上は翌年度に入る")
+        self.assertEqual(pl["basis_json"]["target_yen"], 1200000)
+        sent = []
+
+        class Res:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"{}"
+        handoff.INTAKE = "http://127.0.0.1:1/x"
+        self.addCleanup(setattr, handoff, "INTAKE", "")
+        self.addCleanup(setattr, handoff, "TOKEN_FILE", handoff.TOKEN_FILE)
+        handoff.TOKEN_FILE = __file__
+        oid = handoff.latest(2026)["id"]
+        self.assertEqual(handoff.send(oid, opener=lambda req, timeout: (sent.append(req), Res())[1])["state"], "送信済")
+        self.assertEqual(_j.loads(sent[0].data)["basis_json"]["sim_plan_id"], r["id"])
+        with self.assertRaises(ValueError):
+            handoff.build(self.m.confirm(2027, 12, None, 4.0, "目標なし", "boss")["id"])
+
     def test_keiei_not_connected_is_said(self):
         os.environ["NEWPRODUCT_KEIEI_TOKEN"] = "/nonexistent/keiei_token"
         self.addCleanup(os.environ.pop, "NEWPRODUCT_KEIEI_TOKEN", None)

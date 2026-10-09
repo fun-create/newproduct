@@ -273,7 +273,13 @@ def confirm(fy: int, n_releases: int, target_yen, effort_point, note: str, user_
                    json.dumps(sc, ensure_ascii=False), d.get("range", "—"), "確定", user_id, store.now_s(), note[:500]))
     store.audit(user_id, "plan.sim.confirm", pid, {"label": f"販売計画を確定（{fy}年度 {n_releases}本）", "reason": note,
                                                    "after": n_releases}, ip)
-    return {"ok": True, "id": pid}
+    # 確定したら経営管理へ渡す（十文字さんの選択「確定したら自動で渡す」・FR-124・ADR-078）。渡せなくても確定は取り消さない
+    from app import handoff
+    try:
+        h = handoff.enqueue(pid)
+    except Exception as e:                       # 渡す側の失敗で確定を落とさない（送り物は画面から送り直せる）
+        h = {"queued": False, "why": str(e)}
+    return {"ok": True, "id": pid, "handoff": h}
 
 
 def versions(fy: int | None = None) -> list[dict]:

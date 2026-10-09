@@ -4095,6 +4095,27 @@
         b.appendChild(rc);
       }
 
+      // FR-124。経営管理へ渡した中身（目標の金額を部門×月に配ったもの）と状態
+      var ho = d.handoff;
+      if (ho) {
+        var hc = el("div", { "class": "np-card" });
+        hc.appendChild(el("h2", { text: "経営管理へ渡す新商品分の計画（" + ho.state + "）" }));
+        hc.appendChild(el("p", { "class": ho.state === "送信済" ? "np-note" : "np-warn",
+          text: (ho.state === "送信済" ? "送りました（" + ho.sent_at + "）。" : (ho.last_error || "まだ送っていません。")) + "目標 " + yen(ho.total) + " を、発売月と過去の売れ方で部門×月に配ったもの（" + ho.rows_n + " 行）です。" }));
+        hc.appendChild(table(["部門", "年度", "新商品分"], ho.by_dept.map(function (x) {
+          return el("tr", null, [el("td", { text: x.dept }), el("td", { "class": "np-num", text: String(x.fy) }), el("td", { "class": "np-num", text: yen(x.value) })]);
+        })));
+        if (d.can_confirm && ho.state !== "送信済") {
+          var rs = el("button", { type: "button", text: "送り直す" });
+          rs.addEventListener("click", function () {
+            post("/api/simulate/resend", { id: ho.id }).then(function () { viewSimulate(); })
+              .catch(function (e) { hc.appendChild(el("p", { "class": "np-err", text: e.message })); });
+          });
+          hc.appendChild(el("p", null, [rs]));
+        }
+        b.appendChild(hc);
+      }
+
       // 確定した版
       var vc = el("div", { "class": "np-card" });
       vc.appendChild(el("h2", { text: "確定した販売計画（" + d.fy + "年度）" }));

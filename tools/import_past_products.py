@@ -98,7 +98,9 @@ def build(raw: dict) -> list[dict]:
         ch = {c: round(sum(e["months"][ym][c] for ym in seen)) for c in CHANNELS}
         rows.append({"code": code, "name": e["name"], "launch_date": launch,
                      "fy": y if mo >= 5 else y - 1, "first12_yen": round(total), "months_seen": len(seen),
-                     "complete": 1 if len(seen) == 12 else 0, "channels": ch})
+                     "complete": 1 if len(seen) == 12 else 0, "channels": ch,
+                     # 発売月を 0 として 0〜11 か月目の売上（見ていない月は null）
+                     "months": [round(e["months"][ym]["total"]) if ym in seen else None for ym in window]})
     return rows
 
 
@@ -107,12 +109,12 @@ def apply(rows: list[dict]) -> int:
     with store.tx() as c:
         for r in rows:
             c.execute("INSERT INTO past_product (code,name,launch_date,fy,first12_yen,months_seen,complete,channels_json,"
-                      "source,imported_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET "
+                      "months_json,source,imported_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET "
                       "name=excluded.name,launch_date=excluded.launch_date,fy=excluded.fy,first12_yen=excluded.first12_yen,"
                       "months_seen=excluded.months_seen,complete=excluded.complete,channels_json=excluded.channels_json,"
-                      "source=excluded.source,imported_at=excluded.imported_at",
+                      "months_json=excluded.months_json,source=excluded.source,imported_at=excluded.imported_at",
                       (r["code"], r["name"], r["launch_date"], r["fy"], r["first12_yen"], r["months_seen"],
-                       r["complete"], json.dumps(r["channels"], ensure_ascii=False),
+                       r["complete"], json.dumps(r["channels"], ensure_ascii=False), json.dumps(r["months"]),
                        "新商品売上状況（2022〜2025年度の表・2026-09-20 の写し）", now))
     return len(rows)
 

@@ -60,6 +60,7 @@ from app import templates as tpl_m  # noqa: E402
 from app import idea_import as imp_m  # noqa: E402
 from app import simulate as sim_m  # noqa: E402
 from app import mallreq as mall_m  # noqa: E402
+from app import handoff as handoff_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
@@ -516,7 +517,12 @@ class H(BaseHTTPRequestHandler):
             r["can_confirm"] = sim_m.can_confirm(uid)
             r["versions"] = sim_m.versions(fy)
             r["revision"] = sim_m.revision_check(fy)          # FR-132。経営管理の計画が改訂されたか
+            r["handoff"] = handoff_m.latest(fy)                 # FR-124。経営管理へ渡した中身と状態
             return self.sendj(200, r)
+        if parts == ["simulate", "resend"] and method == "POST":
+            if not sim_m.can_confirm(uid):
+                return self.sendj(403, {"error": "経営管理へ送り直せるのは、社長の業務ロールの人です"})
+            return self.sendj(200, handoff_m.send(int(self.body().get("id") or 0)))
         if parts == ["simulate", "confirm"] and method == "POST":
             d = self.body()
             tgt = (d.get("target") or "").replace(",", "").strip()
