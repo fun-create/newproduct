@@ -18,7 +18,7 @@
 | 種データ | 6フロー **実作業178タスク ＋ 予備12行**（予備は旧表の半分・1人分／ADR-028） |
 | 実データ | アイデア **881件**・機会 **年間53＋ライフ31件**（採点19）・自動化依頼15件。**2026-09-26 移行**: 年間プラン2026年度 **26枠（策定中）**・案件 **20件**（発売済2・開発中18）・実タスク **310件**・案件外の仕事 **74件**。**準備シートの本文（カルテの節）は未移行** |
 | 〜~~`/api/ai-usage` の口~~ | — | **2026-09-25 解消** | FR-146 実装済。`app/ai_budget.py` で疎通済（cap 5.0）。**モデルを呼ぶ実装はまだ無い** |
-| ChatWork | **未設定。**`config/chatwork.env` と `automation.chatwork_room_id` を置くまで送らない |
+| ChatWork | **設定済み（2026-10-09）。**FUN-CREATE BOT から Lucky Field×FUN-CREATE へ。人が押したときだけ送る（ADR-067） |
 | 利用者 | **13名**（2026-09-27 十文字さん指示「tsubasa以外はuserで」）。`admin` は `masateru`・`tsubasa`、他11名は `user`。**2026-09-28 から正は共通台帳 `roles/newproduct.json`（カレンダー「人とアプリ」で付け外し）**（ADR-044） |
 | バックアップ | `/etc/cron.d/newproduct-backup` 04:15。`/var/backups/newproduct` に**5世代** |
 | テスト | `selfcheck.py` **144件**（本番）・`tests/` **320件**・`tests/e2e_http.py` 失敗0 |
@@ -118,7 +118,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 | **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。枠 `newproduct-*: 5.0` は入った（**image と text で分け合う**・ADR-037）。契約は確定（超過は断る／`request_id` で冪等／`remaining` を返す）。**Auto GROWTH は十文字さんの返事待ち**（夜間に新しい経路を開けてよいか）。**口ができるまで着手しない。**`newproduct-` で始まらない job 名は枠に入らないので、呼ぶ前に弾くこと |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。**減衰は上流がかける**（2026-10-05 訂正・ADR-055） |
 | ~~旧ダッシュボード `fun-create.co.jp/fctr/` の撤去~~ | — | **2026-10-05 解消** | FR-81。十文字さんの判断で Auto GROWTH が `index.html`・`dashboard.html` を撤去（VPS に退避。パスワード保護と `history/` は残置）。**こちらでは確かめられていない**（外からは全部 401、サイトは newproduct の VPS 上に無い）。Auto GROWTH ADR-025 |
-| **ChatWork のトークンと部屋ID** | 十文字さん | **2026-09-24 から** | FR-171。`config/chatwork.env`（`CHATWORK_API_TOKEN=…`・600・所有者 newproduct）と 設定 `automation.chatwork_room_id`。**他アプリのトークンは写さない**（どのアプリが投げたか分からなくなり、片方を止めると両方止まる）。置くまで送信は断り、理由を画面に出す |
+| ~~ChatWork のトークンと部屋ID~~ | — | **2026-10-09 解消** | FR-171。十文字さんの選択で FUN-CREATE BOT から「Lucky Field×FUN-CREATE」（345914105）へ。BOT の鍵を `config/chatwork.env` に置いた（「写さない」の例外・ADR-067）。題に「NEW PRODUCT より」。送るのは人が押したときだけ |
 | **利用者の登録** | 済（2026-09-27） | — | 共通台帳の13名を全員登録。`admin` は masateru・tsubasa、残り11名 `user`（十文字さん「tsubasa以外はuserで」。masateru は元から admin なので据え置き）。**いまの正は `config/users.json`**、足し外しは `tools/add_user.py`。`roles/` への一本化は ①LP SCOPE ②keiei ③NEW PRODUCT の順で、**上流に入ってから写す**（`deploy/README.md` 6） |
 
 ---
