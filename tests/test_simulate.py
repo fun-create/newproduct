@@ -185,6 +185,8 @@ class Simulate(unittest.TestCase):
         with self.store.tx() as c:
             c.execute("UPDATE past_product SET months_json=?, channels_json=?",
                       (_j.dumps([1] * 12), _j.dumps({"グッズ": 3, "amazon": 1})))
+        self.addCleanup(setattr, handoff, "INTAKE", handoff.INTAKE)
+        handoff.INTAKE = ""                      # **本物の受け口へ送らない**
         r = self.m.confirm(2026, 12, 1200000, 4.0, "検査", "boss")
         self.assertTrue(r["handoff"]["queued"])
         self.assertEqual(r["handoff"]["state"], "未送信", "受け口が無いので送らない（中身は残す）")
@@ -196,17 +198,35 @@ class Simulate(unittest.TestCase):
         self.assertEqual(pl["basis_json"]["target_yen"], 1200000)
         sent = []
 
-        class Res:
-            def __enter__(self): return self
-            def __exit__(self, *a): return False
-            def read(self): return b"{}"
+        import io
+        import urllib.error
+
+        def res(payload):
+            class Res:
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+                def read(self): return _j.dumps(payload).encode()
+            return Res()
         handoff.INTAKE = "http://127.0.0.1:1/x"
-        self.addCleanup(setattr, handoff, "INTAKE", "")
         self.addCleanup(setattr, handoff, "TOKEN_FILE", handoff.TOKEN_FILE)
         handoff.TOKEN_FILE = __file__
         oid = handoff.latest(2026)["id"]
-        self.assertEqual(handoff.send(oid, opener=lambda req, timeout: (sent.append(req), Res())[1])["state"], "送信済")
+        # 200 でも「受け取った」と書いていなければ送信済にしない
+        self.assertEqual(handoff.send(oid, opener=lambda req, timeout: res({}))["state"], "失敗")
+        # 取り決め違い（400）は理由を残して失敗
+        def bad(req, timeout):
+            raise urllib.error.HTTPError(req.full_url, 400, "Bad", {}, io.BytesIO(
+                _j.dumps({"error": "3行目: 部門マスタに無い部門キー"}).encode()))
+        out = handoff.send(oid, opener=bad)
+        self.assertEqual(out["state"], "失敗")
+        self.assertIn("3行目", handoff.latest(2026)["last_error"])
+        ok = handoff.send(oid, opener=lambda req, timeout: (sent.append(req), res(
+            {"status": "stored", "ref": 7, "replaced": None, "warnings": ["2026-12 amazon が部門の計画を超えます"]}))[1])
+        self.assertEqual((ok["state"], ok["ref"]), ("送信済", 7))
+        self.assertIn("部門の計画を超え", handoff.latest(2026)["last_error"], "知らせは残す")
+        self.assertEqual(handoff.send(oid, opener=lambda req, timeout: res({"status": "already"}))["state"], "送信済")
         self.assertEqual(_j.loads(sent[0].data)["basis_json"]["sim_plan_id"], r["id"])
+        self.assertEqual(sent[0].get_header("Content-type"), "application/json")
         with self.assertRaises(ValueError):
             handoff.build(self.m.confirm(2027, 12, None, 4.0, "目標なし", "boss")["id"])
 

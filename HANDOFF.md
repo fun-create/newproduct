@@ -116,7 +116,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 | **提案3件**（外形監視／枠外の案件／空のときの導線） | 十文字さん | **2026-09-23 から** | 承認まで要件表にも設計にも入れない |
 | **本番画面の目視** | 十文字さん | **2026-09-22 から** | **`実装済` 72件が `検証済` へ上がらない** |
 | calfc の休業日の鍵 | — | **2026-10-09 解消** | `/api/svc/holidays` だけを通す NEW PRODUCT 専用の鍵を calfc が発行・設置（c6283b8・十文字さん確認済み）。年間プランの連休月の判定に使う（ADR-065）。FR-41（営業日の自動割付）・FR-121（予定を書く）は別の道なので**未依頼のまま** |
-| **経営管理の新商品分の受け口** | BUSINESS ANALYSIS（keiei） | **2026-10-09 依頼** | FR-124。確定した販売計画の目標を部門×月に配った中身は `keiei_outbox` に「未送信」で残る。受け口の道が届いたら `NEWPRODUCT_KEIEI_INTAKE`（app/handoff.py）に設定して送り直す。hub tasks/to-keiei-app.md |
+| ~~経営管理の新商品分の受け口~~ | — | **2026-10-09 決着** | ADR-083。`POST 127.0.0.1:8792/api/plan/newproduct` が既定の送り先。確定した販売計画が出たらその場で送る（いまは確定0件・送り物0件）。送ったら Business Analysis に一声（FR-40 の検証） |
 | ~~経営管理の計画を読む口~~ | — | **2026-10-09 解消** | FR-125。販売計画シミュレーションの目標を、承認済みの plan から出す。届くまで目標は画面で入れる（十文字さんの選択・ADR-072）。hub tasks/to-keiei-app.md |
 | **`/api/ai-usage` の口ができるのを待つ** | Auto GROWTH | **2026-09-24 から** | FR-146。枠 `newproduct-*: 5.0` は入った（**image と text で分け合う**・ADR-037）。契約は確定（超過は断る／`request_id` で冪等／`remaining` を返す）。**Auto GROWTH は十文字さんの返事待ち**（夜間に新しい経路を開けてよいか）。**口ができるまで着手しない。**`newproduct-` で始まらない job 名は枠に入らないので、呼ぶ前に弾くこと |
 | 〜~~FCTR の受け口~~ | — | **2026-09-23 解消** | `/opt/autogrowth/data/export/fctr_weekly.json`。**newproduct で読めることを実測済**（09-24）。**減衰は上流がかける**（2026-10-05 訂正・ADR-055） |

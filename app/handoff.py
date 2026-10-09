@@ -7,7 +7,8 @@
   （過去の新商品の 0〜11か月目の売上の割合）で月に配り、**部門の割合**（過去の売れ方・ADR-074）で部門に配る
 - 月は年度をまたいでよい（年度の終わりに出した商品の売上は翌年度に入る）。行ごとに年度（fy）を付ける
 - 経営管理の作法に合わせ、根拠（basis_json）を必ず付ける: どの確定か・本数・目標とその根拠・使った実績・配り方
-- **渡せなくても消さない。**送る中身を `keiei_outbox` に残し、受け口ができたら送り直す（未送信／送信済／失敗）
+- **渡せなくても消さない。**送る中身を `keiei_outbox` に残し、送れなければ送り直せる（未送信／送信済／失敗）
+- 受け口は 2026-10-09 に経営管理が置いた（`POST /api/plan/newproduct`・keiei ADR-037）
 """
 from __future__ import annotations
 
@@ -19,7 +20,10 @@ import urllib.request
 from app import store
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INTAKE = os.environ.get("NEWPRODUCT_KEIEI_INTAKE") or ""          # 経営管理の受け口（できたら設定）
+# 経営管理の受け口（2026-10-09 配置・keiei ADR-037）。loopback から・転送ヘッダ無しで呼ぶ。
+# 受け取ると承認済みの年度計画（plan）ではなく「内訳の目標」（plan_inbound）に置かれる。
+# 同じ sim_plan_id の再送は `already`（何もしない）、同じ年度の別の確定は前の分を置き換える
+INTAKE = os.environ.get("NEWPRODUCT_KEIEI_INTAKE", "http://127.0.0.1:8792/api/plan/newproduct")
 TOKEN_FILE = os.environ.get("NEWPRODUCT_KEIEI_TOKEN") or os.path.join(BASE, "config", "keiei_token")
 METRIC = "revenue_newproduct"
 
@@ -106,14 +110,35 @@ def send(outbox_id: int, opener=None) -> dict:
                                      headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
                                               "X-Actor": "newproduct/handoff"})
         with (opener or urllib.request.urlopen)(req, timeout=10) as res:
-            res.read()
+            body = res.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        # 取り決め違い（400）は向こうが1行も入れない。理由（「3行目: …」の形）をそのまま残す
+        why = e.read().decode("utf-8", "replace")[:300]
+        try:
+            why = json.loads(why).get("error") or why
+        except (ValueError, AttributeError):
+            pass
+        _mark(outbox_id, "失敗", f"経営管理が断りました（{e.code}）: {why}")
+        return {"state": "失敗", "why": f"{e.code}: {why}"}
     except (OSError, urllib.error.URLError) as e:
         _mark(outbox_id, "失敗", f"送れませんでした: {e}")
         return {"state": "失敗", "why": str(e)}
+    try:
+        ans = json.loads(body)
+    except ValueError:
+        ans = {}
+    if ans.get("status") not in ("stored", "already"):
+        # **200 でも「受け取った」と書いていなければ送信済にしない**（落ちない失敗を作らない）
+        _mark(outbox_id, "失敗", f"受け取った返事ではありませんでした: {body[:200]}")
+        return {"state": "失敗", "why": "受け取った返事ではありませんでした"}
+    note = None
+    if ans.get("warnings"):
+        note = "経営管理からの知らせ: " + "／".join(str(w) for w in ans["warnings"])[:500]
     with store.tx() as c:
-        c.execute("UPDATE keiei_outbox SET state='送信済', sent_at=?, tries=tries+1, last_error=NULL WHERE id=?",
-                  (store.now_s(), outbox_id))
-    return {"state": "送信済"}
+        c.execute("UPDATE keiei_outbox SET state='送信済', sent_at=?, tries=tries+1, last_error=? WHERE id=?",
+                  (store.now_s(), note, outbox_id))
+    return {"state": "送信済", "status": ans.get("status"), "ref": ans.get("ref"),
+            "replaced": ans.get("replaced"), "warnings": ans.get("warnings") or []}
 
 
 def _mark(oid, state, err):
