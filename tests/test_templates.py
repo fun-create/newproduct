@@ -101,5 +101,28 @@ class Templates(unittest.TestCase):
             self.m.set_effort("material", "2", "", "dev")
 
 
+    def test_promote_request_to_template_draft_or_work(self):
+        """FR-168。標準タスクに無い作業を、ひな形の下書き（無ければ作る）か案件外の仕事へ。依頼にメモが残る。"""
+        from app import automation
+        rid = automation.create("dev", title="背景登録", requester="増地さん", dept="商品開発部")["id"]
+        with self.assertRaises(PermissionError):
+            self.m.promote_to_template(rid, "meire", "devdept", "1", "nobody")
+        r = self.m.promote_to_template(rid, "meire", "devdept", "", "dev")
+        self.assertTrue(r["draft_created"])
+        row = next(x for x in self.m.detail("meire")["draft"]["rows"] if x["title"] == "背景登録")
+        self.assertIsNone(row["standard_hours"], "時間は後から入れられる（使い始める前に必須）")
+        self.assertEqual(self.store.val("SELECT active_template_version FROM flow_type WHERE code='meire'"), 1,
+                         "下書きに入れるだけで、使用中の版は変えない")
+        with self.assertRaises(ValueError):
+            self.m.promote_to_template(rid, "meire", "devdept", "2", "dev")      # 同じ下書きに二重に入れない
+        r2 = self.m.promote_to_template(rid, "freecut", "devdept", "2", "dev")
+        self.assertTrue(r2["draft_created"], "別の開発タイプには入れられる")
+        w = self.m.promote_to_work(rid, "devdept", "dev")
+        self.assertEqual(self.store.val("SELECT kind FROM work_item WHERE id=?", (w["work_item"]["id"],)), "案件外")
+        notes = [n["body"] for n in automation.detail(rid)["notes"]]
+        self.assertEqual(len(notes), 3)
+        self.assertIn("下書き", notes[0])
+
+
 if __name__ == "__main__":
     unittest.main()

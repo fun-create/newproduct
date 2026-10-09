@@ -2661,6 +2661,38 @@
         ? "標準タスク「" + d.template.title + "」（" + dash(d.template.flow_label) + "）に当たります。"
         : "標準タスク178行のどれにも当たりません。「やっていない」のではなく、表のほうが現場に追いついていないという意味です。";
       b.appendChild(t);
+      // FR-168。標準タスクに無い作業を、ひな形の下書きか案件外の仕事へ。**どちらかは商品開発部の判断**
+      if (!d.template && d.promote && d.promote.can) {
+        var pc = el("div", { "class": "np-card" });
+        pc.appendChild(el("h3", { text: "この作業をどこに入れるか" }));
+        pc.appendChild(el("p", { "class": "np-sub", text: "案件ごとに毎回やる作業なら標準タスクのひな形へ（下書きに入り、ひな形の画面で差を見てから使い始めます）。案件にぶら下がらない定常の作業なら案件外の仕事へ。" }));
+        var pf = el("form", { "class": "np-inline" });
+        var fsel = el("select", { "aria-label": "開発タイプ" });
+        d.promote.flows.forEach(function (f) { fsel.appendChild(el("option", { value: f.code, text: f.label })); });
+        var rsel = el("select", { "aria-label": "担当の業務ロール" });
+        d.promote.roles.forEach(function (x) { rsel.appendChild(el("option", { value: x.code, text: x.label })); });
+        var hin = el("input", { size: "5", "aria-label": "標準時間（h）", placeholder: "h（後でも可）" });
+        [txt("開発タイプ "), fsel, txt(" 担当 "), rsel, txt(" 標準時間 "), hin, el("button", { type: "submit", text: "ひな形の下書きに入れる" })]
+          .forEach(function (x) { pf.appendChild(x); });
+        var pmsg = el("p", { "class": "np-status", role: "status", "aria-live": "polite" });
+        pf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          post("/api/automation/" + encodeURIComponent(id) + "/promote", { flow: fsel.value, role: rsel.value, hours: hin.value })
+            .then(function (res) { pmsg.textContent = "ひな形の下書き（版" + res.version + "）に入れました。"; })
+            .catch(function (e) { pmsg.textContent = "入れられませんでした: " + e.message; });
+        });
+        var wb = el("button", { type: "button", text: "案件外の仕事として記録する" });
+        wb.addEventListener("click", function () {
+          if (!window.confirm("「" + r.title + "」を案件外の仕事として記録します。よろしいですか")) return;
+          post("/api/automation/" + encodeURIComponent(id) + "/promote", { to: "work", role: rsel.value })
+            .then(function () { pmsg.textContent = "案件外の仕事として記録しました（タスク → 案件外の仕事）。"; })
+            .catch(function (e) { pmsg.textContent = "記録できませんでした: " + e.message; });
+        });
+        pc.appendChild(pf);
+        pc.appendChild(el("p", { "class": "np-btnrow" }, [wb, navBtn("#/settings/templates", "ひな形の画面を開く", "back")]));
+        pc.appendChild(pmsg);
+        b.appendChild(pc);
+      }
       if (r.note) b.appendChild(el("p", { "class": "np-sub", text: r.note }));
 
       b.appendChild(autoEffort(d));

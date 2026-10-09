@@ -946,6 +946,10 @@ class H(BaseHTTPRequestHandler):
             d = auto_m.detail(parts[1])
             if d is None:
                 return self.sendj(404, {"error": "その依頼がありません"})
+            # FR-168 の昇格先（標準タスクに当たらない依頼だけ画面に出す）
+            d["promote"] = {"can": tpl_m.can_edit(uid),
+                            "flows": [{"code": f["code"], "label": f["label"]} for f in project_m.flow_types()],
+                            "roles": store.rows(store.q("SELECT code, label FROM role ORDER BY sort"))}
             return self.sendj(200, d)
         if len(parts) == 3 and parts[0] == "automation" and parts[2] == "chatwork" \
                 and method == "GET":
@@ -979,6 +983,12 @@ class H(BaseHTTPRequestHandler):
                                      d.get("handoff_to", ""))
                 store.audit(uid, "automation.stage", rid, d, ip)
                 return self.sendj(200, r)
+            if what == "promote":
+                # FR-168。標準タスクに無い作業を、ひな形の下書きか案件外の仕事へ（どちらかは商品開発部の判断）
+                if d.get("to") == "work":
+                    return self.sendj(200, tpl_m.promote_to_work(rid, d.get("role", ""), uid, ip))
+                return self.sendj(200, tpl_m.promote_to_template(rid, d.get("flow", ""), d.get("role", ""),
+                                                                 d.get("hours"), uid, ip))
             if what == "chatwork":
                 # **人が押したときだけ送る。**自動では送らない
                 r = auto_m.chatwork_send(

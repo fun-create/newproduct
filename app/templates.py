@@ -305,3 +305,44 @@ def set_effort(code: str, value, reason: str, user_id: str, ip: str = "") -> dic
     store.audit(user_id, "flow.effort_point", code, {"before": f["effort_point"], "after": x, "reason": reason,
                                                      "label": f["label"] + " の工数ポイント係数"}, ip)
     return {"ok": True, "effort_point": x}
+
+
+# ── 自動化依頼から昇格させる（FR-168・2026-10-09・ADR-070）─────────────────
+# 標準タスク178行に当たらない作業は「表が現場に追いついていない」印。行き先は2つで、**どちらかは商品開発部の判断**
+# （要件表 FR-168）。画面ではどちらも押せるようにし、押した人と行き先を依頼のメモに残す。
+def promote_to_template(request_id: str, flow: str, role: str, hours, user_id: str, ip: str = "") -> dict:
+    """依頼の作業を、開発タイプのひな形の**下書き**に1行足す（下書きが無ければ使用中の版を写して作る）。
+    使い始めるのは、ひな形の画面で差を見てから（いきなり案件のタスクには入れない）。"""
+    _need(user_id)
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    if r is None:
+        raise LookupError("その依頼がありません")
+    f = _flow(flow)
+    d0 = _draft(flow)
+    if d0 is not None and store.one("SELECT 1 FROM task_template WHERE flow_type=? AND template_version=? AND title=?",
+                                    (flow, d0["version"], r["title"])):
+        raise ValueError(f"「{r['title']}」は、もう {f['label']} のひな形の下書きにあります")
+    made = None
+    if d0 is None:
+        made = new_draft(flow, user_id, ip)["version"]
+    save_row(flow, {"title": r["title"], "role": role, "standard_hours": hours}, user_id)
+    v = _draft_v(flow)
+    from app import automation
+    automation.add_note(request_id, f"標準タスクのひな形（{f['label']}・下書き 版{v}）に入れました。"
+                        "使い始めるのは、設定 → 標準タスクのひな形 で差を見てから", user_id)
+    store.audit(user_id, "template.promote", flow, {"request": request_id, "version": v,
+                                                    "label": f"自動化依頼「{r['title']}」を {f['label']} のひな形の下書きへ"}, ip)
+    return {"ok": True, "flow": flow, "version": v, "draft_created": made is not None}
+
+
+def promote_to_work(request_id: str, role: str, user_id: str, ip: str = "") -> dict:
+    """依頼の作業を「案件外の仕事」として記録する（案件にぶら下がらない定常の作業）。"""
+    _need(user_id)
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    if r is None:
+        raise LookupError("その依頼がありません")
+    from app import automation, task
+    w = task.create_work_item({"kind": "案件外", "title": r["title"], "role": role or ""}, user_id)
+    automation.add_note(request_id, "案件外の仕事として記録しました（タスク → 案件外の仕事）", user_id)
+    store.audit(user_id, "template.promote_work", request_id, {"label": f"自動化依頼「{r['title']}」を案件外の仕事へ"}, ip)
+    return {"ok": True, "work_item": w}
