@@ -513,43 +513,71 @@ def _rule_count(rows: list[dict]) -> list[dict]:
     return out
 
 
-def _rule_holiday(rows: list[dict]) -> list[dict]:
-    """連休月は多くしない（挿入ルール）。**長期連休のある月はカレンダーアプリの会社休業日から決める**
-    （2026-10-09 十文字さん「B」・ADR-065）。連続5日以上の休みがかかる月を連休月とする（`calfc.LONG_RUN`）。
-    つながっていない・登録の外の月は「未計測」。推測で 1・5・8月と置かない（N-10）。"""
+def holiday_caps(months: list[str]) -> dict:
+    """連休月の枠の上限を**自動で**決める（2026-10-09 十文字さん「営業日の割合で減らす」・ADR-066）。
+
+    上限 ＝ 切り捨て（その月の営業日数 ÷ 通常月の平均営業日数 × 月あたりの発売枠）。
+    通常月＝同じ12か月のうち、連休が無く・カレンダーに登録済みの月。営業日はカレンダーの会社休業日から数える。
+    戻り値 {"long": [...], "unknown": [...], "caps": {月: 本数}, "avg": 平均, "slots": 枠, "why": 計算できない理由}"""
     import datetime as _d
+    from app import calfc
+    fr = _d.date.fromisoformat(months[0] + "-01")
+    to = _d.date(fr.year + 1, fr.month, 1) - _d.timedelta(days=1)          # 先頭の月から12か月
+    y, m = int(months[-1][:4]), int(months[-1][5:7])
+    last = _d.date(y + (m == 12), m % 12 + 1, 1) - _d.timedelta(days=1)
+    to = max(to, last)
+    st = calfc.month_stats(fr, to)                                        # つながらなければ NotConnected
+    long_m = sorted(k for k, v in st.items() if v["long"])
+    unknown = sorted(k for k, v in st.items() if v["long"] is None)
+    normal = [v["work"] for k, v in st.items() if v["long"] is False and v["work"]]
+    slots = _num("plan.monthly_launch_slots")
+    out = {"long": long_m, "unknown": unknown, "caps": {}, "avg": None, "slots": slots, "why": None}
+    if slots is None:
+        out["why"] = "月あたりの発売枠が未設定なので、上限を決められません"
+        return out
+    if not normal:
+        out["why"] = "連休の無い月の営業日が数えられないので、上限を決められません"
+        return out
+    avg = sum(normal) / len(normal)
+    out["avg"] = round(avg, 1)
+    for k in long_m:
+        w = st[k]["work"]
+        if w is not None:
+            out["caps"][k] = {"cap": int(slots * w / avg), "work": w}
+    return out
+
+
+def _rule_holiday(rows: list[dict]) -> list[dict]:
+    """連休月は多くしない（挿入ルール）。**長期連休のある月**（連続5日以上の休み）と**その月の上限**を、
+    カレンダーアプリの会社休業日から自動で決める（ADR-065・066）。つながっていない・登録の外は「未計測」（N-10）。"""
     from app import calfc
     months = sorted({r["launch_month"] for r in rows if r.get("launch_month")})
     if not months:
         return []
-    fr = _d.date.fromisoformat(months[0] + "-01")
-    y, m = int(months[-1][:4]), int(months[-1][5:7])
-    to = _d.date(y + (m == 12), m % 12 + 1, 1) - _d.timedelta(days=1)
     try:
-        hm = calfc.long_holiday_months(fr, to)
+        hc = holiday_caps(months)
     except calfc.NotConnected as e:
         return [_r("holiday", "FY", "unavailable",
                    f"長期連休のある月が分かりません（{e}）。元になるのはカレンダーアプリの会社休業日です。"
                    "推測で埋めていませんので、この月は人が見てください")]
-    long_m = [k for k, v in sorted(hm.items()) if v]
-    unknown = [k for k, v in sorted(hm.items()) if v is None]
-    cap = _num("plan.holiday_month_max_slots")
     out = []
-    if unknown:
+    unk = [m for m in hc["unknown"] if m in months]
+    if unk:
         out.append(_r("holiday", "FY", "unavailable",
-                      f"カレンダーアプリに会社休業日が登録されていない月があります（{'・'.join(unknown)}）。この月は人が見てください"))
-    if cap is None:
+                      f"カレンダーアプリに会社休業日が登録されていない月があります（{'・'.join(unk)}）。この月は人が見てください"))
+    if hc["why"]:
         out.append(_r("holiday", "FY", "unavailable",
-                      f"長期連休のある月（カレンダーの会社休業日から）: {'・'.join(long_m) or 'なし'}。"
-                      "連休月の枠の上限が未設定なので判定していません（設定ページで社長が入れます）"))
+                      f"長期連休のある月: {'・'.join(hc['long']) or 'なし'}。{hc['why']}"))
         return out
     for mo, rs in _by_month(rows).items():
-        if mo not in long_m:
+        c = hc["caps"].get(mo)
+        if c is None:
             continue
         n = sum(1 for r in rs if _counts_as_launch(r))
-        lvl = "ok" if n <= cap else "warn"
+        lvl = "ok" if n <= c["cap"] else "warn"
         out.append(_r("holiday", mo, lvl,
-                      f"長期連休のある月に {n} 本（上限 {cap:.0f} 本）", n=n, cap=cap))
+                      f"長期連休のある月に {n} 本（上限 {c['cap']} 本＝営業日 {c['work']} 日 ÷ 通常月の平均 {hc['avg']} 日 × 月の枠 {hc['slots']:.0f} 本）",
+                      n=n, cap=c["cap"]))
     return out
 
 

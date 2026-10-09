@@ -69,13 +69,13 @@ EDITABLE = {
     "plan.ratio_original_to_uchiwa": (BIZ_CORE, _ratio, "年間プランの挿入ルール"),
     "plan.ratio_tolerance_slots":   (BIZ_CORE, _num(0, 50), "年間プランの挿入ルール"),
     "plan.task_setup_lead_months":  (BIZ_DEV, _num(0, 12, integer=True), "年間プランの挿入ルール"),
-    "plan.holiday_month_max_slots": (("president",), _num(0, 50, integer=True), "年間プランの挿入ルール"),
     "automation.chatwork_room_id":  (APP_ADMIN, _room, "接続先"),
     "automation.app_base_url":      (APP_ADMIN, _url, "接続先"),
 }
 # 変えさせないもの（理由は画面に出す）
 LOCKED = {
     "plan.holiday_months": "カレンダーアプリの会社休業日から自動で決まります（連続5日以上の休みがかかる月）。ここでは入れません",
+    "plan.holiday_month_max_slots": "カレンダーの営業日から自動で決まります（その月の営業日 ÷ 通常月の平均営業日 × 月あたりの発売枠・切り捨て）。ここでは入れません",
     "plan.fiscal_year_start_month": "このアプリでは使っていません",
     "ai_scoring_enabled": "AI採点を呼ぶ実装がまだありません。押しても動きません",
     "ai.usage_endpoint": "書き換えると別のものにつながるため、画面からは変えません",
@@ -121,7 +121,7 @@ DESC = {
     "plan.ratio_original_to_uchiwa": "年間プランの「うちわ以外：うちわ」の枠の比率",
     "plan.ratio_tolerance_slots": "比率のずれを何枠まで警告しないか",
     "plan.task_setup_lead_months": "枠を案件にしたとき、発売の何か月前をタスクを組み終える期限にするか",
-    "plan.holiday_month_max_slots": "長期連休のある月に置ける枠の数の上限",
+    "plan.holiday_month_max_slots": "長期連休のある月に置ける枠の数の上限。月ごとに年間プランの画面に出す",
     "plan.holiday_months": "長期連休のある月（連休ルールの判定に使う）。カレンダーアプリの会社休業日から決める",
     "plan.fiscal_year_start_month": "年度の開始月",
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
@@ -161,7 +161,7 @@ def settings_view(user_id: str, app_role: str, connection_keys=()) -> list[dict]
         group = EDITABLE[k][2] if k in EDITABLE else "変えないもの"
         unset = r["value"] in (None, "")
         if k in LOCKED:
-            note = r["why"] or LOCKED[k]
+            note = LOCKED[k]                 # 変えられない理由（未設定のときの古い説明より先に）
         elif unset:
             note = r["why"] or "未設定です"
         elif k in last and last[k]["reason"]:

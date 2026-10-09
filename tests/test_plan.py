@@ -278,24 +278,34 @@ class TestRules(Base):
         self.assertEqual(self.m.check(self.vid)["counts"]["unavailable"], 1)
 
     def test_holiday_rule_uses_calendar_long_breaks(self):
-        """連続5日以上の休みがかかる月が連休月（ADR-065）。土日を足さない・登録の外は分からない。"""
+        """連続5日以上の休みがかかる月が連休月（ADR-065）。上限は営業日の割合で自動（ADR-066）。
+        土日を足さない（closed がすべて）・登録の外は分からない。"""
         import datetime as d
-        from app import calfc, store
-        closed = ["2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06",   # GW 5連休
-                  "2026-07-18", "2026-07-19", "2026-07-20"]                                  # 3連休は長期ではない
-        doc = {"closed": closed, "covered": [{"from": "2026-04-01", "to": "2026-07-31"}]}
+        from app import calfc
+        start, end = d.date(2026, 5, 1), d.date(2027, 4, 30)
+        closed, x = [], start
+        while x <= end:
+            if x.weekday() >= 5:
+                closed.append(x.isoformat())
+            x += d.timedelta(days=1)
+        closed += ["2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08"]   # GW（土日とつながって9連休）
+        doc = {"closed": sorted(set(closed)), "covered": [{"from": "2026-05-01", "to": "2027-04-30"}]}
         orig = calfc.fetch
         calfc.fetch = lambda fr, to, opener=None: doc
         self.addCleanup(setattr, calfc, "fetch", orig)
-        hm = calfc.long_holiday_months(d.date(2026, 5, 1), d.date(2026, 8, 31))
-        self.assertEqual(hm, {"2026-05": True, "2026-06": False, "2026-07": False, "2026-08": None})
+        st = calfc.month_stats(d.date(2026, 5, 1), d.date(2026, 7, 31))
+        self.assertEqual((st["2026-05"]["long"], st["2026-06"]["long"]), (True, False))
+        self.assertEqual(st["2026-05"]["work"], 21 - 5, "5月の平日21日から GW の5日を引く")
+        hc = self.m.holiday_caps(["2026-05", "2026-07"])
+        self.assertEqual(hc["long"], ["2026-05"])
+        self.assertEqual(hc["caps"]["2026-05"]["cap"], int(3 * 16 / hc["avg"]), "営業日の割合 × 月の枠（切り捨て）")
+        self.assertEqual(hc["caps"]["2026-05"]["cap"], 2)
         for _ in range(3):
             self.slot(month="2026-05")
         self.slot(month="2026-07")
-        self.assertIn("2026-05", self.rule("holiday", "FY")["message"], "上限が未設定でも連休月は示す")
-        store.ex("UPDATE setting SET value='2' WHERE key='plan.holiday_month_max_slots'")
-        store.conn().commit()
-        self.assertEqual(self.rule("holiday", "2026-05")["level"], "warn")
+        r = self.rule("holiday", "2026-05")
+        self.assertEqual((r["level"], r["cap"]), ("warn", 2))
+        self.assertIn("営業日 16 日", r["message"])
         self.assertIsNone(self.rule("holiday", "2026-07"), "連休でない月は出さない")
 
     def test_effort_is_unavailable_when_the_bounds_are_cleared(self):

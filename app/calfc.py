@@ -73,6 +73,26 @@ def fetch(fr: str, to: str, opener=None) -> dict:
     return doc
 
 
+def month_stats(fr: dt.date, to: dt.date, doc: dict | None = None) -> dict:
+    """[fr, to] の月ごとに {"long": True/False/None, "work": 営業日数 or None}。
+    **登録の外にかかる月は営業日数を数えない**（None。土日だけで数えると多く見える）。"""
+    doc = doc if doc is not None else fetch(fr.isoformat(), to.isoformat())
+    closed = set(doc.get("closed") or [])
+    covered = list(doc.get("covered") or [])
+    longm = long_holiday_months(fr, to, doc)
+    work, full = {}, {}
+    d = fr
+    while d <= to:
+        m = d.strftime("%Y-%m")
+        s = d.isoformat()
+        inside = any(c.get("from", "") <= s <= c.get("to", "") for c in covered)
+        full[m] = full.get(m, True) and inside
+        if inside and s not in closed:
+            work[m] = work.get(m, 0) + 1
+        d += dt.timedelta(days=1)
+    return {m: {"long": longm.get(m), "work": (work.get(m, 0) if full[m] else None)} for m in full}
+
+
 def long_holiday_months(fr: dt.date, to: dt.date, doc: dict | None = None) -> dict:
     """[fr, to] の月ごとに {"YYYY-MM": True/False/None}。None＝登録の外で分からない。
 
