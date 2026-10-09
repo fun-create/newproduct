@@ -44,6 +44,7 @@ import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 
 
 from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
+from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
 from app import gate as gate_m   # noqa: E402
 from app import idea as idea_m   # noqa: E402
@@ -595,6 +596,7 @@ class H(BaseHTTPRequestHandler):
             if d is None:
                 return self.sendj(404, {"error": "案件がありません"})
             d["ai_names"] = ai_name_m.proposals_of(parts[1])          # 商品名の案（ADR-082）
+            d["schedule"] = sched_m.summary(parts[1])                  # タスクの目安（ADR-084）
             return self.sendj(200, d)
 
         # 商品名の案出し（FR-149・ADR-082）。**AI は案を出すだけ。**選んだ名前だけを F.name に足す
@@ -830,6 +832,16 @@ class H(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "projects" and method == "POST":
             pid, what = parts[1], parts[2]
             d = self.body()
+            if what in ("schedule", "schedule-adopt"):
+                # タスクの目安（FR-41・ADR-084）。**目安は期限ではない。**期限にするのは人が押したときだけ
+                pr = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
+                if pr is None:
+                    raise LookupError("案件がありません")
+                if pr["source_of_truth"] != "app":
+                    raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+                r = sched_m.refresh(pid, uid) if what == "schedule" else sched_m.adopt(pid, uid)
+                store.audit(uid, "project." + what, pid, r, ip)
+                return self.sendj(200, r)
             if what == "section":
                 project_m.save_section(pid, d.get("key", ""), d.get("body", ""), uid)
                 store.audit(uid, "project.section", pid, {"key": d.get("key")}, ip)

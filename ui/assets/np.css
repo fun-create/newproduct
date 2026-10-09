@@ -253,3 +253,5 @@ table.np td.np-name { font-weight: 600; min-width: 10rem; }
 .np-form .np-pick { display: flex; align-items: flex-start; gap: .5rem; margin: .4rem 0; }
 .np-form .np-pick input[type=checkbox] { width: auto; flex: none; margin: .3rem 0 0; }
 .np-form .np-pick label { display: block; margin: 0; }
+/* 日付・状態を途中で折り返さない（表は .np-tablewrap で横に流す） */
+.np-nowrap { white-space: nowrap; }

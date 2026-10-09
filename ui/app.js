@@ -687,18 +687,20 @@
         if (!d.tasks.length) {
           tv.appendChild(el("p", { "class": "np-note", text: "タスクはありません。" }));
         } else {
-          tv.appendChild(table(["#", "進捗", "期限", "タスク", "ロール", "担当", "標準h"],
+          tv.appendChild(schedulePanel(d));
+          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table(["#", "進捗", "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h"],
             d.tasks.map(function (t) {
               return el("tr", null, [
                 el("td", { "class": "np-num", text: String(t.seq) }),
-                el("td", { text: t.status }),
-                el("td", { text: dash(t.due_on) }),
+                el("td", { "class": "np-nowrap", text: t.status }),
+                el("td", { "class": "np-nowrap", text: t.due_on ? t.due_on : "期限なし" }),
+                el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
                 el("td", { text: dash(t.role_label) }),
                 el("td", { text: dash(t.assignee) }),
                 el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) })
               ]);
-            })));
+            }))]));
           tv.appendChild(el("p", { "class": "np-note",
             text: "標準h は予備時間を含まない実作業hです（テンプレート由来）。" }));
         }
@@ -2253,6 +2255,39 @@
         .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
     });
     box.appendChild(f); box.appendChild(msg);
+    return box;
+  }
+
+  // タスクの目安（FR-41・ADR-084）。**目安は期限ではない。**「目安を期限にする」を押したときだけ期限になる
+  function schedulePanel(d) {
+    var sc = d.schedule || {}, h = d.header;
+    var box = el("div");
+    box.appendChild(el("p", { "class": "np-note",
+      text: "目安は、今日から発売日の前日までの営業日（カレンダーアプリの会社休業日を除く）を、タスクの順に標準工数の比で割ったものです。"
+          + "期限ではありません。担当が確かめて「目安を期限にする」を押すと期限になります（期限が入っているタスクは変えません）。" }));
+    box.appendChild(el("p", { "class": "np-sub",
+      text: sc.planned ? ("目安あり " + sc.planned + " 件（計算 " + sc.plan_at + "）／まだ期限になっていない " + sc.adoptable + " 件")
+                       : "目安はまだありません。" }));
+    if (!h.editable) return box;
+    var msg = el("p", { "class": "np-note", role: "status" });
+    var re = el("button", { type: "button", "class": "np-btn", text: sc.planned ? "目安を計算し直す" : "目安を計算する" });
+    re.addEventListener("click", function () {
+      post("/api/projects/" + encodeURIComponent(d.id) + "/schedule", {}).then(function (r) {
+        if (!r.ok) { msg.textContent = "目安を出せませんでした: " + r.why; return; }
+        go();
+      }).catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    var kids = [re];
+    if (sc.adoptable) {
+      var ad = el("button", { type: "button", "class": "np-btn", text: "目安を期限にする（" + sc.adoptable + " 件）" });
+      ad.addEventListener("click", function () {
+        if (!window.confirm("期限の入っていない " + sc.adoptable + " 件に、目安の日付を期限として入れます。よろしいですか")) return;
+        post("/api/projects/" + encodeURIComponent(d.id) + "/schedule-adopt", {}).then(function () { go(); })
+          .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+      });
+      kids.push(ad);
+    }
+    box.appendChild(btnRow(kids)); box.appendChild(msg);
     return box;
   }
 

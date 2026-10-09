@@ -144,6 +144,15 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
     # 移行（進捗管理シートから実タスクを持ち込む）では展開しない。
     # 展開すると、実際に消化した137件の完了と、雛形の未着手が二重に並ぶ
     n = expand_tasks(pid, user_id) if expand else 0
+    if n:
+        # 目安の日付を置く（FR-41・ADR-084）。**期限には入れない。**カレンダーにつながらなくても案件は作る
+        from app import schedule
+        try:
+            schedule.refresh(pid, user_id)
+        except Exception as e:                      # noqa: BLE001 目安が出ないだけで、起票は止めない
+            store.ex("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                     (pid, store.now_s(), user_id, f"タスクの目安を出せませんでした（{type(e).__name__}）"))
+            store.conn().commit()
     return {"id": pid, "tasks_created": n,
             "template_defined": bool(fl and fl["has_template"])}
 
@@ -151,10 +160,9 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
 def expand_tasks(project_id: str, user_id: str) -> int:
     """テンプレートを展開する（F-5-2）。
 
-    **期限の自動割付はまだしない。**営業日マスタは calfc が正本で、
-    その連携は第2段の範囲外（全体設計書 §3-5・第11章 ⑧が未依頼）。
-    **推測で日付を入れない。**入れたら「期限なし」が消えて、
-    実運用の「期限空欄88件」が見えなくなる。期限は人が入れる。
+    **期限は入れない。**2026-10-09 から、目安の日付（plan_start / plan_due）は `app/schedule.py` が
+    カレンダーの営業日で計算して置く（ADR-084）。期限（due_on）になるのは人が「目安を期限にする」を
+    押したときだけ。入れてしまうと「期限なし」が消えて、誰も決めていない期限が並ぶ（ADR-012）。
     """
     p = store.one("SELECT * FROM project WHERE id=?", (project_id,))
     if p is None or not p["flow_type"]:
