@@ -2557,6 +2557,19 @@
           + "出したあと、8つの質問に答えると要件になります。"
           + "このアプリが実装するわけではありません。要件を書き出して、作る人へ渡します。" }));
 
+      // 後追い（FR-169）。実装済から30日たっても、実装後の手間が記録されていないもの
+      if (d.followups && d.followups.length) {
+        var fu = el("div", { "class": "np-card" });
+        fu.appendChild(el("h2", { text: "後追い待ち（実装済から30日・" + d.followups.length + "件）" }));
+        fu.appendChild(el("p", { "class": "np-sub", text: "自動化したのに作業が残っていたら、実装が足りていません。依頼を開いて、実装後の手間を記録してください。" }));
+        fu.appendChild(table(["依頼", "実装済にした日", "実装前の手間"], d.followups.map(function (x) {
+          return el("tr", null, [el("td", null, [el("a", { href: "#/automation/" + encodeURIComponent(x.id), text: x.title })]),
+            el("td", { text: (x.done_at || "").slice(0, 10) }),
+            el("td", { "class": "np-num", text: x.hours_per_month === null ? "未計測" : "月 " + x.hours_per_month + "h" })]);
+        })));
+        b.appendChild(fu);
+      }
+
       // 数の段。**測れていない件数を必ず出す**
       var g = el("div", { "class": "np-grid np-grid-3" });
       function card(label, n, sub, link) {
@@ -2637,6 +2650,32 @@
     return box;
   }
 
+  /** 実装後の手間（FR-169）。前と並べ、手作業が残っていれば「実装が足りていない可能性」と出す */
+  function autoAfter(id, d) {
+    var a = d.after, c = el("div", { "class": "np-card" });
+    c.appendChild(el("h3", { text: "実装後の手間（作業が実際に減ったか）" }));
+    c.appendChild(table(["", "月あたり"], [
+      el("tr", null, [el("td", { text: "実装前" }), el("td", { "class": "np-num", text: a.before === null ? "未計測" : a.before + " h" })]),
+      el("tr", null, [el("td", { text: "実装後" }), el("td", { "class": "np-num", text: a.after === null ? "未計測" : a.after + " h" })]),
+      el("tr", null, [el("td", { text: "減った量" }), el("td", { "class": "np-num", text: a.saved === null ? "—" : a.saved + " h" + (a.rate === null ? "" : "（" + a.rate + "%）") })])
+    ]));
+    if (a.verdict) c.appendChild(el("p", { "class": a.after !== null && a.after > 0 ? "np-warn" : "np-note", text: a.verdict }));
+    if (a.checked_at) c.appendChild(el("p", { "class": "np-sub", text: "記録: " + a.checked_at + " " + dash(a.checked_by) + (a.note ? "　" + a.note : "") }));
+    var f = el("form", { "class": "np-inline" });
+    var mi = el("input", { size: "5", "aria-label": "実装後の1回あたりの分", value: a.after_minutes_each === null ? "" : String(a.after_minutes_each) });
+    var ti = el("input", { size: "5", "aria-label": "実装後の月の回数", value: a.after_times_per_month === null ? "" : String(a.after_times_per_month) });
+    var ni = el("input", { size: "24", "aria-label": "メモ", placeholder: "残っている手作業など" });
+    [txt("1回 "), mi, txt(" 分 × 月 "), ti, txt(" 回 "), ni, el("button", { type: "submit", text: "記録する" })].forEach(function (x) { f.appendChild(x); });
+    var st = el("p", { "class": "np-status", role: "status", "aria-live": "polite", text: "手作業が無くなったら 1回 0 分で記録します。" });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      post("/api/automation/" + encodeURIComponent(id) + "/after", { minutes_each: mi.value, times_per_month: ti.value, note: ni.value })
+        .then(function () { go(); }).catch(function (e) { st.textContent = "記録できませんでした: " + e.message; });
+    });
+    c.appendChild(f); c.appendChild(st);
+    return c;
+  }
+
   function viewAutomationOne(id) {
     loading();
     api("/api/automation/" + encodeURIComponent(id)).then(function (d) {
@@ -2699,6 +2738,7 @@
       b.appendChild(el("h2", { text: "質問（答えが揃うと要件になります）" }));
       d.questions.forEach(function (q) { b.appendChild(autoQ(id, q)); });
       b.appendChild(autoStage(d));
+      if (d.request.stage === "実装済") b.appendChild(autoAfter(id, d));
       b.appendChild(autoChatwork(d.request.id));
     }).catch(fail);
   }

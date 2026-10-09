@@ -333,3 +333,28 @@ class TestChatWorkHandoff(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFollowup(Base):
+    """FR-169。実装済みの依頼で、作業が実際に減ったかを後追いする（ADR-071）。"""
+
+    def test_after_is_compared_with_before_and_overdue_ones_are_listed(self):
+        import os
+        rid = self.m.create("u", title="後追いの検査")["id"]
+        self.answer_all(rid)
+        self.m.set_effort(rid, "30", "20", "u")                         # 前: 月10h
+        with self.assertRaises(ValueError):
+            self.m.set_after(rid, "5", "20", "", "u")                   # 実装済の前は記録しない
+        self.m.set_stage(rid, "実装済", "u")
+        self.assertTrue(self.m.after_view(rid)["verdict"].startswith("未計測"))
+        os.environ["NEWPRODUCT_TODAY"] = "2099-01-01"                   # 30日以上たった
+        self.addCleanup(os.environ.pop, "NEWPRODUCT_TODAY", None)
+        self.assertIn(rid, [x["id"] for x in self.m.followups()])
+        a = self.m.set_after(rid, "5", "20", "確認だけ手で", "u")        # 後: 月1.67h
+        self.assertEqual((a["before"], a["after"], a["saved"]), (10.0, 1.67, 8.33))
+        self.assertIn("実装が足りていない", a["verdict"])
+        self.assertNotIn(rid, [x["id"] for x in self.m.followups()], "記録したら後追い待ちから外れる")
+        a = self.m.set_after(rid, "0", "", "", "u")
+        self.assertEqual((a["after"], a["verdict"]), (0.0, "手作業は無くなりました"))
+        with self.assertRaises(ValueError):
+            self.m.set_after(rid, "-1", "", "", "u")

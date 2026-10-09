@@ -983,6 +983,11 @@ class H(BaseHTTPRequestHandler):
                                      d.get("handoff_to", ""))
                 store.audit(uid, "automation.stage", rid, d, ip)
                 return self.sendj(200, r)
+            if what == "after":
+                # FR-169。実装後の手間を記録して、前と並べる
+                r = auto_m.set_after(rid, d.get("minutes_each"), d.get("times_per_month"), d.get("note", ""), uid)
+                store.audit(uid, "automation.after", rid, {k: d.get(k) for k in ("minutes_each", "times_per_month")}, ip)
+                return self.sendj(200, r)
             if what == "promote":
                 # FR-168。標準タスクに無い作業を、ひな形の下書きか案件外の仕事へ（どちらかは商品開発部の判断）
                 if d.get("to") == "work":

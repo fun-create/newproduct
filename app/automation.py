@@ -219,7 +219,72 @@ def set_stage(request_id: str, stage: str, user_id: str, handoff_to: str = "") -
                   (stage, user_id, store.now_s(),
                    (handoff_to or "").strip() or r["handoff_to"],
                    store.now_s(), user_id, request_id))
+        if stage == "実装済" and not r["done_at"]:
+            c.execute("UPDATE automation_request SET done_at=? WHERE id=?", (store.now_s(), request_id))
     return {"id": request_id, "stage": stage}
+
+
+# ── 後追い（FR-169・ADR-071）。**自動化したのに作業が残っていたら、それは実装が足りていない** ──
+FOLLOWUP_DAYS = 30
+
+
+def set_after(request_id: str, minutes_each, times_per_month, note: str, user_id: str) -> dict:
+    """実装後の手間を記録する。実装済の依頼だけ。0 分＝手作業が無くなった。空欄は未計測（0 にしない）。"""
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    if r is None:
+        raise ValueError("その依頼がありません")
+    if r["stage"] != "実装済":
+        raise ValueError("実装後の手間は、状態が「実装済」になってから記録します")
+
+    def num(v, label):
+        if v in (None, ""):
+            return None
+        try:
+            x = float(v)
+        except ValueError:
+            raise ValueError(f"{label}は数字で入れてください") from None
+        if x < 0:
+            raise ValueError(f"{label}は0以上で入れてください")
+        return x
+    m, t = num(minutes_each, "1回あたりの分"), num(times_per_month, "月の回数")
+    h = round(m * t / 60, 2) if (m is not None and t is not None) else (0.0 if m == 0 else None)
+    with store.tx() as c:
+        c.execute("UPDATE automation_request SET after_minutes_each=?,after_times_per_month=?,after_hours_per_month=?,"
+                  "after_note=?,after_checked_by=?,after_checked_at=?,updated_at=?,updated_by=? WHERE id=?",
+                  (m, t, h, (note or "").strip()[:500] or None, user_id, store.now_s(), store.now_s(), user_id,
+                   request_id))
+    return {"ok": True, **after_view(request_id)}
+
+
+def after_view(request_id: str) -> dict:
+    """前と後を並べる。**減った量と、残った手作業**を出す。どちらかが未計測なら差は出さない。"""
+    r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
+    before, after = r["hours_per_month"], r["after_hours_per_month"]
+    out = {"done_at": r["done_at"], "before": before, "after": after,
+           "after_minutes_each": r["after_minutes_each"], "after_times_per_month": r["after_times_per_month"],
+           "note": r["after_note"], "checked_by": r["after_checked_by"], "checked_at": r["after_checked_at"],
+           "saved": None, "rate": None, "verdict": None}
+    if r["stage"] != "実装済":
+        return out
+    if after is None:
+        out["verdict"] = "未計測（実装後の手間がまだ記録されていません）"
+    elif before is None:
+        out["verdict"] = "実装前の手間が未計測なので、減った量は出せません"
+    else:
+        out["saved"] = round(before - after, 2)
+        out["rate"] = round((before - after) / before * 100) if before else None
+        out["verdict"] = ("手作業は無くなりました" if after == 0 else
+                          f"手作業が月 {after}h 残っています。実装が足りていない可能性があります（元は月 {before}h）")
+    return out
+
+
+def followups() -> list[dict]:
+    """実装済から FOLLOWUP_DAYS 日たっても、実装後の手間が記録されていない依頼。"""
+    import datetime as _d
+    edge = (store.today() - _d.timedelta(days=FOLLOWUP_DAYS)).isoformat()
+    return store.rows(store.q(
+        "SELECT id, title, done_at, hours_per_month FROM automation_request WHERE stage='実装済' "
+        "AND after_checked_at IS NULL AND done_at IS NOT NULL AND substr(done_at,1,10) <= ? ORDER BY done_at", (edge,)))
 
 
 def add_note(request_id: str, body: str, user_id: str, q_key: str = "") -> dict:
@@ -265,7 +330,7 @@ def listing(args: dict | None = None) -> dict:
                        "AND stage NOT IN ('見送り','実装済')")
     h = measured[0]["h"] if measured else None
     return {
-        "rows": rows, "by_stage": by_stage, "total": n_all,
+        "rows": rows, "by_stage": by_stage, "total": n_all, "followups": followups(),
         "not_in_template": n_gap,
         "hours_per_month": round(float(h), 1) if h else None,
         "hours_measured_n": measured[0]["n"] if measured else 0,
@@ -305,7 +370,7 @@ def detail(request_id: str) -> dict | None:
             tpl = dict(t)
     return {
         "request": dict(r), "questions": qs, "progress": progress(request_id),
-        "effort": effort(request_id), "template": tpl,
+        "effort": effort(request_id), "template": tpl, "after": after_view(request_id),
         "notes": store.rows(store.q(
             "SELECT * FROM automation_note WHERE request_id=? ORDER BY at", (request_id,))),
         "stages": STAGES,
