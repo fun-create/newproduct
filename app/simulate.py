@@ -120,6 +120,20 @@ def place(n_releases: int, fy: int, effort_point: float | None) -> dict:
             "note": cap["note"], "capacity": sum((c["cap"] or 0) for c in cap["months"].values())}
 
 
+def mix(n_releases: int) -> dict:
+    """商品タイプの構成（FR-127 の一部）。設定「うちわ以外：うちわ」の比で本数を分ける（端数は うちわ以外 へ）。
+    **売上の見込みはタイプで分けていない**: 過去の表で12か月そろった「うちわ」の商品は6件しかなく、分布を分けると当てにならない。"""
+    from app import plan
+    r = plan._setting("plan.ratio_original_to_uchiwa") or "3:1"
+    try:
+        a, b = (int(x) for x in r.split(":"))
+    except ValueError:
+        return {"ratio": r, "uchiwa": None, "other": None}
+    u = n_releases * b // (a + b) if a + b else 0
+    return {"ratio": r, "uchiwa": u, "other": n_releases - u,
+            "note": "売上の見込みはタイプで分けていません（過去にうちわの商品で12か月そろったものが6件しかないため）"}
+
+
 # ── 案を並べる ─────────────────────────────────────────────
 def scenario(n_releases: int, target_yen: float | None, fy: int, effort_point: float | None) -> dict:
     d = distribution()
@@ -138,6 +152,7 @@ def scenario(n_releases: int, target_yen: float | None, fy: int, effort_point: f
         out["reach_rate"] = round(sum(1 for x in s if x >= target_yen) / len(s) * 100)
         out["need_each"] = round(target_yen / n_releases)
         out["need_x_median"] = round(target_yen / n_releases / d["median"], 1) if d["median"] else None
+    out["mix"] = mix(n_releases)
     pl = out["placement"]
     out["feasible"] = pl["unplaced"] == 0 and not pl["over_months"]
     out["why_not"] = (([f"枠に入りきらない {pl['unplaced']} 本"] if pl["unplaced"] else [])
@@ -206,3 +221,22 @@ def versions(fy: int | None = None) -> list[dict]:
 def current_fy() -> int:
     t = store.today()
     return t.year if t.month >= 5 else t.year - 1
+
+
+def plan_ref(launch_date: str | None) -> dict | None:
+    """個別案件の年間目標の逆算に使う（FR-177・ADR-073）。発売日の年度で**確定した**販売計画の1本あたり。
+    目標が入っていれば「目標 ÷ 本数」、無ければ「見込みの真ん中 ÷ 本数」。どちらを使ったかを根拠に書く。"""
+    if not launch_date:
+        return None
+    y, m = int(launch_date[:4]), int(launch_date[5:7])
+    fy = y if m >= 5 else y - 1
+    v = next((x for x in versions(fy) if x["state"] == "確定"), None)
+    if v is None:
+        return {"fy": fy, "none": True}
+    n = v["params"]["n_releases"]
+    tgt = v["params"].get("target_yen")
+    p50 = v["result"].get("p50")
+    each = round(tgt / n) if tgt else (round(p50 / n) if p50 else None)
+    how = (f"{fy}年度の販売計画（確定 {v['decided_at'][:10]}・{n}本・目標 {tgt:,.0f}円）の 目標 ÷ 本数" if tgt else
+           f"{fy}年度の販売計画（確定 {v['decided_at'][:10]}・{n}本・目標なし）の 見込みの真ん中 {p50:,.0f}円 ÷ 本数")
+    return {"fy": fy, "n": n, "each": each, "basis": how, "id": v["id"]}

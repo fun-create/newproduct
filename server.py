@@ -685,7 +685,12 @@ class H(BaseHTTPRequestHandler):
             actual = (sum(x["total"] for x in ps.get("sites") or [] if x["total"] is not None)
                       if not ps.get("why") else None)
             p = store.one("SELECT launch_date FROM project WHERE id=?", (pid,))
-            return self.sendj(200, target_m.progress(pid, p["launch_date"] if p else None, actual))
+            r = target_m.progress(pid, p["launch_date"] if p else None, actual)
+            # FR-177。確定した販売計画の1本あたりを「逆算法」の候補として出す。実績の分布は目安として添える
+            r["plan_ref"] = sim_m.plan_ref(p["launch_date"] if p else None)
+            dd = sim_m.distribution()
+            r["dist"] = {k: dd.get(k) for k in ("n", "median", "top80")}
+            return self.sendj(200, r)
 
         # 月次レポート（FR-116）。毎月2日に timer が作る。画面からも作り直せる
         if parts == ["reports"] and method == "GET":

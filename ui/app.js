@@ -832,8 +832,21 @@
       f.appendChild(el("p", null, [ms, txt(" 年間目標（円・税込の商品代） "), yenIn, hint]));
       f.appendChild(el("label", { text: "根拠（必須）" }));
       f.appendChild(bs);
+      var dsx = t.dist || {};
       var bar = el("p", null, [el("button", { type: "submit", text: t.state === "目標未設定" ? "目標を決める" : "目標を直す" }),
-        el("span", { "class": "np-sub", text: "　平均で置くとほぼ全商品が未達になります（実績の中央値は約7万円・上位23商品で8割）。似ている商品の実績から置くのが目安です。" })]);
+        el("span", { "class": "np-sub", text: dsx.n ? "　平均で置くとほぼ全商品が未達になります（過去の新商品 " + dsx.n + " 件の発売から12か月の中央値は " + yen(dsx.median) + "・上位 " + dsx.top80 + " 商品で8割）。似ている商品の実績から置くのが目安です。" : "" })]);
+      // FR-177。確定した販売計画があれば、その1本あたりを「逆算法」で入れられる
+      var pr = t.plan_ref;
+      if (pr && !pr.none && pr.each) {
+        var fill = el("button", { type: "button", text: "販売計画（" + pr.fy + "年度・" + pr.n + "本）の1本あたり " + yen(pr.each) + " を入れる" });
+        fill.addEventListener("click", function () {
+          ms.value = "逆算法"; yenIn.value = pr.each; bs.value = pr.basis;
+          hint.textContent = "　根拠に書くこと: " + t.methods["逆算法"];
+        });
+        f.appendChild(el("p", { "class": "np-btnrow" }, [fill]));
+      } else if (pr && pr.none) {
+        f.appendChild(el("p", { "class": "np-sub", text: pr.fy + "年度の販売計画はまだ確定していません（確定すると、ここから1本あたりを入れられます）。" }));
+      }
       f.appendChild(bar);
       f.addEventListener("submit", function (ev) {
         ev.preventDefault();
@@ -3951,12 +3964,13 @@
       // 案の比較
       var sc = el("div", { "class": "np-card" });
       sc.appendChild(el("h2", { text: "本数ごとの見込み" }));
-      sc.appendChild(el("p", { "class": "np-sub", text: d.method }));
-      var head = ["年間の本数", "年間売上の見込み（下振れ／真ん中／上振れ）", "0円見込み"];
+      sc.appendChild(el("p", { "class": "np-sub", text: d.method + (d.scenarios[0] && d.scenarios[0].mix && d.scenarios[0].mix.note ? "　" + d.scenarios[0].mix.note + "。単価帯は、過去の表に単価が無いので出していません。" : "") }));
+      var head = ["年間の本数", "構成（うちわ以外／うちわ）", "年間売上の見込み（下振れ／真ん中／上振れ）", "0円見込み"];
       if (d.target_yen) head = head.concat(["目標に届く見込み", "1本あたりに要る売上"]);
       head = head.concat(["工数と枠", ""]);
       sc.appendChild(table(head, d.scenarios.map(function (x) {
         var cells = [el("td", { "class": "np-num", text: x.n + " 本" }),
+          el("td", { "class": "np-num", text: x.mix && x.mix.other !== null ? x.mix.other + "／" + x.mix.uchiwa + " 本" : "—" }),
           el("td", { "class": "np-num", text: x.p50 === undefined ? "—" : yen(x.p10) + "／" + yen(x.p50) + "／" + yen(x.p90) }),
           el("td", { "class": "np-num", text: x.zero_expected === undefined ? "—" : "約 " + x.zero_expected + " 本" })];
         if (d.target_yen) cells = cells.concat([el("td", { "class": "np-num", text: x.reach_rate === undefined ? "—" : x.reach_rate + "%" }),

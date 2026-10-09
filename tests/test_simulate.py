@@ -103,6 +103,23 @@ class Simulate(unittest.TestCase):
         self.assertEqual([(x["params"]["n_releases"], x["state"]) for x in v], [(36, "確定"), (24, "取消")])
         self.assertIn("10 商品", v[0]["data_range"])
 
+    def test_mix_follows_ratio_setting(self):
+        self.assertEqual({k: v for k, v in self.m.mix(36).items() if k in ("uchiwa", "other")}, {"uchiwa": 9, "other": 27})
+        self.assertEqual(self.m.mix(10)["uchiwa"], 2, "端数は うちわ以外 へ")
+
+    def test_plan_ref_for_project_targets(self):
+        """FR-177。発売日の年度で確定した計画の1本あたり（目標があれば 目標÷本数、無ければ 見込みの真ん中÷本数）。"""
+        self.assertTrue(self.m.plan_ref("2026-12-01")["none"])
+        self.assertIsNone(self.m.plan_ref(None))
+        self.m.confirm(2026, 24, 2400000, 5.0, "検査", "boss")
+        r = self.m.plan_ref("2027-03-10")                      # 2027年3月は 2026年度
+        self.assertEqual((r["fy"], r["n"], r["each"]), (2026, 24, 100000))
+        self.assertIn("目標 ÷ 本数", r["basis"])
+        self.m.confirm(2027, 12, None, 5.0, "目標なし", "boss")
+        r = self.m.plan_ref("2027-06-01")
+        self.assertEqual(r["each"], round(self.m.versions(2027)[0]["result"]["p50"] / 12))
+        self.assertIn("見込みの真ん中", r["basis"])
+
 
 if __name__ == "__main__":
     unittest.main()
