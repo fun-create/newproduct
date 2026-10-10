@@ -95,7 +95,9 @@ def build(month: str) -> tuple[str, list[str]]:
         from app import sales
         n = sales.new_product_summary()
         L.append(f"- 本数（発売から1年以内）: {n['count']} 本" + (f"（{'・'.join(f'{k} {v}' for k, v in n['by_flow'].items())}）" if n["by_flow"] else ""))
-        L.append(f"- 売上として数える案件: {n['counted']} 件／全額 {_yen(n['totals']['全額'])}／増分 {_yen(n['totals']['増分'])}"
+        def _amt(v):
+            return "対象なし" if v is None else _yen(v)          # 数える案件が無いときは 0円と書かない
+        L.append(f"- 売上として数える案件: {n['counted']} 件／全額 {_amt(n['totals']['全額'])}／増分 {_amt(n['totals']['増分'])}"
                  f"／未計測 {n['totals']['未計測']} 件・方式未選択 {n['totals']['方式未選択']} 件")
     except Exception as e:                                   # noqa: BLE001
         problems.append(f"新商品: {e}")

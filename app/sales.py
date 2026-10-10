@@ -402,6 +402,7 @@ def new_product_summary() -> dict:
     for p in launched:
         by_flow[p["flow_label"] or "開発タイプ未設定"] = by_flow.get(p["flow_label"] or "開発タイプ未設定", 0) + 1
     rows, tot = [], {"全額": 0.0, "増分": 0.0, "未計測": 0, "方式未選択": 0}
+    n_full = n_incr = 0
     for p in launched:
         if not p["revenue_counted"]:
             continue
@@ -419,6 +420,7 @@ def new_product_summary() -> dict:
         if p["revenue_basis"] == "全額":
             r["amount"] = full
             tot["全額"] += full
+            n_full += 1
         else:
             ld = _pdate(p["launch_date"])
             base_from = (ld - _dt.timedelta(days=365)).isoformat()
@@ -435,7 +437,13 @@ def new_product_summary() -> dict:
             r["amount"] = full - base
             r["full"], r["baseline"] = full, base
             tot["増分"] += r["amount"]
+            n_incr += 1
         rows.append(r)
+    # **数える相手がいない合計は 0 ではなく None**（「0円」は売れなかったという主張になる・N-10・2026-10-09 app-ui 点検 1-2）
+    if not n_full:
+        tot["全額"] = None
+    if not n_incr:
+        tot["増分"] = None
     return {"since": since, "until": today.isoformat(), "count": len(launched), "by_flow": by_flow,
             "counted": len(rows), "rows": rows, "totals": tot, "tax": "税込",
             "note": ("本数は発売から1年以内の案件（中止を除く）。売上として数えるのは「売上計上」を立てた案件だけ。"

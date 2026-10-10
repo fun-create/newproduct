@@ -280,6 +280,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
             "key": s["key"], "title": s["title"], "asks": s["asks"],
             # **パーセントにしない**（画面設計 3-8）。何が足りないか分からなくなる
             "progress": f"{filled} / {len(s['fields'])} 入力済",
+            "filled": filled, "total": len(s["fields"]),
             "gate_pending": (f"{nx['gate']}必須 {len(need)}件未入力"
                              if nx and need else None),
             "fields": [{"key": k, "label": lb,
@@ -291,6 +292,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
 
     return {
         "id": p["id"],
+        "today": store.today_s(),          # 期間の帯の「今日」（日本の日付。画面で UTC から作らない）
         "header": {
             "product": product_label(p),
             "name": display_name(p),

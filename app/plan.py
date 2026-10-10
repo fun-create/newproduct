@@ -602,8 +602,11 @@ def _rule_holiday(rows: list[dict]) -> list[dict]:
 def _basis(version_id: str) -> dict:
     """この版をどの値で判定するか。承認済み・失効で承認時の値があれば、それ（ADR-069）。"""
     v = store.one("SELECT state, approved_at, rules_snapshot FROM plan_version WHERE id=?", (version_id,))
-    if v is None or v["state"] == "策定中" or not v["rules_snapshot"]:
+    if v is None or v["state"] == "策定中":
         return {"mode": "いまの設定", "snapshot": None, "diff": []}
+    if not v["rules_snapshot"]:
+        # 承認時の値が残っていない承認済みの版（ADR-069 より前に承認したもの）
+        return {"mode": "いまの設定（承認時の値なし）", "snapshot": None, "diff": [], "approved_at": v["approved_at"]}
     snap = json.loads(v["rules_snapshot"])
     labels = {r["key"]: r["label"] for r in store.q("SELECT key, label FROM setting")}
     diff = []

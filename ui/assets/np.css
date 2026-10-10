@@ -255,3 +255,117 @@ table.np td.np-name { font-weight: 600; min-width: 10rem; }
 .np-form .np-pick label { display: block; margin: 0; }
 /* 日付・状態を途中で折り返さない（表は .np-tablewrap で横に流す） */
 .np-nowrap { white-space: nowrap; }
+
+/* ── グラフの部品（ADR-092・docs/ui-review-2026-10-09.md §3）。色はトークンだけ。**色に意味を持たせない**（形・語・数で分ける） ── */
+.np-chart { margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--fca-line); border-radius: 8px; background: var(--fca-card); min-width: 0; }
+.np-chart-title { font-weight: 700; margin: 0 0 2px; }
+.np-chart-lead { margin: 2px 0 6px; font-weight: 600; }
+.np-chart-svg { width: 100%; min-width: 0; }
+.np-src { font-size: .8rem; color: var(--fca-muted); margin: .15rem 0 .5rem; }
+.np-svg { display: block; max-width: 100%; }
+.np-svg text { fill: var(--fca-ink); font-size: 12px; }
+.np-svg .np-tick { fill: var(--fca-muted); font-size: 11px; }
+.np-svg .np-strong { fill: var(--fca-ink); }
+.np-svg .np-val { fill: var(--fca-ink); font-size: 11px; }
+.np-svg .np-axis { stroke: var(--fca-line); stroke-width: 1; }
+.np-svg .np-col { fill: var(--fca-navy); }
+.np-svg .np-col-partial { fill: var(--fca-card); stroke: var(--fca-navy); stroke-width: 1.5; }
+.np-svg .np-tl-done { fill: var(--fca-muted); }
+.np-svg .np-tl-plan { fill: var(--fca-card); stroke: var(--fca-navy); stroke-width: 1.5; stroke-dasharray: 3 2; }
+.np-svg .np-line { fill: none; stroke: var(--fca-navy); stroke-width: 2; }
+.np-svg .np-line-dash { stroke-dasharray: 6 4; stroke: var(--fca-muted); }
+.np-svg .np-mark { fill: var(--fca-navy); stroke: var(--fca-navy); stroke-width: 1.5; }
+.np-svg .np-mark-hollow { fill: var(--fca-card); }
+/* 目標・下限の線は本文色の破線（ライトの金は白地で 2.70:1 で、意味を持つ線の 3:1 に届かない） */
+.np-svg .np-target { stroke: var(--fca-ink); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.np-svg .np-hatch { stroke: var(--fca-line); stroke-width: 2; }
+.np-svg .np-unmeasured-bg { stroke: none; }
+.np-svg .np-band { fill: var(--fca-bg); stroke: var(--fca-line); stroke-dasharray: 2 2; }
+.np-svg .np-range { fill: var(--fca-bg); stroke: var(--fca-navy); stroke-width: 1.5; }
+.np-svg .np-range-mid { stroke: var(--fca-navy); stroke-width: 3; }
+.np-hbars { display: grid; gap: 6px; }
+.np-hbar-row { display: grid; grid-template-columns: minmax(6em, 30%) 1fr auto; gap: 8px; align-items: center; min-width: 0; }
+.np-hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.np-hbar-track { height: 14px; background: var(--fca-bg); border-radius: 3px; min-width: 0; }
+.np-hbar { height: 100%; background: var(--fca-navy); border-radius: 3px; }
+.np-hbar-alt { background: repeating-linear-gradient(45deg, var(--fca-navy) 0 3px, transparent 3px 6px); border: 1px solid var(--fca-navy); }
+.np-hbar-unmeasured { height: 100%; background: repeating-linear-gradient(45deg, var(--fca-line) 0 2px, transparent 2px 6px); border-radius: 3px; }
+.np-hbar-val { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .92em; }
+@media (max-width: 480px) {
+  .np-hbar-row { grid-template-columns: 1fr auto; row-gap: 2px; }
+  .np-hbar-label { grid-row: 1; grid-column: 1; white-space: normal; }
+  .np-hbar-val { grid-row: 1; grid-column: 2; }
+  .np-hbar-track { grid-row: 2; grid-column: 1 / -1; }
+}
+.np-meter { margin: 6px 0 4px; }
+.np-meter-track { position: relative; height: 16px; background: var(--fca-bg); border: 1px solid var(--fca-line); border-radius: 8px; }
+.np-meter-fill { height: 100%; background: var(--fca-navy); border-radius: 8px; }
+.np-meter-unmeasured { height: 100%; border-radius: 8px; color: var(--fca-muted); font-size: 11px; padding-left: 8px; line-height: 16px;
+  background: repeating-linear-gradient(45deg, var(--fca-line) 0 2px, transparent 2px 6px); }
+.np-meter-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fca-ink); }
+.np-meter-scale { position: relative; height: 18px; font-size: 11px; color: var(--fca-muted); }
+.np-meter-scale span { position: absolute; transform: translateX(-50%); white-space: nowrap; top: 3px; }
+.np-meter-scale span.np-r { transform: none; }
+.np-meter-scale span.np-l { transform: none; }
+.np-stack-bar { position: relative; display: flex; height: 18px; border-radius: 4px; overflow: hidden; border: 1px solid var(--fca-line); }
+.np-stack-seg { height: 100%; }
+.np-stack-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--fca-ink); }
+.np-seg0 { background: var(--fca-navy); }
+.np-seg1 { background: repeating-linear-gradient(45deg, var(--fca-navy) 0 3px, var(--fca-card) 3px 6px); }
+.np-seg2 { background: var(--fca-muted); }
+.np-seg3 { background: repeating-linear-gradient(0deg, var(--fca-muted) 0 2px, var(--fca-card) 2px 5px); }
+.np-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; border: 1px solid var(--fca-line); }
+.np-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 6px 0 0; font-size: .9em; }
+.np-legend-mark { font-weight: 700; }
+.np-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.np-kpi { display: block; padding: 10px 12px; border: 1px solid var(--fca-line); border-radius: 8px; background: var(--fca-card); color: var(--fca-ink); text-decoration: none; min-width: 0; }
+a.np-kpi:hover, a.np-kpi:focus-visible { border-color: var(--fca-navy); }
+.np-kpi-label { font-size: .85em; color: var(--fca-muted); }
+.np-kpi-big { font-size: 1.6em; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; color: var(--fca-navy); }
+.np-kpi-unmeasured { color: var(--fca-muted); font-size: 1.15em; }
+.np-kpi-sub { font-size: .82em; color: var(--fca-muted); }
+.np-grid-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.np-grid-charts > .np-chart { margin: 0; }
+.np-steps { list-style: none; display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; padding: 0; margin: 0 0 8px; }
+.np-step { display: flex; flex-direction: column; min-width: 7.5em; padding: 8px 10px; border: 1px solid var(--fca-line); border-radius: 8px; background: var(--fca-card); color: var(--fca-ink); text-decoration: none; }
+a.np-step:hover, a.np-step:focus-visible { border-color: var(--fca-navy); }
+.np-step-label { font-size: .85em; color: var(--fca-muted); }
+.np-step-n { font-size: 1.4em; font-weight: 700; color: var(--fca-navy); font-variant-numeric: tabular-nums; }
+.np-step-sub { font-size: .8em; color: var(--fca-muted); }
+.np-step-arrow { align-self: center; color: var(--fca-muted); }
+.np-dots { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.np-dot { width: 9px; height: 9px; border: 1px solid var(--fca-navy); border-radius: 2px; }
+.np-dot-on { background: var(--fca-navy); }
+.np-dotbar { display: inline-block; width: 60px; height: 8px; border: 1px solid var(--fca-navy); border-radius: 2px; }
+.np-dotbar > span { display: block; height: 100%; background: var(--fca-navy); }
+.np-dots-n { font-size: .85em; color: var(--fca-muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .np-grid-charts { grid-template-columns: 1fr; } .np-steps { flex-direction: column; } .np-step-arrow { align-self: flex-start; transform: rotate(90deg); margin-left: 1em; } }
+
+/* 見出しの階層（ページ題 h1 1.25rem より大きい見出しを作らない・2026-10-09 点検 2-1） */
+.fca-main h2 { font-size: 1.1rem; margin: 1.6rem 0 .6rem; }
+.fca-main h3 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
+.fca-main h4 { font-size: .95rem; margin: .8rem 0 .3rem; }
+.np-card > h2:first-child, .np-card > h3:first-child, .np-chart h3:first-child { margin-top: 0; }
+/* 枠の中の枠をやめる（2026-10-09 点検 2-2）。#view 直下の .np-card は区切り線の節にする。375px で左右の幅を取り戻す */
+#view > .np-card { border: 0; border-top: 1px solid var(--fca-line); border-radius: 0; background: transparent; padding: 1rem 0 0; margin: 1rem 0 0; box-shadow: none; }
+#view > .np-card:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.np-svg .np-col-alt { stroke: var(--fca-navy); stroke-width: 1.5; }
+.np-svg .np-col-current { stroke: var(--fca-ink); stroke-width: 2.5; }
+.np-svg a:focus-visible rect { stroke: var(--fca-focus); stroke-width: 3; }
+/* ゲートの帯（記号と語。色に頼らない） */
+.np-gstrip-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.np-gstrip { list-style: none; display: inline-flex; gap: 2px; padding: 0; margin: 0; }
+.np-gcell { display: inline-flex; flex-direction: column; align-items: center; min-width: 22px; padding: 1px 2px; border: 1px solid var(--fca-line); border-radius: 3px; font-size: 11px; line-height: 1.2; }
+.np-gcell-now { border: 2px solid var(--fca-ink); font-weight: 700; }
+.np-gcode { font-size: 9px; color: var(--fca-muted); }
+.np-gstrip-now { font-size: .85em; white-space: nowrap; }
+.np-gstrip-big .np-gcell { min-width: 34px; font-size: 14px; padding: 3px 4px; }
+.np-gstrip-big .np-gcode { font-size: 10px; }
+.np-gstrip-big + .np-gstrip-now { font-weight: 700; font-size: .95em; }
+/* 月の升目（機会カレンダー） */
+.np-mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.np-mcell { border: 1px solid var(--fca-line); border-radius: 6px; padding: 6px 8px; background: var(--fca-card); min-width: 0; }
+.np-mcell-h { font-weight: 700; font-size: .9em; margin-bottom: 2px; }
+.np-mcell ul { margin: 0; padding-left: 1.1em; font-size: .88em; }
+/* 区切りの無い長い文字列（URL など）を途中で折り返す。375px で画面ごと横に広がるのを防ぐ（2026-10-10 プレビューで見つけた） */
+#view li, #view p, #view summary, #view h2, #view h3, #view h4, #view figcaption, #view dd, #view .np-hbar-val { overflow-wrap: anywhere; }

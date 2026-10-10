@@ -154,6 +154,434 @@
     return el("div", { "class": "np-tablewrap" }, [t]);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // グラフの部品（2026-10-09 十文字さん「グラフ等も入れて見やすく」・ADR-092・設計は docs/ui-review-2026-10-09.md §3）
+  //   - 外部ライブラリを使わない。横棒・メーター・段・升目は HTML、月の棒・折れ線・幅・期間は SVG
+  //   - **色だけで意味を持たせない**（N-11）: 系列は線の種類と印の形（●▲■）で分け、名前を線の端に直接書く。主な値は画面に文字で出す
+  //   - **未計測は 0 として描かない**（N-10）: 斜線の帯と見える語「未計測」。線は途切れさせる。0 は高さ0の棒＋「0」
+  //   - 途中の月は白抜き＋「途中」。目標・下限の線は本文色の破線＋語（金は意味を持つ線に使わない: ライトで 2.70:1）
+  //   - SVG は置いた場所の幅で描く（最低幅なし）。たたんだ節を開いたときも描く（ResizeObserver）
+  //   - どのグラフにも、たたんだ「数字で見る」の表を付ける。SVG に font-family を書かない
+  // ══════════════════════════════════════════════════════════════
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, kids) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function isNum(v) { return v !== null && v !== undefined && v !== "" && !isNaN(v); }
+  function fmtNum(v, unit) {
+    if (!isNum(v)) return "未計測";
+    var s = Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("ja-JP") : String(Math.round(v * 10) / 10);
+    return s + (unit || "");
+  }
+  function fmtShort(v, unit) {
+    if (!isNum(v)) return "未計測";
+    if (unit === "円") {
+      if (Math.abs(v) >= 100000000) return (Math.round(v / 10000000) / 10) + "億円";
+      if (Math.abs(v) >= 10000) return (Math.round(v / 1000) / 10) + "万円";
+    }
+    return fmtNum(v, unit);
+  }
+  var CHART_SEQ = 0;
+  // 置いた場所の幅で描く。幅 0（たたまれている）のあいだは描かず、開いて幅ができたら描く
+  function svgHost(draw, minH) {
+    var host = el("div", { "class": "np-chart-svg" });
+    if (minH) host.style.minHeight = minH + "px";
+    var lastW = 0;
+    function redraw(w) {
+      w = Math.floor(w || 0);
+      if (w < 1 || Math.abs(w - lastW) < 8) return;
+      lastW = w;
+      host.textContent = "";
+      host.appendChild(draw(w));
+    }
+    if (window.ResizeObserver) new ResizeObserver(function (es) { redraw(es[0].contentRect.width); }).observe(host);
+    // 最初の1回は待たずに描く（ResizeObserver が呼ばれない環境でも出るように）。幅 0（たたまれている）なら描かない
+    requestAnimationFrame(function () { redraw(host.clientWidth); });
+    setTimeout(function () { redraw(host.clientWidth); }, 300);
+    return host;
+  }
+  function svgRoot(w, h, title, desc) {
+    var id = "npc" + (++CHART_SEQ);
+    var svg = sv("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, role: "img",
+      "aria-labelledby": id + "t " + id + "d", "class": "np-svg" },
+      [sv("title", { id: id + "t", text: title }), sv("desc", { id: id + "d", text: desc || title })]);
+    svg.hatchId = id + "h";
+    svg.appendChild(sv("defs", null, [sv("pattern", { id: svg.hatchId, width: 6, height: 6, patternUnits: "userSpaceOnUse",
+      patternTransform: "rotate(45)" }, [sv("line", { x1: 0, y1: 0, x2: 0, y2: 6, "class": "np-hatch" })])]));
+    return svg;
+  }
+  function hatchRect(svg, x, y, w, h, label) {
+    return sv("rect", { x: x, y: y, width: Math.max(1, w), height: Math.max(1, h), fill: "url(#" + svg.hatchId + ")",
+      "class": "np-unmeasured-bg" }, [sv("title", { text: label })]);
+  }
+  // 出どころの札。**数字のすぐ下に置く**（表の下の注記にしない・FR-20）
+  function srcTag(source, at, extra) {
+    return el("p", { "class": "np-src", text: "出どころ: " + source + (at ? "（" + at + "）" : "") + (extra ? "・" + extra : "") });
+  }
+  // 見出し・出どころ・グラフ・凡例・注記・数字の表をひとまとまりにする
+  function chartCard(title, body, opts) {
+    opts = opts || {};
+    var f = el("figure", { "class": "np-chart" });
+    f.appendChild(el("figcaption", { "class": "np-chart-title", text: title }));
+    if (opts.source) f.appendChild(srcTag(opts.source, opts.at));
+    if (opts.sub) f.appendChild(el("p", { "class": "np-sub", text: opts.sub }));
+    if (opts.lead) f.appendChild(el("p", { "class": "np-chart-lead", text: opts.lead }));
+    f.appendChild(body);
+    if (opts.legend && opts.legend.length) {
+      f.appendChild(el("ul", { "class": "np-legend" }, opts.legend.map(function (l) {
+        return el("li", null, [el("span", { "class": "np-legend-mark", "aria-hidden": "true", text: l.mark }), txt(" " + l.label)]);
+      })));
+    }
+    if (opts.note) f.appendChild(el("p", { "class": "np-sub", text: opts.note }));
+    if (opts.rows && opts.rows.length) {
+      var d = el("details", { "class": "np-more" });
+      d.appendChild(el("summary", { text: "数字で見る" }));
+      d.appendChild(table(opts.headers, opts.rows.map(function (r) {
+        return el("tr", null, r.map(function (c, i) { return el("td", { "class": i ? "np-num" : null, text: c }); }));
+      })));
+      f.appendChild(d);
+    }
+    return f;
+  }
+
+  // 横棒（HTML）。items: [{label, value, href?, note?, valueText?, alt?}]。value が null は「未計測」
+  function hbars(items, opts) {
+    opts = opts || {};
+    var max = opts.max || Math.max.apply(null, items.map(function (x) { return isNum(x.value) ? x.value : 0; }).concat([0]));
+    var w = el("div", { "class": "np-hbars", role: "list", "aria-label": opts.label || null });
+    items.forEach(function (x) {
+      var lab = x.href ? el("a", { href: x.href, text: x.label }) : el("span", { text: x.label });
+      var bar = el("div", { "class": "np-hbar-track", "aria-hidden": "true" });
+      if (!isNum(x.value)) {
+        bar.appendChild(el("div", { "class": "np-hbar np-hbar-unmeasured" }));
+      } else {
+        var b = el("div", { "class": "np-hbar" + (x.alt ? " np-hbar-alt" : "") });
+        b.style.width = (max > 0 ? Math.max(x.value > 0 ? 1.5 : 0, x.value / max * 100) : 0) + "%";
+        bar.appendChild(b);
+      }
+      w.appendChild(el("div", { "class": "np-hbar-row", role: "listitem" }, [
+        el("div", { "class": "np-hbar-label" }, [lab]), bar,
+        el("div", { "class": "np-hbar-val", text: (x.valueText || fmtNum(x.value, opts.unit)) + (x.note ? "　" + x.note : "") })]));
+    });
+    return w;
+  }
+
+  // 達成度のメーター（HTML）。marks: [{at, label}]。max <= 0 や value が無ければ未計測
+  function meter(value, max, opts) {
+    opts = opts || {};
+    var ok = isNum(value) && isNum(max) && max > 0;
+    var w = el("div", { "class": "np-meter" });
+    var track = el("div", { "class": "np-meter-track", role: "meter", "aria-label": opts.label || "",
+      "aria-valuemin": "0", "aria-valuemax": ok ? String(max) : null, "aria-valuenow": ok ? String(value) : null,
+      "aria-valuetext": opts.valueText || (ok ? fmtNum(value, opts.unit) : "未計測") });
+    if (!ok) track.appendChild(el("div", { "class": "np-meter-unmeasured", text: "未計測" }));
+    else {
+      var f = el("div", { "class": "np-meter-fill" });
+      f.style.width = Math.min(100, Math.max(0, value / max * 100)) + "%";
+      track.appendChild(f);
+    }
+    var scale = el("div", { "class": "np-meter-scale", "aria-hidden": "true" });
+    if (ok) (opts.marks || []).forEach(function (m) {
+      var at = Math.min(100, Math.max(0, m.at / max * 100));
+      var t = el("div", { "class": "np-meter-mark" });
+      t.style.left = at + "%";
+      track.appendChild(t);
+      var s = el("span", { text: "▲" + m.label });
+      if (at > 85) { s.style.right = (100 - at) + "%"; s.classList.add("np-r"); }
+      else if (at < 15) { s.style.left = at + "%"; s.classList.add("np-l"); }
+      else s.style.left = at + "%";
+      scale.appendChild(s);
+    });
+    w.appendChild(track);
+    w.appendChild(scale);
+    return w;
+  }
+
+  // 月ごとの縦棒（SVG）。points: [{x, y|null, partial?, note?}]。opts: target {y,label}・band {min,max,label}・unit・title
+  function columns(points, opts) {
+    opts = opts || {};
+    return svgHost(function (W) {
+      var H = opts.height || 200, L = 4, R = 4, T = 22, B = 36;
+      var ys = points.map(function (p) { return isNum(p.y) ? p.y + (isNum(p.y2) ? p.y2 : 0) : null; }).filter(isNum);
+      var extra = [opts.target ? opts.target.y : 0, opts.band ? opts.band.max : 0].filter(isNum);
+      var max = Math.max.apply(null, ys.concat(extra).concat([0])) || 1;
+      var svg = svgRoot(W, H, opts.title || "", opts.desc);
+      var n = points.length || 1, cw = (W - L - R) / n, bw = Math.max(3, Math.min(36, cw * 0.66));
+      var py = function (v) { return T + (H - T - B) * (1 - v / max); };
+      if (opts.band && isNum(opts.band.min) && isNum(opts.band.max)) {
+        svg.appendChild(sv("rect", { x: L, y: py(opts.band.max), width: W - L - R, height: py(opts.band.min) - py(opts.band.max), "class": "np-band" }));
+        svg.appendChild(sv("text", { x: W - R, y: py(opts.band.max) - 3, "text-anchor": "end", "class": "np-tick", text: opts.band.label }));
+      }
+      svg.appendChild(sv("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, "class": "np-axis" }));
+      var every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor((W - L - R) / 40))));
+      points.forEach(function (p, i) {
+        var cx = L + cw * i + cw / 2;
+        if (!isNum(p.y)) {
+          svg.appendChild(hatchRect(svg, L + cw * i + 1, T, cw - 2, H - B - T, p.x + " 未計測"));
+          svg.appendChild(sv("text", { x: cx, y: H - B - 4, "text-anchor": "middle", "class": "np-tick", text: cw >= 30 ? "未計測" : "未" }));
+        } else {
+          var g = p.href ? sv("a", { href: p.href, "aria-label": p.x + " " + fmtNum(p.y, opts.unit) }) : svg;
+          g.appendChild(sv("rect", { x: cx - bw / 2, y: py(p.y), width: bw, height: Math.max(0, H - B - py(p.y)),
+            fill: p.alt ? "url(#" + svg.hatchId + ")" : null,
+            "class": (p.partial ? "np-col np-col-partial" : (p.alt ? "np-col-alt" : "np-col")) + (p.current ? " np-col-current" : "") },
+            [sv("title", { text: p.x + " " + fmtNum(p.y, opts.unit) + (p.partial ? "（途中）" : "") })]));
+          var topY = py(p.y);
+          if (isNum(p.y2) && p.y2 > 0) {        // 2段目（斜線）。例: 実作業の上に予備時間
+            topY = py(p.y + p.y2);
+            g.appendChild(sv("rect", { x: cx - bw / 2, y: topY, width: bw, height: Math.max(0, py(p.y) - topY),
+              fill: "url(#" + svg.hatchId + ")", "class": "np-col-alt" },
+              [sv("title", { text: p.x + " " + (opts.y2label || "2段目") + " " + fmtNum(p.y2, opts.unit) })]));
+          }
+          if (cw >= 22 || i === n - 1) g.appendChild(sv("text", { x: cx, y: topY - 4, "text-anchor": "middle", "class": "np-val",
+            text: (p.partial ? "途中 " : "") + fmtShort(p.y + (isNum(p.y2) ? p.y2 : 0), opts.unit) }));
+          if (g !== svg) svg.appendChild(g);
+        }
+        if (p.note && cw >= 30) svg.appendChild(sv("text", { x: cx, y: H - B + 26, "text-anchor": "middle", "class": "np-tick", text: p.note }));
+        if (i % every === 0 || i === n - 1 || isJan(p.x)) svg.appendChild(sv("text", { x: cx, y: H - B + 13, "text-anchor": "middle", "class": "np-tick" + (isJan(p.x) ? " np-strong" : ""), text: (opts.xfmt || shortMonth)(p.x, i) }));
+      });
+      if (opts.target && isNum(opts.target.y)) {
+        var ty = py(opts.target.y);
+        svg.appendChild(sv("line", { x1: L, x2: W - R, y1: ty, y2: ty, "class": "np-target" }));
+        svg.appendChild(sv("text", { x: L + 2, y: ty - 4, "class": "np-tick np-strong", text: opts.target.label }));
+      }
+      return svg;
+    }, opts.height || 200);
+  }
+  // 年の変わり目（1月）は間引かずに出す。年が分からなくなるため
+  function isJan(x) { return /^\d{4}-01$/.test(x || ""); }
+  function shortMonth(x, i) {
+    if (!/^\d{4}-\d{2}$/.test(x)) return x;
+    var m = +x.slice(5, 7);
+    return (m === 1 || i === 0 ? x.slice(2, 4) + "/" : "") + m + "月";
+  }
+
+  // 折れ線（SVG・2系列まで）。series: [{name, points:[{x, y|null, partial?}], mark: "●|▲|■", dash}]
+  function lines(series, opts) {
+    opts = opts || {};
+    return svgHost(function (W) {
+      var H = opts.height || 220, L = 4, R = 58, T = 18, B = 34;
+      var xs = series[0] ? series[0].points.map(function (p) { return p.x; }) : [];
+      var all = [];
+      series.forEach(function (s) { s.points.forEach(function (p) { if (isNum(p.y)) all.push(p.y); }); });
+      var max = opts.max || Math.max.apply(null, all.concat([0])) || 1;
+      var svg = svgRoot(W, H, opts.title || "", opts.desc);
+      var n = xs.length, px = function (i) { return L + 6 + (n <= 1 ? 0 : (W - L - R - 12) * i / (n - 1)); };
+      var py = function (v) { return T + (H - T - B) * (1 - v / max); };
+      svg.appendChild(sv("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, "class": "np-axis" }));
+      (opts.hlines || []).forEach(function (h) {      // 横の基準線（例: ABC の 70%・90%）。本文色の破線＋語
+        svg.appendChild(sv("line", { x1: L, x2: W - R, y1: py(h.y), y2: py(h.y), "class": "np-target" }));
+        svg.appendChild(sv("text", { x: W - R + 4, y: py(h.y) + 4, "class": "np-tick np-strong", text: h.label }));
+      });
+      svg.appendChild(sv("text", { x: L, y: T - 6, "class": "np-tick", text: "目盛りの上端 " + fmtShort(max, opts.unit) }));
+      var every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor((W - L - R) / 40))));
+      xs.forEach(function (x, i) {
+        if (i % every === 0 || i === n - 1 || isJan(x)) svg.appendChild(sv("text", { x: px(i), y: H - B + 14, "text-anchor": "middle", "class": "np-tick" + (isJan(x) ? " np-strong" : ""), text: (opts.xfmt || shortMonth)(x, i) }));
+      });
+      var ends = [];
+      series.forEach(function (s) {
+        var d = "", pen = false, last = null;
+        s.points.forEach(function (p, i) {
+          if (!isNum(p.y)) { pen = false; return; }
+          d += (pen ? "L" : "M") + px(i).toFixed(1) + " " + py(p.y).toFixed(1) + " ";
+          pen = true; last = { i: i, y: p.y };
+        });
+        svg.appendChild(sv("path", { d: d, "class": "np-line" + (s.dash ? " np-line-dash" : "") }));
+        if (s.points.length <= 60) s.points.forEach(function (p, i) {
+          if (!isNum(p.y)) {
+            if (series.length > 1) svg.appendChild(sv("text", { x: px(i), y: H - B - 4, "text-anchor": "middle", "class": "np-tick", text: "未" }));
+            return;
+          }
+          svg.appendChild(markShape(s.mark || "●", px(i), py(p.y), s.name + " " + p.x + " " + fmtNum(p.y, opts.unit) + (p.partial ? "（途中）" : ""), p.partial));
+          if (p.partial) svg.appendChild(sv("text", { x: px(i), y: py(p.y) - 8, "text-anchor": "middle", "class": "np-tick", text: "途中" }));
+        });
+        if (last) ends.push({ y: py(last.y), x: px(last.i), text: (s.mark || "●") + s.name });
+      });
+      // 線の端の名前は重ならないように 14px 以上離す
+      ends.sort(function (a, b) { return a.y - b.y; });
+      for (var k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
+      ends.forEach(function (e) { svg.appendChild(sv("text", { x: e.x + 8, y: e.y + 4, "class": "np-tick np-strong", text: e.text })); });
+      xs.forEach(function (x, i) {
+        var none = series.every(function (s) { var p = s.points[i]; return !p || !isNum(p.y); });
+        if (none) svg.appendChild(hatchRect(svg, px(i) - 4, T, 8, H - T - B, x + " 未計測"));
+      });
+      return svg;
+    }, opts.height || 220);
+  }
+  function markShape(m, x, y, label, hollow) {
+    var t = sv("title", { text: label }), c = "np-mark" + (hollow ? " np-mark-hollow" : "");
+    if (m === "▲") return sv("path", { d: "M" + x + " " + (y - 5) + "L" + (x + 5) + " " + (y + 4) + "L" + (x - 5) + " " + (y + 4) + "Z", "class": c }, [t]);
+    if (m === "■") return sv("rect", { x: x - 4, y: y - 4, width: 8, height: 8, "class": c }, [t]);
+    return sv("circle", { cx: x, cy: y, r: 4, "class": c }, [t]);
+  }
+
+  // 幅の帯（SVG）。rows: [{label, lo, mid, hi, right?}]。opts.target {x, label}・unit
+  function ranges(rows, opts) {
+    opts = opts || {};
+    return svgHost(function (W) {
+      var Lw = Math.min(90, Math.floor(W * 0.22)), Rw = Math.min(110, Math.floor(W * 0.26)), rowH = 34, T = 20;
+      var H = T + rowH * rows.length + 6;
+      var vals = [];
+      rows.forEach(function (r) { [r.lo, r.mid, r.hi].forEach(function (v) { if (isNum(v)) vals.push(v); }); });
+      if (opts.target && isNum(opts.target.x)) vals.push(opts.target.x);
+      var max = Math.max.apply(null, vals.concat([0])) || 1;
+      var svg = svgRoot(W, H, opts.title || "", opts.desc);
+      var px = function (v) { return Lw + (W - Lw - Rw) * v / max; };
+      svg.appendChild(sv("text", { x: Lw, y: 12, "class": "np-tick", text: "0" }));
+      svg.appendChild(sv("text", { x: W - Rw, y: 12, "text-anchor": "end", "class": "np-tick", text: fmtShort(max, opts.unit) }));
+      rows.forEach(function (r, i) {
+        var y = T + i * rowH;
+        svg.appendChild(sv("text", { x: 0, y: y + 14, "class": "np-tick np-strong", text: r.label }));
+        if (!isNum(r.lo) || !isNum(r.hi)) {
+          svg.appendChild(hatchRect(svg, Lw, y + 4, W - Lw - Rw, 14, r.label + " 未計測"));
+        } else {
+          svg.appendChild(sv("rect", { x: px(r.lo), y: y + 4, width: Math.max(2, px(r.hi) - px(r.lo)), height: 14, "class": "np-range" },
+            [sv("title", { text: r.label + " " + fmtNum(r.lo, opts.unit) + "〜" + fmtNum(r.hi, opts.unit) })]));
+          if (isNum(r.mid)) svg.appendChild(sv("line", { x1: px(r.mid), x2: px(r.mid), y1: y + 1, y2: y + 21, "class": "np-range-mid" }));
+          svg.appendChild(sv("text", { x: Lw, y: y + 31, "class": "np-tick",
+            text: fmtShort(r.lo, opts.unit) + " ／ 真ん中 " + fmtShort(r.mid, opts.unit) + " ／ " + fmtShort(r.hi, opts.unit) }));
+        }
+        if (r.right) svg.appendChild(sv("text", { x: W - Rw + 6, y: y + 15, "class": "np-tick np-strong", text: r.right }));
+      });
+      if (opts.target && isNum(opts.target.x)) {
+        svg.appendChild(sv("line", { x1: px(opts.target.x), x2: px(opts.target.x), y1: 14, y2: H - 4, "class": "np-target" }));
+        svg.appendChild(sv("text", { x: px(opts.target.x) + 3, y: 12, "class": "np-tick np-strong", text: opts.target.label }));
+      }
+      return svg;
+    }, 60);
+  }
+
+  // 期間の帯（ガント風・SVG）。rows: [{label, start, end, done?, plan?, note?}]（YYYY-MM-DD）。opts.today は必須（日本の日付）
+  function timeline(rows, opts) {
+    opts = opts || {};
+    var dated = rows.filter(function (r) { return r.start && r.end; });
+    if (!dated.length) return el("p", { "class": "np-note", text: opts.empty || "日付の入った行がありません。" });
+    var day = 86400000;
+    var t0 = Math.min.apply(null, dated.map(function (r) { return Date.parse(r.start); }));
+    var t1 = Math.max.apply(null, dated.map(function (r) { return Date.parse(r.end) + day; }).concat([t0 + day]));
+    var today = opts.today ? Date.parse(opts.today) : null;
+    if (today !== null) { t0 = Math.min(t0, today); t1 = Math.max(t1, today + day); }
+    var rowH = 22;
+    return svgHost(function (W) {
+      var Lw = Math.min(200, Math.floor(W * 0.36)), R = 6, T = 22, H = T + rowH * rows.length + 6;
+      var svg = svgRoot(W, H, opts.title || "期間", opts.desc);
+      var px = function (ms) { return Lw + (W - Lw - R) * (ms - t0) / (t1 - t0); };
+      var md = function (ms) { var d = new Date(ms); return (d.getUTCMonth() + 1) + "/" + d.getUTCDate(); };
+      svg.appendChild(sv("text", { x: Lw, y: 12, "class": "np-tick", text: md(t0) }));
+      svg.appendChild(sv("text", { x: W - R, y: 12, "text-anchor": "end", "class": "np-tick", text: md(t1 - day) }));
+      if (today !== null) {
+        svg.appendChild(sv("line", { x1: px(today), x2: px(today), y1: T - 4, y2: H - 2, "class": "np-target" }));
+        svg.appendChild(sv("text", { x: px(today) + 3, y: T - 8, "class": "np-tick np-strong", text: "今日" }));
+      }
+      var maxChars = Math.max(4, Math.floor(Lw / 12) - 1);
+      rows.forEach(function (r, i) {
+        var y = T + i * rowH;
+        var lab = r.label.length > maxChars ? r.label.slice(0, maxChars - 1) + "…" : r.label;
+        var tx = sv("text", { x: 0, y: y + 14, "class": "np-tick" });
+        tx.appendChild(document.createTextNode(lab));
+        tx.appendChild(sv("title", { text: r.label }));
+        svg.appendChild(tx);
+        if (!r.start || !r.end) {
+          svg.appendChild(sv("text", { x: Lw, y: y + 14, "class": "np-tick", text: r.why || "日付なし" }));
+          return;
+        }
+        var a = px(Date.parse(r.start)), b = px(Date.parse(r.end) + day);
+        svg.appendChild(sv("rect", { x: a, y: y + 4, width: Math.max(3, b - a), height: rowH - 8, rx: 2,
+          "class": r.plan ? "np-tl-plan" : (r.done ? "np-tl-done" : "np-col") },
+          [sv("title", { text: r.label + " " + r.start + "〜" + r.end + (r.note ? "（" + r.note + "）" : "") })]));
+        if (r.done && W - b > 30) svg.appendChild(sv("text", { x: b + 3, y: y + 14, "class": "np-tick", text: "完了" }));
+      });
+      return svg;
+    }, 40);
+  }
+
+  // 積み上げの帯（HTML）。区分は4つまで（5つ目以降は「その他」）。**模様の上に文字を載せない**。凡例に値と割合
+  function stackbar(parts, opts) {
+    opts = opts || {};
+    var ps = parts.slice(0, 3);
+    if (parts.length > 4) ps.push({ label: "その他", value: parts.slice(3).reduce(function (a, p) { return a + (isNum(p.value) ? p.value : 0); }, 0) });
+    else if (parts.length === 4) ps.push(parts[3]);
+    var known = ps.filter(function (p) { return isNum(p.value); });
+    var tot = known.reduce(function (a, p) { return a + p.value; }, 0);
+    var w = el("div", { "class": "np-stack" });
+    var bar = el("div", { "class": "np-stack-bar", role: "img", "aria-label": ps.map(function (p) { return p.label + " " + fmtNum(p.value, opts.unit); }).join("、") });
+    ps.forEach(function (p, i) {
+      if (!isNum(p.value) || !p.value) return;
+      var s = el("div", { "class": "np-stack-seg np-seg" + i, title: p.label + " " + fmtNum(p.value, opts.unit) });
+      s.style.width = (tot ? p.value / tot * 100 : 0) + "%";
+      bar.appendChild(s);
+    });
+    if (opts.mark && tot) {
+      var mk = el("div", { "class": "np-stack-mark", title: opts.mark.label });
+      mk.style.left = Math.min(100, opts.mark.at / tot * 100) + "%";
+      bar.appendChild(mk);
+    }
+    w.appendChild(bar);
+    w.appendChild(el("ul", { "class": "np-legend" }, ps.map(function (p, i) {
+      return el("li", null, [el("span", { "class": "np-swatch np-seg" + i, "aria-hidden": "true" }),
+        txt(" " + p.label + " " + fmtNum(p.value, opts.unit) + (tot && isNum(p.value) ? "（" + Math.round(p.value / tot * 100) + "%）" : ""))]);
+    }).concat(opts.mark ? [el("li", null, [txt("▲ " + opts.mark.label)])] : [])));
+    if (known.length < ps.length) w.appendChild(el("p", { "class": "np-sub", text: "割合は未計測の区分を除いて計算しています。" }));
+    return w;
+  }
+
+  // 段の帯（HTML）。steps: [{label, n, sub?, href?}]。箱を矢印でつなぐ。**割合は出さない**（つながりが記録されていないため）
+  function steps(items) {
+    var w = el("ol", { "class": "np-steps" });
+    items.forEach(function (s, i) {
+      var box = el(s.href ? "a" : "div", { "class": "np-step", href: s.href || null }, [
+        el("span", { "class": "np-step-label", text: s.label }),
+        el("span", { "class": "np-step-n" + (isNum(s.n) ? "" : " np-kpi-unmeasured"), text: isNum(s.n) ? fmtNum(s.n) : (s.n || "未計測") }),
+        s.sub ? el("span", { "class": "np-step-sub", text: s.sub }) : null]);
+      w.appendChild(el("li", null, [box]));
+      if (i < items.length - 1) w.appendChild(el("li", { "class": "np-step-arrow", "aria-hidden": "true", text: "→" }));
+    });
+    return w;
+  }
+
+  // 埋まり具合の升目（HTML）。x / n。**パーセントにしない**（何が足りないかが消えるため）
+  function fillDots(x, n, label) {
+    var w = el("span", { "class": "np-dots", role: "img", "aria-label": (label || "") + " " + x + " / " + n });
+    if (n <= 10) for (var i = 0; i < n; i++) w.appendChild(el("span", { "class": "np-dot" + (i < x ? " np-dot-on" : ""), "aria-hidden": "true" }));
+    else { var b = el("span", { "class": "np-dotbar", "aria-hidden": "true" }); var f = el("span"); f.style.width = (n ? x / n * 100 : 0) + "%"; b.appendChild(f); w.appendChild(b); }
+    w.appendChild(el("span", { "class": "np-dots-n", text: " " + x + " / " + n }));
+    return w;
+  }
+
+  // 数字のタイル。state を渡すと数字の代わりに語（未計測・対象なし・未設定）を出す
+  function kpi(label, big, sub, href, state) {
+    var k = el(href ? "a" : "div", { "class": "np-kpi", href: href || null });
+    k.appendChild(el("div", { "class": "np-kpi-label", text: label }));
+    k.appendChild(el("div", { "class": "np-kpi-big" + (state ? " np-kpi-unmeasured" : ""), text: state || big }));
+    if (sub) k.appendChild(el("div", { "class": "np-kpi-sub", text: sub }));
+    return k;
+  }
+  function kpiRow(items) { return el("div", { "class": "np-kpis" }, items); }
+  function chartGrid(items) { return el("div", { "class": "np-grid-charts" }, items); }
+
+  // ゲートの帯（1行）。7つの升目に記号、語は次のゲートだけ（ほかは読み上げと title に）。**色ではなく記号と語で**
+  function gateStrip(gates, big) {
+    var nx = gates.filter(function (g) { return g.state === "判定待ち" || g.state === "差戻し" || g.state === "保留"; })[0];
+    var w = el("ol", { "class": "np-gstrip" + (big ? " np-gstrip-big" : ""), "aria-label": "ゲートの進み" });
+    gates.forEach(function (g) {
+      var li = el("li", { "class": "np-gcell" + (g === nx ? " np-gcell-now" : ""), title: g.gate + " " + (g.name || "") + " " + g.word,
+        "aria-label": g.gate + " " + (g.name || "") + " " + g.word });
+      li.appendChild(el("span", { "aria-hidden": "true", text: g.glyph }));
+      li.appendChild(el("span", { "class": "np-gcode", "aria-hidden": "true", text: g.gate }));
+      w.appendChild(li);
+    });
+    var box = el("div", { "class": "np-gstrip-wrap" }, [w]);
+    box.appendChild(el("span", { "class": "np-gstrip-now", text: nx
+      ? (big ? "いまここ: " : "") + nx.gate + " " + (nx.name || "") + " " + nx.word + (nx.missing && nx.missing.length ? "（欠 " + nx.missing.length + "）" : "")
+      : (gates.every(function (g) { return g.state === "未"; }) ? "ゲートの記録なし" : "判定待ちなし") }));
+    return box;
+  }
+
   function gateChips(gates) {
     var w = el("div", { "class": "np-gates" });
     gates.forEach(function (g) {
@@ -176,135 +604,146 @@
       var b = clear();
       b.appendChild(el("p", { "class": "np-note", text: "きょうは " + d.today + " です。" }));
 
-      // ── 0段目: 自分のやること（2026-10-06 十文字さん選択）。開いた人が最初に要るのは「何をすればいいか」──
+      // ── 1. 自分のやること（ADR-057・2026-10-09 十文字さん「上に残して5行に縮める」）──
       var my = d.my, mc = el("div", { "class": "np-card" });
       mc.appendChild(el("h2", { text: "自分のやること" }));
       mc.appendChild(el("p", { "class": "np-sub", text: my.roles.length
-        ? "あなたの業務ロール（" + my.roles.join("・") + "）のタスクと、あなたが担当のタスクです。期限切れと、7日先までを出しています。"
-        : "あなたに業務ロールが割り当てられていないため、担当者があなたのタスクだけを出しています（いまのタスクは業務ロールに付いています）。" }));
+        ? "あなたが担当のタスクと、あなたの業務ロール（" + my.roles.join("・") + "）のタスクです。"
+        : "あなたに業務ロールが割り当てられていないため、担当者があなたのタスクだけを数えています（いまのタスクは業務ロールに付いています）。" }));
+      var mcnt = my.counts || {};
+      mc.appendChild(kpiRow([
+        kpi("期限切れ", fmtNum(mcnt.overdue), "完了・対象外を除く", "#/tasks?when=overdue&mine=1", mcnt.overdue === null ? "未計測" : null),
+        kpi("今日が期限", fmtNum(mcnt.today), null, "#/tasks?when=today&mine=1", mcnt.today === null ? "未計測" : null),
+        kpi("7日以内", fmtNum(mcnt.next7), "明日から7日先まで", "#/tasks?when=next7&mine=1", mcnt.next7 === null ? "未計測" : null)]));
       if (!my.tasks.length) mc.appendChild(el("p", { "class": "np-note", text: "7日先までにやるタスクはありません。" }));
       else {
-        mc.appendChild(table(["期限", "状態", "タスク", "案件", "なぜ自分か"], my.tasks.map(function (t) {
-          return el("tr", null, [el("td", { text: t.due_on + (t.overdue ? "（期限切れ）" : "") }), el("td", { text: t.status }),
+        mc.appendChild(table(["期限", "タスク", "案件", "なぜ自分か"], my.tasks.slice(0, 5).map(function (t) {
+          return el("tr", null, [el("td", { "class": "np-nowrap", text: t.due_on + (t.overdue ? "（期限切れ）" : "") }),
             el("td", { text: t.title }),
             el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
         })));
-        if (my.tasks_n > my.tasks.length) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - my.tasks.length) + " 件も含めて、自分のタスクをすべて見る")]));
+        if (my.tasks_n > 5) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - 5) + " 件も含めて、自分のタスクをすべて見る")]));
       }
-      if (my.gates.length) {
-        mc.appendChild(el("h3", { text: "あなたが判定するゲート（" + my.gates_n + "件）" }));
-        mc.appendChild(table(["ゲート", "状態", "案件", "足りないもの"], my.gates.map(function (g) {
-          return el("tr", null, [el("td", { text: g.gate + " " + g.name }), el("td", { text: g.state }),
-            el("td", null, [el("a", { href: "#/projects/" + g.project_id, text: g.product })]),
-            el("td", { "class": "np-num", text: g.missing_n + " 件" })]);
-        })));
+      if (my.gates_n) {
+        var gg = {};
+        my.gates.forEach(function (g) { var k = g.gate + " " + g.name; gg[k] = (gg[k] || 0) + 1; });
+        mc.appendChild(el("p", null, [el("strong", { text: "あなたが判定するゲート " + my.gates_n + " 件: " }),
+          txt(Object.keys(gg).map(function (k) { return k + " " + gg[k] + "件"; }).join("・") + (my.gates_n > my.gates.length ? " ほか" : "") + " "),
+          navBtn("#/gates", "ゲート盤へ", "sm")]));
       }
-      mc.appendChild(btnRow([navBtn("#/tasks", "タスクの一覧を開く"), navBtn("#/gates", "ゲートの一覧を開く", "back")]));
       b.appendChild(mc);
 
-      // ── 1段目 ──
-      b.appendChild(el("h2", { text: "いま詰まっているもの" }));
-      var g1 = el("div", { "class": "np-grid np-grid-3" });
-      function card(label, n, mine, link, sub) {
-        var c = el("div", { "class": "np-card" });
-        c.appendChild(el("h3", { text: label }));
-        c.appendChild(el("a", { "class": "np-big", href: link, text: String(n) }));
-        if (mine !== null && mine !== undefined)
-          c.appendChild(el("p", { "class": "np-sub", text: "うち自分の担当 " + mine + " 件" }));
-        if (sub) c.appendChild(el("p", { "class": "np-sub", text: sub }));
-        return c;
-      }
-      g1.appendChild(card("期限切れタスク", d.stuck.overdue.n, d.stuck.overdue.mine,
-        d.stuck.overdue.link, "完了・対象外は除いています。"));
+      // ── 2. いま詰まっているもの ──
+      var st = el("div", { "class": "np-card" }), c = d.counts || {}, pl = d.pipeline || {}, pr = pl.projects || {};
+      st.appendChild(el("h2", { text: "いま詰まっているもの" }));
+      var waitN = (pr.by_next_gate || []).reduce(function (a, x) { return a + x.n; }, 0);
+      st.appendChild(kpiRow([
+        kpi("期限切れタスク（全員）", fmtNum(c.overdue), "案件タスク＋案件外の仕事", "#/tasks?when=overdue"),
+        kpi("今日が期限（全員）", fmtNum(c.today), null, "#/tasks?when=today"),
+        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "ほか発売済 " + pr.launched_no_gate + " 件はゲートの記録なし（移行分）" : null, "#/gates"),
+        kpi("期限なしのタスク", fmtNum(c.none), "入れないままだと詰まりが見えません", "#/tasks?when=none")]));
+      var hill = [{ x: "期限切れ", y: c.overdue }, { x: "今日", y: c.today }];
+      ["+1", "+2", "+3", "+4", "+5", "+6"].forEach(function (k) { hill.push({ x: k.replace("+", "") + "日後", y: c[k] }); });
+      hill.push({ x: "期限なし", y: c.none, alt: true });
+      st.appendChild(chartCard("期限の山（タスクの件数・全員）", columns(hill, { unit: "件", title: "期限ごとのタスクの件数",
+        desc: "期限切れ " + c.overdue + " 件、今日 " + c.today + " 件、期限なし " + c.none + " 件", xfmt: function (x) { return x; }, height: 180 }),
+        { note: "斜線の棒は「期限なし」（ほかの棒と別の扱い）。棒の数字は件数です。",
+          headers: ["期限", "件数"], rows: hill.map(function (h) { return [h.x, fmtNum(h.y, "件")]; }) }));
+      st.appendChild(btnRow([navBtn("#/tasks?when=overdue", "期限切れを見る", "sm"), navBtn("#/tasks?when=next7", "7日先までを見る", "sm"), navBtn("#/tasks?when=none", "期限なしを見る", "sm")]));
+      b.appendChild(st);
 
-      var gw = el("div", { "class": "np-card" });
-      gw.appendChild(el("h3", { text: "自分のゲート待ち" }));
-      gw.appendChild(el("a", { "class": "np-big", href: d.stuck.gate_waiting.link,
-        text: String(d.stuck.gate_waiting.mine) }));
-      if (!d.my_roles.length) {
-        gw.appendChild(el("p", { "class": "np-sub",
-          text: "あなたに業務ロールが割り当てられていません。承認の可否は業務ロールで決まります（アプリ権限とは別です）。" }));
-      }
-      if (d.stuck.gate_waiting.by_role.length) {
-        gw.appendChild(el("p", { "class": "np-sub", text: "誰の番か（全体）:" }));
-        var ul = el("ul", { "class": "np-miss" });
-        d.stuck.gate_waiting.by_role.forEach(function (r) {
-          ul.appendChild(el("li", { text: r.label + " " + r.n + "件" }));
-        });
-        gw.appendChild(ul);
-      } else {
-        gw.appendChild(el("p", { "class": "np-sub", text: "判定待ちはありません。" }));
-      }
-      g1.appendChild(gw);
+      // ── 3. パイプライン（アイデア → 年間プラン → 案件 → 発売）。**割合は出さない**（つながりが記録されていないため）──
+      var pc = el("div", { "class": "np-card" });
+      pc.appendChild(el("h2", { text: "パイプライン（アイデア → 年間プラン → 案件 → 発売）" }));
+      var ib = (pl.ideas || {}).by_stage || {}, sl = pl.slots || {}, ln = pl.links || {};
+      pc.appendChild(steps([
+        { label: "アイデア", n: (pl.ideas || {}).total, sub: "採点済 " + (ib["採点済"] || 0) + "・起票 " + (ib["起票"] || 0) + "・候補 " + (ib["候補"] || 0), href: "#/ideas" },
+        { label: "年間プランの枠（" + sl.fy + "年度）", n: sl.n === null ? "版なし" : sl.n, sub: sl.state ? sl.state + "・案件化 " + sl.converted : "版がまだありません", href: "#/plan" },
+        { label: "開発中の案件", n: pr.active, sub: "全 " + pr.total + " 件（発売済・中止を含む）", href: "#/projects" },
+        { label: "発売済", n: pr.launched, sub: pr.launched_no_gate ? "うちゲートの記録なし " + pr.launched_no_gate + "（移行分）" : null }]));
+      pc.appendChild(el("p", { "class": "np-sub", text: "つながりの記録: アイデアから起こした案件 " + ln.from_idea + " / " + ln.projects
+        + "・枠から起こした案件 " + (ln.slot_converted === null ? "—" : ln.slot_converted) + " / " + (ln.slots === null ? "—" : ln.slots)
+        + "。記録が無いあいだは、段から段へ進んだ割合は出しません（0% と誤って読めるため）。" }));
+      var ng = (pr.by_next_gate || []);
+      pc.appendChild(chartCard("開発中の案件は、どのゲートの手前にいるか", hbars(ng.map(function (g) {
+        return { label: g.gate + " " + g.name, value: g.n, href: "#/gates" };
+      }), { unit: "件", label: "ゲートごとの案件数" }), { sub: "0 件のゲートも描いています（数えた結果の 0 です）。" }));
+      b.appendChild(pc);
 
-      g1.appendChild(card("今日のタスク", d.stuck.today.n, d.stuck.today.mine,
-        d.stuck.today.link, null));
-      b.appendChild(g1);
-
-      // ── 2段目。**未計測と0を区別する**（§5-9 の7）──
-      b.appendChild(el("h2", { text: "月次で見るもの" }));
-      var g2 = el("div", { "class": "np-grid np-grid-3" });
-      b.appendChild(btnRow([navBtn("#/reports", "月次レポートを見る")]));
-      d.monthly.forEach(function (m) {
-        var c = el("div", { "class": "np-card" });
-        c.appendChild(el("h3", { text: m.label }));
-        if (m.value === null) {
-          c.appendChild(el("span", { "class": "np-big np-big-unmeasured", text: m.state }));
-          c.appendChild(el("p", { "class": "np-sub", text: m.why }));
-        } else {
-          c.appendChild(el("span", { "class": "np-big", text: String(m.value) }));
-          // **色に意味を持たせない**（N-11）。状態は語として添える
-          if (m.state) c.appendChild(el("p", { "class": "np-sub", text: "状態: " + m.state }));
-          if (m.why) c.appendChild(el("p", { "class": "np-sub", text: m.why }));
-        }
-        if (m.definition) c.appendChild(el("p", { "class": "np-sub", text: "定義: " + m.definition }));
-        // **数えた対象を書く。**「どの版の何月を見たのか」が無いと確かめようがない
-        if (m.version) c.appendChild(el("p", { "class": "np-sub",
-          text: "対象: " + m.version + " の " + m.month }));
-        if (m.link) c.appendChild(btnRow([navBtn(m.link, "開く", "sm")]));
-        if (m.stock_n !== undefined && m.stock_n !== null)
-          c.appendChild(el("p", { "class": "np-sub", text: "G3通過・未発売 " + m.stock_n + " 件" }));
-        g2.appendChild(c);
+      // ── 4. 発売の見通し ──
+      var lo = d.launch_outlook || {}, cs = lo.concept_stock || {};
+      var oc = el("div", { "class": "np-card" });
+      oc.appendChild(el("h2", { text: "発売の見通し" }));
+      var csMax = Math.max(6, (cs.floor || 0) * 2, cs.value || 0);
+      var csBox = el("div");
+      csBox.appendChild(el("p", { "class": "np-chart-lead", text: cs.value === null || cs.value === undefined
+        ? "未計測（" + (cs.why || "") + "）" : cs.value + " か月（" + cs.state + "）" }));
+      csBox.appendChild(meter(cs.value, csMax, { unit: "か月", label: "コンセプト在庫月数",
+        valueText: cs.value === null ? "未計測" : cs.value + "か月（下限 " + cs.floor + "か月）",
+        marks: cs.floor ? [{ at: cs.floor, label: "下限 " + cs.floor + "か月" }] : [] }));
+      csBox.appendChild(el("p", { "class": "np-sub", text: "G3通過・未発売 " + cs.stock_n + " 件 ÷ 月の発売目標 " + (cs.monthly_target === null ? "未設定" : cs.monthly_target + " 本") }));
+      var tot = (lo.projects_dated || 0) + (lo.projects_undated || 0);
+      oc.appendChild(chartGrid([
+        chartCard("コンセプト在庫月数", csBox, { source: "案件のゲート G3 の記録と、設定の月の発売目標" }),
+        chartCard("案件の発売予定日", el("div", null, [
+          el("p", { "class": "np-chart-lead", text: "入っている " + lo.projects_dated + " / " + tot + " 件" }),
+          hbars([{ label: "入っている", value: lo.projects_dated }, { label: "未設定", value: lo.projects_undated, alt: true, href: "#/projects" }], { unit: "件", max: tot || 1 }),
+          el("p", { "class": "np-sub", text: "発売予定日はカルテの頭で入れられます（理由が必要）。入るとタスクの目安と発売の帯が出ます。" })]))]));
+      var lm = (lo.months || []).map(function (m) {
+        return { x: m.month, y: m.launch_n, partial: m.month === lo.today_month,
+          note: m.slots === 0 ? "枠なし" : (m.other_n ? "他" + m.other_n : null) };
       });
-      b.appendChild(g2);
+      oc.appendChild(chartCard("月ごとの発売本数（年間プランの枠・" + lo.fy + "年度）", columns(lm, {
+        unit: "本", title: "月ごとの発売本数", desc: "年間プランの枠を月ごとに数えた発売本数。目標は月 " + lo.target_per_month + " 本",
+        target: lo.target_per_month ? { y: lo.target_per_month, label: "目標 " + lo.target_per_month + " 本" } : null }), {
+        source: lo.source, note: "白抜きの棒は今月。棒の下の「他n」はページリニューアル等の本数に数えない枠、「枠なし」は枠が無い月です。",
+        headers: ["月", "発売本数", "数えない枠", "案件化"], rows: (lo.months || []).map(function (m) {
+          return [m.month, m.launch_n + " 本", m.other_n + " 本", m.converted_n + " / " + m.slots]; }) }));
+      b.appendChild(oc);
 
-      // ── 直近の発売予定 ──
-      b.appendChild(el("h2", { text: "直近の発売予定（4週）" }));
-      if (!d.upcoming.length) {
-        b.appendChild(el("p", { "class": "np-note", text: "4週以内の発売予定はありません。" }));
-      } else {
-        b.appendChild(table(["発売予定日", "案件（社内呼称）", "分類", "ステージ"],
-          d.upcoming.map(function (u) {
-            return el("tr", null, [
-              el("td", { text: dash(u.launch_date) }),
-              el("td", null, [el("a", { href: "#/projects/" + u.id, text: u.name })]),
-              el("td", { text: u.product }),
-              el("td", { text: u.stage })
-            ]);
-          })));
+      // ── 5. 新商品の売上 ──
+      var ns = d.newproduct_sales || {}, sc = el("div", { "class": "np-card" });
+      sc.appendChild(el("h2", { text: "新商品の売上" }));
+      var nsm = ns.months || [];
+      if (!nsm.length) sc.appendChild(el("p", { "class": "np-warn", text: "「新商品売上状況」の表が取り込まれていないため、出せません。" }));
+      else {
+        var lastv = nsm.filter(function (m) { return m.revenue !== null; }).slice(-1)[0];
+        sc.appendChild(chartCard("新商品（発売から12か月以内）の売上・月ごと（" + ns.tax + "）", columns(nsm.map(function (m) {
+          return { x: m.month, y: m.revenue };
+        }), { unit: "円", title: "新商品の月別売上", desc: (lastv ? lastv.month + " は " + fmtNum(lastv.revenue, "円") + "。" : "") + (ns.data_end ? ns.data_end + " より後は未計測" : "") }), {
+          source: ns.source, lead: lastv ? "最新 " + lastv.month + "：" + fmtNum(lastv.revenue, "円") : null,
+          note: "斜線の月は未計測です（表は " + ns.data_end + " まで）。",
+          headers: ["月", "売上", "発売本数"], rows: nsm.slice().reverse().map(function (m) { return [m.month, fmtNum(m.revenue, "円"), fmtNum(m.launches, "本")]; }) }));
+        sc.appendChild(chartCard("発売本数・月ごと（同じ表から）", columns(nsm.map(function (m) { return { x: m.month, y: m.launches }; }),
+          { unit: "本", title: "月ごとの発売本数（実績）", height: 140 }), { source: ns.source }));
       }
+      sc.appendChild(el("p", { "class": "np-sub", text: "アプリで「売上計上」を立てた案件: " + (ns.app_counted ? ns.app_counted + " 件" : "対象なし（0 件）") + "。発売後の売上は売上実績で見られます。" }));
+      sc.appendChild(btnRow([navBtn("#/sales", "売上実績を開く", "sm"), navBtn("#/reports", "月次レポートを見る", "sm")]));
+      b.appendChild(sc);
 
-      // ── 要注意。**空欄を画面に出す。出さないと空欄のまま増える** ──
-      b.appendChild(el("h2", { text: "要注意（空欄・未確定）" }));
-      var a = d.attention;
-      b.appendChild(table(["項目", "件数", "意味"], [
-        el("tr", null, [el("td", null, [el("a", { href: "#/tasks?when=none", text: "期限なしのタスク" })]),
-          el("td", { "class": "np-num", text: String(a.no_due) }),
-          el("td", { text: "隠すと、期限を入れない運用が固定します。" })]),
-        el("tr", null, [el("td", { text: "所要時間なしのタスク" }),
-          el("td", { "class": "np-num", text: String(a.no_hours) }),
-          el("td", { text: "月次の負荷に積めません。" })]),
-        el("tr", null, [el("td", { text: "工数ポイントが未確定の案件" }),
-          el("td", { "class": "np-num", text: String(a.effort_unknown) }),
-          el("td", { text: "⑤資材リニューアルは係数そのものが未確定です（実測できていません）。" })]),
-        el("tr", null, [el("td", { text: "ページリニューアルの案件" }),
-          el("td", { "class": "np-num", text: String(a.pagerenew_no_template) }),
-          el("td", { text: "標準タスク未定義。この開発タイプはタスク一覧が空になります。" })])
-      ]));
+      // ── 6. 要注意（空欄・未確定）。**空欄を出す。出さないと空欄のまま増える** ──
+      var a = d.attention, ac = el("div", { "class": "np-card" });
+      ac.appendChild(el("h2", { text: "要注意（入力済みの割合）" }));
+      var allT = c.all || 0;
+      function filled(label, x, n, href, why) { return { label: label, value: n ? x / n * 100 : null, valueText: x + " / " + n, href: href, note: why }; }
+      ac.appendChild(hbars([
+        filled("タスクの期限", allT - a.no_due, allT, "#/tasks?when=none"),
+        filled("タスクの所要時間", a.tasks_total - a.no_hours, a.tasks_total),
+        filled("案件の工数ポイント", a.projects_total - a.effort_unknown, a.projects_total, "#/projects"),
+        filled("案件の発売予定日", lo.projects_dated, tot, "#/projects")], { max: 100, label: "入力済みの割合" }));
+      ac.appendChild(el("p", { "class": "np-sub", text: "数字は「入っている件数 / 全体」。ページリニューアルの案件 " + a.pagerenew_no_template + " 件は標準タスクが未定義です。" }));
+      b.appendChild(ac);
 
-      b.appendChild(el("p", { "class": "np-note",
-        text: "この画面は「新規に増える画面」です。月次会議で『コンセプトが積み上がっていない』と毎回言われながら、それを数える場所がありませんでした。" }));
+      if (d.upcoming && d.upcoming.length) {
+        var uc = el("div", { "class": "np-card" });
+        uc.appendChild(el("h2", { text: "直近の発売予定（4週）" }));
+        uc.appendChild(table(["発売予定日", "案件（社内呼称）", "分類", "ステージ"], d.upcoming.map(function (u) {
+          return el("tr", null, [el("td", { text: dash(u.launch_date) }), el("td", null, [el("a", { href: "#/projects/" + u.id, text: u.name })]),
+            el("td", { text: u.product }), el("td", { text: u.stage })]);
+        })));
+        b.appendChild(uc);
+      }
     }).catch(fail);
   }
 
@@ -357,29 +796,34 @@
           + "枠に無いものは、下のフォームから直接起こせます。" }));
         b.appendChild(btnRow([navBtn("#/plan", "年間プランを開く")]));
       } else {
-        b.appendChild(table(
-          ["案件（社内呼称）", "ステージ", "ゲート", "次のゲート", "発売予定日", "分類・サイズ",
-           "開発タイプ", "売上計上", "工数ポイント", "担当", "欠けているもの",
-           "正本"],
-          d.rows.map(function (r) {
-            return el("tr", null, [
-              el("td", { "class": "np-name" }, [el("a", { href: "#/projects/" + r.id, text: r.name })]),
-              el("td", { text: r.stage }),
-              el("td", null, [gateChips(r.gates)]),
-              el("td", { text: r.next_gate }),
-              el("td", { text: dash(r.launch_date) }),
-              el("td", { text: r.product }),
-              el("td", { text: r.flow_label }),
-              el("td", { text: r.revenue }),
-              el("td", { "class": "np-num",
-                text: r.effort_point === null ? "未確定" : String(r.effort_point) }),
-              el("td", { text: dash(r.owner) }),
-              el("td", { "class": "np-num" }, [
-                el("a", { href: "#/projects/" + r.id, text: String(r.missing_n) + " 件" })]),
+        // 入力済みの数（2026-10-09 点検 §6 案件一覧）。全行が空の列は表から外し「未入力」の1列にまとめる
+        var N = d.rows.length;
+        var OPT = [
+          { key: "発売予定日", has: function (r) { return !!r.launch_date; }, td: function (r) { return el("td", { "class": "np-nowrap", text: dash(r.launch_date) }); } },
+          { key: "分類", has: function (r) { return r.product && r.product.indexOf("未設定") < 0; }, td: function (r) { return el("td", { text: r.product }); } },
+          { key: "開発タイプ", has: function (r) { return !!r.flow_type; }, td: function (r) { return el("td", { text: r.flow_label }); } },
+          { key: "工数ポイント", has: function (r) { return r.effort_point !== null; }, td: function (r) { return el("td", { "class": "np-num", text: r.effort_point === null ? "未確定" : String(r.effort_point) }); } },
+          { key: "担当", has: function (r) { return !!r.owner; }, td: function (r) { return el("td", { text: dash(r.owner) }); } }];
+        OPT.forEach(function (o) { o.n = d.rows.filter(o.has).length; });
+        b.appendChild(chartCard("入力済みの項目（" + N + " 件のうち）", hbars(OPT.map(function (o) {
+          return { label: o.key, value: o.n, valueText: o.n + " / " + N };
+        }), { max: N, label: "項目ごとの入力済みの件数" }), { sub: "空のままだと、発売の見通し・タスクの目安・工数の見積もりが出ません。" }));
+        var shown = OPT.filter(function (o) { return o.n > 0; }), hidden = OPT.filter(function (o) { return o.n === 0; });
+        var head = ["案件（社内呼称）", "ステージ", "ゲート"].concat(shown.map(function (o) { return o.key; }))
+          .concat(hidden.length ? ["未入力"] : []).concat(["売上計上", "欠けているもの", "正本"]);
+        b.appendChild(table(head, d.rows.map(function (r) {
+          return el("tr", null, [
+            el("td", { "class": "np-name" }, [el("a", { href: "#/projects/" + r.id, text: r.name })]),
+            el("td", { "class": "np-nowrap", text: r.stage }),
+            el("td", null, [gateStrip(r.gates)])]
+            .concat(shown.map(function (o) { return o.td(r); }))
+            .concat(hidden.length ? [el("td", { "class": "np-sub", text: hidden.map(function (o) { return o.key; }).join("・") })] : [])
+            .concat([el("td", { text: r.revenue }),
+              el("td", { "class": "np-num" }, [el("a", { href: "#/projects/" + r.id, text: String(r.missing_n) + " 件" })]),
               // R-2。**移行期間の正本を列で出す**
-              el("td", { text: r.source_of_truth === "app" ? "アプリ" : "Drive（編集不可）" })
-            ]);
-          })));
+              el("td", { text: r.source_of_truth === "app" ? "アプリ" : "Drive（編集不可）" })]));
+        })));
+        b.appendChild(el("p", { "class": "np-sub", text: "ゲートの記号: ● 通過 ／ ◐ 待ち ／ ◼ 差戻・保留・中止 ／ ○ 未 ／ / 対象外。語は次のゲートだけを書いています。" }));
       }
       d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
       b.appendChild(newProjectForm(d.filters.flow));
@@ -457,7 +901,7 @@
         if (h.effort_point === null && h.effort_point_note)
           head.appendChild(el("p", { "class": "np-warn", text: "工数ポイント: " + h.effort_point_note }));
         if (h.flow_note) head.appendChild(el("p", { "class": "np-warn", text: h.flow_note }));
-        head.appendChild(gateChips(d.gates));
+        head.insertBefore(gateStrip(d.gates, true), head.children[1] || null);
         if (h.editable) head.appendChild(stageControl(d, meta));
         if (h.editable) head.appendChild(revenueControl(d));
         if (h.editable) head.appendChild(launchControl(d));
@@ -517,7 +961,7 @@
 
         // C〜F の節
         d.sections.forEach(function (s) {
-          var c = el("div", { "class": "np-card", id: "np-sec-" + s.key });
+          var c = el("div", { "class": "np-card", id: "np-sec-" + s.key, "data-filled": String(s.filled), "data-total": String(s.total) });
           c.appendChild(el("h2", {
             text: s.key + ". " + s.title + " — " + s.asks
           }));
@@ -706,6 +1150,19 @@
           tv.appendChild(el("p", { "class": "np-note", text: "タスクはありません。" }));
         } else {
           tv.appendChild(schedulePanel(d));
+          // 期間の帯。期限が入っていれば塗り、目安だけなら白抜きの点線。**完了日が今日より後の行は描かない**（移行時の年の推定の疑い）
+          var tl = d.tasks.map(function (t) {
+            var sus = t.status === "完了" && t.done_at && t.done_at.slice(0, 10) > d.today;
+            var st = t.start_on || t.due_on, en = t.due_on;
+            var plan = false;
+            if (!en && t.plan_due) { st = t.plan_start; en = t.plan_due; plan = true; }
+            return { label: t.seq + " " + t.title, start: sus ? null : st, end: sus ? null : en, plan: plan,
+              done: t.status === "完了", why: sus ? "完了日に疑い" : (t.status === "対象外" ? "対象外" : "日付なし") };
+          });
+          if (tl.some(function (x) { return x.start && x.end; })) {
+            tv.appendChild(chartCard("タスクの期間（塗り＝期限・白抜きの点線＝目安・灰色＝完了）", timeline(tl, { today: d.today,
+              title: "タスクの期間" }), { note: "縦の破線が今日です。" }));
+          }
           tv.appendChild(el("div", { "class": "np-tablewrap" }, [table(["#", "進捗", "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h"],
             d.tasks.map(function (t) {
               return el("tr", null, [
@@ -761,7 +1218,12 @@
       try { open = localStorage.getItem(FOLD_KEY + c.id); } catch (e) { /* 使えなくても開いたまま */ }
       if (open === "1") det.setAttribute("open", "open");          // 既定は閉じる（目次から開く）
       if (c.querySelector("[data-np-attention]")) det.setAttribute("open", "open");   // 人の判断を待つ案がある節は開く
-      det.appendChild(el("summary", { text: title }));
+      var sm = el("summary", { text: title });
+      if (c.getAttribute("data-total")) {      // 埋まり具合の升目（たたんだままでも見えるように）
+        sm.appendChild(txt("　"));
+        sm.appendChild(fillDots(+c.getAttribute("data-filled"), +c.getAttribute("data-total"), "入力済"));
+      }
+      det.appendChild(sm);
       det.addEventListener("toggle", function () {
         try { localStorage.setItem(FOLD_KEY + c.id, det.open ? "1" : "0"); } catch (e) { /* 覚えないだけ */ }
       });
@@ -1592,16 +2054,21 @@
         });
         b.appendChild(tabs);
 
-        // 期間フィルタ。**「期限なし」を常設ボタンに**
+        // 期間は「期限の山」の棒を押して選ぶ（2026-10-09 点検 §6 タスク。13個のボタンが 375px で4行に折り返していた）。
+        // **「期限なし」は斜線の別の棒で常に出す**。件数は全員分（自分の分だけのときも全員分の山を出し、そう書く）
+        var hk = ["overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6", "none"];
+        var hill = hk.map(function (k) {
+          return { x: k === "overdue" ? "期限切れ" : k === "today" ? "今日" : k === "none" ? "期限なし" : k.replace("+", "") + "日後",
+            y: d.counts[k], alt: k === "none", current: k === when, href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq };
+        });
+        b.appendChild(chartCard("期限ごとの件数（全員の分）— 棒を押すとその期間に絞れます", columns(hill, { unit: "件", height: 170,
+          title: "期限ごとのタスクの件数", xfmt: function (x) { return x; } }), {
+          sub: "いま見ている期間: " + (WHEN_LABEL[when] || when) + "。斜線は期限なし（別の扱い）。" }));
         var fl = el("div", { "class": "np-filters" });
-        ["overdue+today", "overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6",
-         "week", "next7", "none", "all"].forEach(function (k) {
-          var n = mine ? undefined : d.counts[k];        // 件数は全員分なので、自分の分だけのときは出さない
-          fl.appendChild(el("a", {
-            href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq,
-            text: WHEN_LABEL[k] + (n === undefined ? "" : " " + n),
-            "aria-current": k === when ? "true" : null
-          }));
+        ["overdue+today", "week", "next7", "all"].forEach(function (k) {
+          var n = mine ? undefined : d.counts[k];
+          fl.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq,
+            text: WHEN_LABEL[k] + (n === undefined ? "" : " " + n), "aria-current": k === when ? "true" : null }));
         });
         b.appendChild(fl);
         // 自分の分だけ（担当者が自分＋自分の業務ロール）。ダッシュボードの「自分のやること」の続き
@@ -1667,7 +2134,7 @@
                 // **実作業と予備を1つの数にしない**（2026-09-23 の決定）
                 el("td", { "class": "np-num", text: x.work_hours + "h" }),
                 el("td", { "class": "np-num", text: x.reserve_hours + "h" }),
-                el("td", { "class": "np-num", text: x.hours + "h" }),
+                el("td", { "class": "np-num", text: x.hours + "h" + (x.hours_unknown_n ? "（時間未入力 " + x.hours_unknown_n + " 件は入っていません）" : "") }),
                 el("td", { "class": "np-num", text: String(x.n) }),
                 el("td", { text: d.load.limit_label })]));
             });
@@ -1681,8 +2148,28 @@
                 el("td", { text: "—" })]));
             });
           });
-          b.appendChild(table(["月（タスク実施月）", "ロール", "実作業h", "予備h",
+          // 自部署の月の合計を「実作業＋予備（斜線）」の積み上げで。**時間の空いた行は合計に入っていない**ので件数を語で添える。
+          // 全行が空の月は棒を描かず「未計測」。他部署は同じ棒に積まない。上限は未設定なので線を引かない（2026-10-09 点検 1-3）
+          var lpts = d.load.months.map(function (m) {
+            var w = 0, r = 0, n = 0, u = 0;
+            m.own.forEach(function (x) { w += x.work_hours; r += x.reserve_hours; n += x.n; u += x.hours_unknown_n || 0; });
+            if (!n) return { x: m.month, y: 0, note: "行なし" };
+            if (u === n) return { x: m.month, y: null, note: "時間未入力" + u };
+            return { x: m.month, y: Math.round(w * 10) / 10, y2: Math.round(r * 10) / 10, note: u ? "未入力" + u : null };
+          });
+          b.appendChild(chartCard("自部署の月ごとの負荷（実作業h＋予備h・タスク実施月）", columns(lpts, { unit: "h", y2label: "予備",
+            title: "自部署の月ごとの負荷" }), {
+            legend: [{ mark: "■", label: "実作業（塗り）" }, { mark: "▨", label: "予備時間（斜線）" }],
+            note: "棒の下の「未入力n」は時間の入っていない行の数で、合計に入っていません。全行が未入力の月は「未計測」。上限は未設定のため線を引いていません。",
+            headers: ["月", "実作業h", "予備h", "件数", "時間未入力"], rows: d.load.months.map(function (m) {
+              var w = 0, r = 0, n = 0, u = 0;
+              m.own.forEach(function (x) { w += x.work_hours; r += x.reserve_hours; n += x.n; u += x.hours_unknown_n || 0; });
+              return [m.month, Math.round(w * 10) / 10 + "h", Math.round(r * 10) / 10 + "h", n + " 件", u + " 件"]; }) }));
+          var det = el("details", { "class": "np-more" });
+          det.appendChild(el("summary", { text: "月 × ロールの表を開く" }));
+          det.appendChild(table(["月（タスク実施月）", "ロール", "実作業h", "予備h",
                                "合計h", "件数", "上限"], lr));
+          b.appendChild(det);
           b.appendChild(el("p", { "class": "np-note", text: d.load.reserve_caption }));
           b.appendChild(el("p", { "class": "np-note", text: d.load.external_caption }));
           b.appendChild(el("p", { "class": "np-note", text: d.load.no_month_caption }));
@@ -1801,6 +2288,18 @@
         text: "記号: ● 通過 ／ ◐ 待ち ／ ◼ 差戻・保留・中止 ／ ○ 未 ／ / 対象外。"
           + "記号は列の表現にすぎません。状態は語で出しています。" }));
 
+      if (d.rows.length) {
+        var mineN = d.rows.filter(function (r) { return r.mine; }).length;
+        b.appendChild(kpiRow([
+          kpi("自分が判定するもの", mineN + " 件", null, null),
+          kpi("直近30日の通過", d.passed_30d === null ? null : d.passed_30d + " 件", "0 件のときも 0 と出します", null, d.passed_30d === null ? "未計測" : null),
+          kpi("案件", d.rows.length + " 件", null, "#/projects")]));
+        var cntg = {};
+        d.rows.forEach(function (r) { cntg[r.next_gate] = (cntg[r.next_gate] || 0) + 1; });
+        b.appendChild(chartCard("次の判定がどのゲートか", hbars(Object.keys(cntg).sort().map(function (k) {
+          return { label: k, value: cntg[k] };
+        }), { unit: "件" }), { sub: "発売済でゲートの記録が無い案件（移行分）は「—」などとして別の行に出ます。" }));
+      }
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
           text: "案件がありません。" + (d.passed_30d !== null
@@ -1844,7 +2343,11 @@
   // ══════════════════════════════════════════════════════
   var IDEA_FILTER_KEYS = ["stage", "rank", "rubric", "origin", "theme", "q"];
 
-  function yen(v) { return (v === null || v === undefined || v === "") ? "未入力" : "¥" + Number(v).toLocaleString("ja-JP"); }
+  // 金額の書き方は1つ（2026-10-09 app-ui 点検 2-3。同じ名前の関数が2つあり、後のものだけが効いていた）。
+  // 欠けたときの語は呼ぶ側が選ぶ（入力欄由来は「未入力」、取れていないものは「未計測」）
+  function yen(v, missing) {
+    return (v === null || v === undefined || v === "") ? (missing || "未計測") : Math.round(Number(v)).toLocaleString("ja-JP") + "円";
+  }
   function pctText(p) {
     if (p === null || p === undefined) return "—";
     return "上位 " + (Math.round(p * 1000) / 10) + "%";
@@ -1876,6 +2379,23 @@
       var ai = meta.ai_scoring || {};
       b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
         navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : ""))]));
+
+      // ── 全体の形（絞り込み後の全件で数える。表は上限まで）──
+      var sm = d.summary || {};
+      if (sm.by_stage) {
+        var charts = [chartCard("ステージ別（" + d.total + " 件）", hbars(d.filters.stage.map(function (k) {
+          return { label: k, value: sm.by_stage[k] || 0, href: "#/ideas?stage=" + encodeURIComponent(k) };
+        }), { unit: "件" }), { sub: "0 件のステージも出しています。" }),
+          chartCard("テーマ別", hbars((sm.by_theme || []).map(function (x) { return { label: x.label, value: x.n }; }), { unit: "件" }))];
+        if (d.rubric && sm.by_rank) {
+          charts.push(chartCard("ランク別（版 " + d.rubric + " の中で）", hbars(d.filters.rank.concat(["未採点"]).map(function (k) {
+            return { label: k, value: sm.by_rank[k] || 0 };
+          }), { unit: "件" }), { sub: "版ごとに分布が違うため、版をまたいでは数えません。" }));
+        }
+        b.appendChild(chartGrid(charts));
+        if (sm.origin_unknown && sm.origin_unknown === d.total)
+          b.appendChild(el("p", { "class": "np-sub", text: "起票経路: 不明 " + sm.origin_unknown + " / " + d.total + "（移行分。起票した経路が記録されていません）" }));
+      }
 
       // ── 絞り込み（ステージ・ランク・rubric版・起票経路・テーマ）──
       var f = el("form", { "class": "np-filters", id: "np-ifilter" });
@@ -1931,7 +2451,7 @@
               el("td", { text: x.origin_label }),
               el("td", { text: dash(x.demand_cycle) }),
               el("td", { "class": "np-num", text: x.production_feasibility === null ? "未入力" : String(x.production_feasibility) }),
-              el("td", { "class": "np-num", text: yen(x.expected_margin_yen) }),
+              el("td", { "class": "np-num", text: yen(x.expected_margin_yen, "未入力") }),
               el("td", { "class": "np-num", text: s.common_score === null || s.common_score === undefined ? "—" : String(s.common_score) }),
               el("td", { "class": "np-num", text: s.theme_fit === null || s.theme_fit === undefined ? "—" : String(s.theme_fit) }),
               el("td", { "class": "np-num", text: s.feasibility_factor === null || s.feasibility_factor === undefined ? "—" : String(s.feasibility_factor) }),
@@ -1952,7 +2472,7 @@
               el("td", { text: x.origin_label }),
               el("td", { text: dash(x.demand_cycle) }),
               el("td", { "class": "np-num", text: x.production_feasibility === null ? "未入力" : String(x.production_feasibility) }),
-              el("td", { "class": "np-num", text: yen(x.expected_margin_yen) }),
+              el("td", { "class": "np-num", text: yen(x.expected_margin_yen, "未入力") }),
               el("td", { text: x.score_versions.length ? x.score_versions.join("／") : "未採点" })
             ]);
           })));
@@ -2046,7 +2566,7 @@
         ["需要発生（通年／季節／単発）", d.demand_cycle === null ? "未入力" : d.demand_cycle],
         ["デザイン自由度(1-5)", d.design_freedom === null ? "未入力" : String(d.design_freedom)],
         ["生産方法(1-5)", d.production_feasibility === null ? "未入力" : String(d.production_feasibility)],
-        ["想定粗利額（1個あたり）", yen(d.expected_margin_yen)],
+        ["想定粗利額（1個あたり）", yen(d.expected_margin_yen, "未入力")],
         ["エリア候補", dash(d.area1) + "／" + dash(d.area2)],
         ["参考商品1", dash(d.ref_url1)],
         ["参考商品2", dash(d.ref_url2)],
@@ -2142,7 +2662,26 @@
           ]));
         });
       }
-      c.appendChild(table(["評価項目", "素点", "ウェイト"], rows));
+      // 軸ごとの横棒（素点 ÷ 満点）。ウェイトと寄与は文字で（2026-10-09 点検 §6 アイデア1件）
+      if (rb) {
+        c.appendChild(hbars(rb.axes.filter(function (ax) { return ax.layer !== "attribute"; }).map(function (ax) {
+          var raw = s.axes[ax.code], mx = ax.scale_max || 10;
+          var has = raw !== undefined && raw !== null;
+          return { label: ax.label, value: has ? raw / mx * 10 : null, valueText: has ? raw + "／" + mx : "点なし",
+            note: ax.weight === null ? "ウェイト未実測" : "×" + ax.weight + (has ? "＝" + Math.round(raw * ax.weight * 10) / 10 : "") };
+        }), { max: 10, label: "評価項目ごとの素点" }));
+      }
+      if (isV2 && s.common_score !== null && s.theme_fit !== null) {
+        c.appendChild(stackbar([{ label: "①共通点", value: s.common_score }, { label: "②テーマ適合", value: s.theme_fit }], { unit: "点" }));
+        c.appendChild(el("p", { "class": "np-chart-lead", text: "（" + s.common_score + " ＋ " + s.theme_fit + "）× 減点係数 " + dash(s.feasibility_factor) + " ＝ 総合点 " + dash(s.total) }));
+        if (s.percentile !== null && s.percentile !== undefined) c.appendChild(meter(Math.round((1 - s.percentile) * 100), 100, {
+          label: "テーマ内の位置", valueText: "上位 " + Math.round(s.percentile * 100) + "%",
+          marks: [{ at: 50, label: "真ん中" }] }));
+      }
+      var dt0 = el("details", { "class": "np-more" });
+      dt0.appendChild(el("summary", { text: "素点とウェイトの表" }));
+      dt0.appendChild(table(["評価項目", "素点", "ウェイト"], rows));
+      c.appendChild(dt0);
       var sum = [
         ["総合点", s.total === null ? "—" : String(s.total) + (s.total_max ? "／" + s.total_max : "")],
         ["ランク", dash(s.rank)],
@@ -2191,7 +2730,7 @@
       ]));
     });
     f.appendChild(el("p", { "class": "np-note",
-      text: "想定粗利額は " + yen(d.expected_margin_yen) + " → " + d.margin_points + " 点として入ります。生産方法 " + d.production_feasibility + " → 減点係数 " + d.feasibility_factor + " を総合点に掛けます。" }));
+      text: "想定粗利額は " + yen(d.expected_margin_yen, "未入力") + " → " + d.margin_points + " 点として入ります。生産方法 " + d.production_feasibility + " → 減点係数 " + d.feasibility_factor + " を総合点に掛けます。" }));
     f.appendChild(el("p", { "class": "np-note", text: meta.idea.margin_bands_note }));
     f.appendChild(el("button", { type: "submit", text: "v2 で採点する" }));
     var msg = el("p", { "class": "np-note" });
@@ -2680,6 +3219,8 @@
         if (n.how) st.appendChild(el("pre", { "class": "np-pre", text: n.how }));
       });
       var bu = a.budget || {};
+      if (bu.state === "ok" && bu.cap) st.appendChild(meter(bu.spent, bu.cap, { unit: "$", label: "AI予算の使用",
+        valueText: "$" + bu.spent + " / 上限 $" + bu.cap, marks: [] }));
       st.appendChild(el("p", { "class": "np-sub", text: bu.state === "ok"
         ? (bu.spent_label + ": " + bu.spent + " / 上限 " + bu.cap + "（残り " + bu.remaining + "）")
         : ("AI予算: " + ({ unavailable: "確かめられません", over_cap: "使い切りました", no_cap: "枠がありません",
@@ -2864,6 +3405,7 @@
       setTitle("プラン", d.current.version.label);
       b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く"), navBtn("#/simulate", "販売計画シミュレーション")]));
       b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
+      b.appendChild(planCharts(d.current));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
       if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
@@ -2946,6 +3488,49 @@
     return box;
   }
 
+  // 年間プランのグラフ（2026-10-09 点検 §6 年間プラン）。工数ポイント（目安の帯）・発売本数（目標の線）・うちわの比率
+  function planCharts(cur) {
+    var box = el("div", { "class": "np-card" });
+    box.appendChild(el("h2", { text: "月ごとの見通し" }));
+    var fy = cur.version.fiscal_year, by = {};
+    cur.months.forEach(function (m) { by[m.month] = m; });
+    var res = cur.rules.results;
+    var eff = res.filter(function (r) { return r.rule === "effort" && r.min !== undefined; })[0];
+    var cnt = res.filter(function (r) { return r.rule === "count" && r.want !== undefined; })[0];
+    var ratio = res.filter(function (r) { return r.rule === "ratio"; })[0];
+    var months = [];
+    for (var k = 0; k < 12; k++) {
+      var y = fy + Math.floor((4 + k) / 12), mo = (4 + k) % 12 + 1;
+      months.push(y + "-" + (mo < 10 ? "0" : "") + mo);
+    }
+    var effPts = months.map(function (m) {
+      var x = by[m];
+      if (!x) return { x: m, y: 0, note: "枠なし" };
+      var lv = eff ? (x.effort < eff.min ? "下限未満" : (x.effort > eff.max ? "上限超え" : null)) : null;
+      return { x: m, y: x.effort, note: x.effort_unknown ? "未確定" + x.effort_unknown : lv };
+    });
+    var cntPts = months.map(function (m) {
+      var x = by[m];
+      return x ? { x: m, y: x.launch_n, note: (x.n - x.launch_n) ? "他" + (x.n - x.launch_n) : null } : { x: m, y: 0, note: "枠なし" };
+    });
+    var grid = [];
+    grid.push(chartCard("工数ポイント（月の合計）", columns(effPts, { unit: "点", title: "月ごとの工数ポイント",
+      band: eff ? { min: eff.min, max: eff.max, label: "目安 " + eff.min + "〜" + eff.max + " 点" } : null }), {
+      note: "帯は目安の幅。棒の下の語: 下限未満・上限超え・未確定n（工数ポイント未確定の枠。合計に入れていない）・枠なし。",
+      headers: ["月", "工数ポイント", "未確定の枠"], rows: months.map(function (m) { var x = by[m]; return [m, x ? x.effort + " 点" : "枠なし", x ? x.effort_unknown + " 本" : "—"]; }) }));
+    grid.push(chartCard("発売本数（月の枠）", columns(cntPts, { unit: "本", title: "月ごとの発売本数",
+      target: cnt ? { y: cnt.want, label: "目標 " + cnt.want + " 本" } : null }), {
+      note: "ページリニューアル等の本数に数えない枠は棒に積まず、棒の下に「他n」と書いています。",
+      headers: ["月", "発売本数", "数えない枠"], rows: months.map(function (m) { var x = by[m]; return [m, x ? x.launch_n + " 本" : "枠なし", x ? (x.n - x.launch_n) + " 本" : "—"]; }) }));
+    box.appendChild(chartGrid(grid));
+    if (ratio && ratio.original !== undefined) {
+      box.appendChild(chartCard("うちわとそれ以外の比率（年度）", stackbar([
+        { label: "うちわ以外", value: ratio.original }, { label: "うちわ", value: ratio.uchiwa }], { unit: "本" }), {
+        lead: ratio.target_uchiwa !== undefined ? "目標の比なら うちわ " + ratio.target_uchiwa + " 本。いまとの差 " + ratio.gap + " 本（" + (ratio.level === "ok" ? "許容の内" : "許容の外") + "）" : ratio.message }));
+    }
+    return box;
+  }
+
   function planRules(cur) {
     var box = el("div", { "class": "np-card" });
     var c = cur.rules.counts;
@@ -2962,6 +3547,8 @@
           + (bs.diff.length ? "いまの設定と違うもの: " + bs.diff.map(function (x) {
               return x.label + " 承認時 " + dash(x.approved) + " → いま " + dash(x.now); }).join("、")
               + "。いまの値で直したいときは「改訂版を作る」で写してから見直します。" : "いまの設定とも同じです。") }));
+    } else if (bs && bs.mode === "いまの設定（承認時の値なし）") {
+      box.appendChild(el("p", { "class": "np-warn", text: "この版は承認済みですが、承認した時点の値が残っていません（その仕組みより前に承認した版）。いまの設定の値で判定しています。" }));
     } else if (bs) {
       box.appendChild(el("p", { "class": "np-note", text: "策定中なので、いまの設定（設定ページ）の値で判定しています。承認すると、その時点の値がこの版に残ります。" }));
     }
@@ -3186,15 +3773,11 @@
       if (d.template_note)
         b.appendChild(el("p", { "class": "np-warn", text: d.template_note }));
 
-      // 状態の絞り込み。**語で出す**（色にしない）
-      var bar = el("p", { "class": "np-sub" });
-      bar.appendChild(el("a", { href: "#/automation", text: "すべて" }));
-      d.stages.forEach(function (s) {
-        bar.appendChild(txt("　"));
-        bar.appendChild(el("a", { href: "#/automation?stage=" + encodeURIComponent(s),
-          text: s + "（" + (d.by_stage[s] || 0) + "）" }));
-      });
-      b.appendChild(bar);
+      // 状態の段の帯。箱を押すとその状態に絞れる。**0 の段も 0 と出す**（2026-10-09 点検 §6 自動化依頼）
+      b.appendChild(chartCard("依頼の進み（状態ごとの件数）", steps(d.stages.map(function (s) {
+        return { label: s, n: d.by_stage[s] || 0, href: "#/automation?stage=" + encodeURIComponent(s) };
+      })), { sub: "箱を押すと、その状態の依頼だけに絞れます。" }));
+      b.appendChild(btnRow([navBtn("#/automation", "すべての状態を見る", "sm")]));
 
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note", text: "該当する依頼はありません。" }));
@@ -3205,7 +3788,7 @@
               el("td", null, [el("a", { href: "#/automation/" + r.id, text: r.title })]),
               el("td", { text: dash(r.requester) }),
               el("td", { text: r.stage }),
-              el("td", { text: r.answered + " / " + r.required }),
+              el("td", null, [fillDots(r.answered, r.required, "答え")]),
               el("td", { text: r.in_template ? "あり" : "無し" }),
               el("td", { "class": "np-num",
                 text: r.hours_per_month === null ? "未計測" : r.hours_per_month + "h" })]);
@@ -3457,7 +4040,6 @@
   // **何が売れているか（構成）を見る画面。**正式な売上は経営管理。
   // 金額は税込（決定）。前年比は丸1か月どうしのときだけ。未計測は「未計測」と書く（0 にしない）
   // ══════════════════════════════════════════════════════
-  function yen(v) { return (v === null || v === undefined) ? "未計測" : Math.round(v).toLocaleString("ja-JP") + "円"; }
   function pct(v) { return (v === null || v === undefined) ? "—" : v.toFixed(1) + "%"; }
   function yoy(v) { return (v === null || v === undefined) ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v).toFixed(1) + "%"; }
   /** 構成比の棒。**1色。**長さだけで見せ、数字を必ず横に添える（色に意味を持たせない） */
@@ -3504,7 +4086,8 @@
         var cells = ln.replace(/^\||\|$/g, "").split("|").map(function (c) { return c.trim(); });
         if (!tbl) { tbl = el("table", { "class": "np" }); box.appendChild(tbl);
           var tr0 = el("tr"); cells.forEach(function (c) { tr0.appendChild(el("th", { text: c })); }); tbl.appendChild(tr0); return; }
-        var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(el("td", { text: c })); }); tbl.appendChild(tr); return;
+        // 円・%・件・本・h で終わるセルは右寄せ（数字の列をそろえる・点検 §6 月次レポート）
+        var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(el("td", { text: c, "class": /^[+−±\-]?[\d,.]+\s*(円|%|件|本|h|か月)?$|^—$/.test(c.trim()) ? "np-num" : null })); }); tbl.appendChild(tr); return;
       }
       if (/^- /.test(ln)) { if (!ul) { ul = el("ul"); box.appendChild(ul); } ul.appendChild(el("li", { text: ln.slice(2) })); return; }
       flush();
@@ -3524,6 +4107,9 @@
       setTitle("月次レポート");
       b.appendChild(btnRow([navBtn("#/", "← ダッシュボードへ戻る", "back")]));
       b.appendChild(el("p", { "class": "np-note", text: "毎月2日 10:00 に前の月の分を作ります（売上・商品ABC・新商品・開発の進み・年間プラン・トレンド）。事実の数字だけで、AI の文章は入れていません。送りはしません。" }));
+      // 同じ数字をグラフで見られる画面（レポートの表を読み取ってグラフにはしない・点検 §4）
+      b.appendChild(btnRow([navBtn("#/sales", "売上実績（グラフ）", "sm"), navBtn("#/abc", "商品ABC（グラフ）", "sm"),
+        navBtn("#/plan", "年間プラン（グラフ）", "sm"), navBtn("#/trends", "トレンド", "sm")]));
       var nav = el("div", { "class": "np-filters" });
       var month = q.get("month") || (d.rows[0] && d.rows[0].month) || d.default;
       d.rows.forEach(function (r) {
@@ -3580,7 +4166,23 @@
       // 年間イベント（FR-78・FR-80）
       var ac = el("div", { "class": "np-card" });
       ac.appendChild(el("h2", { text: "年間イベント（" + d.annual.length + "件）" }));
-      ac.appendChild(table(["月", "日", "イベント", "販売可能性が高い", "次の回", "発売の目安", "年間プラン"], d.annual.map(function (x) {
+      // 発売の目安の月ごとに並べる（2026-10-09 点検 §6 機会カレンダー）。★は販売可能性が高い
+      var lmBy = {};
+      d.annual.forEach(function (x) { if (x.launch_month) (lmBy[x.launch_month] = lmBy[x.launch_month] || []).push(x); });
+      var lms = Object.keys(lmBy).sort().slice(0, 12);
+      if (lms.length) {
+        var grid = el("div", { "class": "np-mgrid" });
+        lms.forEach(function (m) {
+          grid.appendChild(el("div", { "class": "np-mcell" }, [
+            el("div", { "class": "np-mcell-h", text: m.slice(0, 4) + "年" + (+m.slice(5, 7)) + "月に発売（" + lmBy[m].length + "）" }),
+            el("ul", null, lmBy[m].map(function (x) { return el("li", { text: (x.sellable ? "★" : "") + x.label + (x.event_month ? "（" + (+x.event_month.slice(5, 7)) + "月）" : "") }); }))]));
+        });
+        ac.appendChild(chartCard("発売の目安の月ごとのイベント（イベントの2か月前）", grid, { sub: "★は販売可能性が高いイベント。括弧はイベントの月です。" }));
+      }
+      var adet = el("details", { "class": "np-more" });
+      adet.appendChild(el("summary", { text: "年間イベントの表を開く（枠を足すボタンはこちら）" }));
+      ac.appendChild(adet);
+      adet.appendChild(table(["月", "日", "イベント", "販売可能性が高い", "次の回", "発売の目安", "年間プラン"], d.annual.map(function (x) {
         var c = el("td"); slotBtn(x, c);
         return el("tr", null, [el("td", { "class": "np-num", text: x.month ? x.month + "月" : "—" }), el("td", { text: dash(x.day) }),
           el("td", { text: x.label }), el("td", { text: x.sellable ? "印あり" : "" }),
@@ -3592,7 +4194,15 @@
       var lc = el("div", { "class": "np-card" });
       lc.appendChild(el("h2", { text: "ライフイベント（" + d.life.length + "件）" }));
       lc.appendChild(el("p", { "class": "np-sub", text: "総合＝購買意欲×2＋写真親和性＋発生頻度×2（満点40）。月が決まっていないので、枠はプランの画面で発売月を決めて作ってください。" }));
-      lc.appendChild(table(["ライフイベント", "総合", "購買意欲", "写真親和性", "発生頻度", "優先", "商品が作れていない", "商品例", "年間プラン"], d.life.map(function (x) {
+      var top = d.life.filter(function (x) { return x.total !== null && x.total !== undefined; })
+        .sort(function (a, c) { return c.total - a.total; }).slice(0, 10);
+      lc.appendChild(chartCard("総合点の上位10（満点40）", hbars(top.map(function (x) {
+        return { label: x.label, value: x.total, valueText: x.total + " / 40", note: x.product_gap ? "商品が作れていない" : null };
+      }), { max: 40 }), { sub: "採点していないライフイベントは、この棒には出していません（表にはあります）。" }));
+      var ldet = el("details", { "class": "np-more" });
+      ldet.appendChild(el("summary", { text: "ライフイベントの表を開く（全 " + d.life.length + " 件）" }));
+      lc.appendChild(ldet);
+      ldet.appendChild(table(["ライフイベント", "総合", "購買意欲", "写真親和性", "発生頻度", "優先", "商品が作れていない", "商品例", "年間プラン"], d.life.map(function (x) {
         return el("tr", null, [el("td", { text: x.label }), el("td", { "class": "np-num", text: dash(x.total) }),
           el("td", { "class": "np-num", text: dash(x.gift_intent) }), el("td", { "class": "np-num", text: dash(x.photo_fit) }),
           el("td", { "class": "np-num", text: dash(x.frequency) }), el("td", { "class": "np-num", text: dash(x.priority) }),
@@ -3626,6 +4236,13 @@
       d.segments.forEach(function (sg) {
         var c = el("div", { "class": "np-card" });
         c.appendChild(el("h2", { text: sg.name }));
+        // 市場性を30点の物差しで（2026-10-09 点検 §6 トレンド）。上限が30より小さいのは「方向」などが未計測のため。黙って縮めない
+        c.appendChild(hbars(sg.themes.map(function (t) {
+          var gap = t.score_max !== null && t.score_max !== undefined ? Math.max(0, 30 - t.score_max) : null;
+          return { label: (t.top ? "★" : "") + t.label, value: t.decayed,
+            valueText: t.decayed + " / 30" + (gap ? "（うち " + gap + " 点は未計測）" : "") };
+        }), { max: 30, label: sg.name + " の市場性" }));
+        c.appendChild(el("p", { "class": "np-sub", text: "★は上位 " + d.top_n + "。物差しは30点（強さ12・継続10・方向5・季節性3）。" }));
         c.appendChild(table(["", "テーマ", "", "市場性（点／上限）", "連続", "根拠", "自社側70点", "合計100"], sg.themes.map(function (t) {
           var act = el("td");
           if (t.idea_id) act.appendChild(el("a", { href: "#/ideas/" + encodeURIComponent(t.idea_id), text: "アイデア " + t.idea_id }));
@@ -3699,6 +4316,22 @@
           el("td", { "class": "np-num", text: yen(x.total) }), el("td", { text: "" })])])));
         return c;
       }
+      // 累計の曲線（パレート）と、商品数と売上の割合の比べ（2026-10-09 点検 §6 商品ABC）
+      var cur = d.rows.filter(function (x) { return x.cum !== null && x.cum !== undefined; }).sort(function (a, c) { return a.rank - c.rank; });
+      if (cur.length >= 3) {
+        var aN = d.current.classes.A.count;
+        b.appendChild(chartCard("売上の累計（商品を売上の多い順に並べたとき）", lines([{ name: "累計", mark: "●",
+          points: cur.map(function (x) { return { x: String(x.rank), y: x.cum }; }) }], { unit: "%", max: 100, height: 200,
+          hlines: [{ y: d.limits.A, label: "A " + d.limits.A + "%" }, { y: d.limits.B, label: "B " + d.limits.B + "%" }],
+          xfmt: function (x) { return x + "位"; }, title: "売上の累計構成比", desc: "上位 " + aN + " 商品で売上の " + d.limits.A + "% 前後" }), {
+          lead: "上位 " + aN + " 商品（全 " + d.current.count + " のうち " + Math.round(aN / Math.max(1, d.current.count) * 1000) / 10 + "%）で、売上の " + d.current.classes.A.share + "%",
+          note: "横の破線が A・B の区切りです。横の目盛りは順位です。" }));
+        b.appendChild(chartCard("商品数の割合と売上の割合（A・B・C）", el("div", null, [
+          el("p", { "class": "np-sub", text: "商品数の割合" }),
+          stackbar(["A", "B", "C"].map(function (k) { return { label: k, value: d.current.classes[k].count }; }), { unit: " 商品" }),
+          el("p", { "class": "np-sub", text: "売上の割合" }),
+          stackbar(["A", "B", "C"].map(function (k) { return { label: k, value: d.current.classes[k].revenue }; }), { unit: "円" })])));
+      }
       var g = el("div", { "class": "np-grid np-grid-2" });
       g.appendChild(abcSummary("選んだ期間 " + d.period.from + "〜" + d.period.to, d.current));
       if (d.compare) g.appendChild(abcSummary("比べる期間 " + d.compare.period.from + "〜" + d.compare.period.to, d.compare));
@@ -3764,6 +4397,12 @@
       b.appendChild(salesSubnav("#/cost"));
       b.appendChild(el("p", { "class": "np-note", text: "発売前の案件だけを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は CIP が持ちます。" }));
       if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "発売前の案件はありません。" })); return; }
+      var nR = d.rows.length;
+      b.appendChild(kpiRow([
+        kpi("締切が決まっている案件", d.rows.filter(function (r) { return r.deadline && r.deadline.due; }).length + " / " + nR, "発売予定日が入ると、本番発注の締切が出ます"),
+        kpi("採用した見積がある案件", d.rows.filter(function (r) { return r.adopted > 0; }).length + " / " + nR),
+        kpi("試算原価がある案件", d.rows.filter(function (r) { return r.version; }).length + " / " + nR),
+        kpi("CIP 未登録の候補", d.rows.reduce(function (a, r) { return a + (r.unregistered || 0); }, 0) + " 行")]));
       b.appendChild(table(["案件", "発売予定日", "本番発注の締切", "候補（採用／未判断）", "CIP 未登録", "試算", "直接費", "想定粗利"],
         d.rows.map(function (r) {
           var dl = r.deadline;
@@ -3776,10 +4415,9 @@
             el("td", { "class": "np-num", text: String(r.unregistered) }),
             el("td", { text: r.version ? "v" + r.version : "なし" }),
             el("td", { "class": "np-num", text: r.direct ? cyen(r.direct.yen) + (r.direct.unknown ? "＋未確定" + r.direct.unknown + "行" : "") : "—" }),
-            el("td", { "class": "np-num", text: r.gross && r.gross.yen !== null ? cyen(r.gross.yen) + (r.gross.rate !== null ? "（" + r.gross.rate + "%）" : "") + (r.gross.overstated ? "※" : "") : "—" })
+            el("td", { "class": "np-num", text: r.gross && r.gross.yen !== null ? cyen(r.gross.yen) + (r.gross.rate !== null ? "（" + r.gross.rate + "%）" : "") + (r.gross.overstated ? "　未確定の行あり・実際より高く出ています" : "") : "—" })
           ]);
         })));
-      b.appendChild(el("p", { "class": "np-sub", text: "※ 直接費に未確定の行があり、粗利が実際より大きく出ています。" }));
     }).catch(fail);
   }
 
@@ -3837,14 +4475,28 @@
           top.appendChild(el("p", { "class": "np-sub",
             text: "前年同月（" + (d.prev_year_month || "—") + "） " + yen(t.prev_revenue) + "　前年比 " + yoy(t.yoy) }));
         }
+        // **出どころは数字のすぐ下に**（2026-10-09 点検 1-1。タブで出どころが違い、同じ店の前年比の符号が逆になる）
+        top.appendChild(srcTag(d.source || d.basis, d.generated_at, d.basis));
         b.appendChild(top);
 
         // 2段目: 月ごとの推移
         var tr = el("div", { "class": "np-card" });
         tr.appendChild(el("h2", { text: "月ごとの推移" }));
         var maxv = d.trend.reduce(function (a, x) { return Math.max(a, x.revenue || 0, x.prev_revenue || 0); }, 0);
+        if (d.trend.length >= 2) {
+          tr.appendChild(chartCard(d.site_label + " の月ごとの売上（" + d.tax + "）", lines([
+            { name: "今年", mark: "●", points: d.trend.map(function (x) { return { x: x.month, y: x.revenue, partial: !x.complete }; }) },
+            { name: "前年", mark: "▲", dash: true, points: d.trend.map(function (x) { return { x: x.month, y: x.prev_revenue }; }) }],
+            { unit: "円", title: d.site_label + " の月ごとの売上", desc: "今年と前年同月の売上の推移" }), {
+            source: d.source || d.basis, at: d.generated_at,
+            legend: [{ mark: "●", label: "今年（実線）" }, { mark: "▲", label: "前年同月（破線）" }],
+            note: "白抜きの●は終わっていない月（途中）。前年の値が無い月は線を引いていません。" }));
+        }
+        var det0 = el("details", { "class": "np-more" });
+        det0.appendChild(el("summary", { text: "月ごとの表を開く（最新の月が上）" }));
+        tr.appendChild(det0);
         // **最新の月を上に**（2026-10-02 十文字さん）
-        tr.appendChild(table(["月", "売上", "", "前年同月", "前年比"], d.trend.slice().reverse().map(function (x) {
+        det0.appendChild(table(["月", "売上", "", "前年同月", "前年比"], d.trend.slice().reverse().map(function (x) {
           return el("tr", null, [el("td", { text: x.month + (x.complete ? "" : "（途中）") }),
             el("td", { "class": "np-num", text: yen(x.revenue) }),
             el("td", null, [shareBar(maxv && x.revenue !== null ? x.revenue / maxv * 100 : null)]),
@@ -3852,14 +4504,21 @@
             el("td", { "class": "np-num", text: x.complete && x.revenue !== null && x.prev_revenue
               ? yoy((x.revenue - x.prev_revenue) / x.prev_revenue * 100) : "—" })]);
         })));
-        tr.appendChild(el("p", { "class": "np-note", text: "棒は表の中の最大の月を100としています。いま見られるのは " + d.months.length + " か月分です（Auto GROWTH の月次集計がある月）。" }));
+        det0.appendChild(el("p", { "class": "np-note", text: "棒は表の中の最大の月を100としています。いま見られるのは " + d.months.length + " か月分です。" }));
         b.appendChild(tr);
 
         // 全体のときだけ: 店別
         if (d.stores) {
           var sc = el("div", { "class": "np-card" });
           sc.appendChild(el("h2", { text: "店別" }));
-          sc.appendChild(table(["店", "売上", "構成比", "前年同月", "前年比"], d.stores.map(function (x) {
+          sc.appendChild(srcTag(d.source || d.basis, d.generated_at, "店のタブの数字（売上フィード）とは出どころが違うため、前年比が合わないことがあります"));
+          sc.appendChild(hbars(d.stores.map(function (x) {
+            return { label: x.store, value: x.revenue, valueText: yen(x.revenue), note: "前年比 " + yoy(x.yoy) };
+          }), { label: "店別の売上" }));
+          var det1 = el("details", { "class": "np-more" });
+          det1.appendChild(el("summary", { text: "店別の表を開く" }));
+          sc.appendChild(det1);
+          det1.appendChild(table(["店", "売上", "構成比", "前年同月", "前年比"], d.stores.map(function (x) {
             return el("tr", null, [el("td", { text: x.store }), el("td", { "class": "np-num", text: yen(x.revenue) }),
               el("td", null, [shareBar(x.share)]), el("td", { "class": "np-num", text: yen(x.prev_revenue) }),
               el("td", { "class": "np-num", text: yoy(x.yoy) })]);
@@ -3916,8 +4575,8 @@
             nc2.appendChild(table(["項目", "値"], [
               el("tr", null, [el("th", { text: "新商品の本数（発売から1年以内）" }), el("td", { text: n.count + " 本" + (flows ? "（" + flows + "）" : "") })]),
               el("tr", null, [el("th", { text: "売上として数える案件" }), el("td", { text: n.counted + " 件" })]),
-              el("tr", null, [el("th", { text: "全額で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["全額"]) })]),
-              el("tr", null, [el("th", { text: "増分で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["増分"]) })]),
+              el("tr", null, [el("th", { text: "全額で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["全額"], "対象なし（全額で数える案件 0 件）") })]),
+              el("tr", null, [el("th", { text: "増分で数える分" }), el("td", { "class": "np-num", text: yen(n.totals["増分"], "対象なし（増分で数える案件 0 件）") })]),
               el("tr", null, [el("th", { text: "未計測・方式未選択" }), el("td", { text: n.totals["未計測"] + " 件・" + n.totals["方式未選択"] + " 件" })])
             ]));
             if (n.rows.length) nc2.appendChild(table(["案件", "発売日", "方式", "金額", "備考"], n.rows.map(function (r) {
@@ -4564,6 +5223,10 @@
           el("td", { "class": "np-num", text: ds.zero + " 件（" + Math.round(ds.zero_rate * 1000) / 10 + "%）" }),
           el("td", { "class": "np-num", text: "上位 " + ds.top80 + " 商品" })])]));
         dc.appendChild(el("p", { "class": "np-sub", text: "売れ方は一部の商品に偏っています。平均で目標を置くと、ほとんどの商品が届かない分布です。最近発売して12か月そろわない " + ds.incomplete + " 商品は入れていません。" }));
+        // 1商品あたりの幅（真ん中の半分＝下位25%〜上位25%・真ん中の線）。最大は文字で（帯に入れると他が潰れる）。平均は描かない
+        dc.appendChild(chartCard("1商品の発売から12か月の売上（真ん中の半分と中央値）", ranges([
+          { label: "1商品", lo: ds.p25, mid: ds.median, hi: ds.p75 }], { unit: "円", title: "過去の新商品の売上の幅" }), {
+          lead: "中央値 " + yen(ds.median) + "・最大 " + yen(ds.max) + "・0円 " + ds.zero + " 件・上位 " + ds.top80 + " 商品で売上の8割" }));
       }
       b.appendChild(dc);
 
@@ -4571,6 +5234,14 @@
       var sc = el("div", { "class": "np-card" });
       sc.appendChild(el("h2", { text: "本数ごとの見込み" }));
       sc.appendChild(el("p", { "class": "np-sub", text: d.method + (d.scenarios[0] && d.scenarios[0].mix && d.scenarios[0].mix.note ? "　" + d.scenarios[0].mix.note + "。単価帯は、過去の表に単価が無いので出していません。" : "") }));
+      if (d.scenarios.some(function (x) { return x.p50 !== undefined; })) {
+        sc.appendChild(chartCard("本数ごとの年間売上の見込み（下振れ〜上振れの帯・太線が真ん中）", ranges(d.scenarios.map(function (x) {
+          return { label: x.n + " 本", lo: x.p10, mid: x.p50, hi: x.p90,
+            right: d.target_yen && x.reach_rate !== undefined ? "届く見込み " + x.reach_rate + "%" : null };
+        }), { unit: "円", title: "本数ごとの年間売上の見込み",
+          target: d.target_yen ? { x: d.target_yen, label: "目標 " + fmtShort(d.target_yen, "円") } : null }), {
+          note: "帯は下振れ（10%）〜上振れ（90%）。縦の破線が目標です。数字は下の表にもあります。" }));
+      }
       var head = ["年間の本数", "構成（うちわ以外／うちわ）", "年間売上の見込み（下振れ／真ん中／上振れ）", "0円見込み"];
       if (d.target_yen) head = head.concat(["目標に届く見込み", "1本あたりに要る売上"]);
       head = head.concat(["工数と枠", ""]);

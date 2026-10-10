@@ -753,9 +753,21 @@ def listing(args: dict | None = None) -> dict:
                        "feasibility_factor": sc["feasibility_factor"]}
                       if sc else None),
         })
+    # **絞り込み後の全件で数える**（表は上限まで。グラフは表示中の行で数えない・2026-10-09 点検 §6 アイデア一覧）
+    def _grp(expr, extra=""):
+        return [{"key": r[0], "n": r[1]} for r in store.q(
+            f"SELECT {expr} AS k, COUNT(*) FROM idea i LEFT JOIN theme t ON t.id=i.theme_id {extra} WHERE " + w
+            + " GROUP BY k ORDER BY COUNT(*) DESC", params)]
+    summary = {"by_stage": {x["key"]: x["n"] for x in _grp("i.stage")},
+               "by_theme": [{"label": x["key"] or "—", "n": x["n"]} for x in _grp("t.label")],
+               "origin_unknown": store.val("SELECT COUNT(*) FROM idea i WHERE " + w + " AND i.origin IS NULL", params, 0)}
+    if version:
+        summary["by_rank"] = {r[0] or "未採点": r[1] for r in store.q(
+            "SELECT s.rank, COUNT(*) FROM idea i LEFT JOIN idea_score s ON s.idea_id=i.id AND s.rubric_version=? WHERE "
+            + w + " GROUP BY s.rank", [version] + params)}
     return {
         "rows": rows, "total": total_n, "shown": len(rows), "limit": limit,
-        "rubric": version,
+        "rubric": version, "summary": summary,
         "filters": {
             "stage": STAGES,
             "rank": RANKS,

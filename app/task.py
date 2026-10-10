@@ -209,7 +209,7 @@ def load_by_month_role() -> dict:
     rs = store.q(
         "SELECT substr(COALESCE(t.due_on, t.start_on),1,7) AS m, "
         "t.role AS role, r.label AS role_label, r.external AS ext, r.sort AS sort, "
-        "SUM(COALESCE(t.hours,0)) AS h, COUNT(*) AS n, "
+        "SUM(COALESCE(t.hours,0)) AS h, COUNT(*) AS n, SUM(t.hours IS NULL) AS hu, "
         # **実作業と予備を1つの数にしない**（F-5-7 ／ 2026-09-23）
         "SUM(CASE WHEN t.kind='予備' THEN COALESCE(t.hours,0) ELSE 0 END) AS rh "
         "FROM task t LEFT JOIN role r ON r.code=t.role "
@@ -219,7 +219,7 @@ def load_by_month_role() -> dict:
     rs2 = store.q(
         "SELECT substr(COALESCE(w.due_on, w.start_on),1,7) AS m, "
         "w.role AS role, r.label AS role_label, r.external AS ext, r.sort AS sort, "
-        "SUM(COALESCE(w.hours,0)) AS h, COUNT(*) AS n, 0 AS rh "
+        "SUM(COALESCE(w.hours,0)) AS h, COUNT(*) AS n, SUM(w.hours IS NULL) AS hu, 0 AS rh "
         "FROM work_item w LEFT JOIN role r ON r.code=w.role "
         "WHERE COALESCE(w.due_on, w.start_on) IS NOT NULL "
         "AND w.status NOT IN ('完了','対象外') "
@@ -231,12 +231,15 @@ def load_by_month_role() -> dict:
         row = next((x for x in m[bucket] if x["role"] == r["role"]), None)
         if row is None:
             row = {"role": r["role"], "role_label": r["role_label"] or "—",
-                   "hours": 0.0, "reserve_hours": 0.0, "n": 0,
+                   "hours": 0.0, "reserve_hours": 0.0, "n": 0, "hours_unknown_n": 0,
                    "sort": r["sort"] or 99}
             m[bucket].append(row)
         row["hours"] += float(r["h"] or 0)
         row["reserve_hours"] += float(r["rh"] or 0)
         row["n"] += int(r["n"] or 0)
+        # **時間の空いた行は 0h として合計に入っている。**何件あるかを別に持ち、画面で「合計に入っていない」と出す
+        # （2026-10-09 app-ui 点検 1-3。案件外の仕事 2026-06〜08 は全行が空なのに「0h」と出ていた）
+        row["hours_unknown_n"] += int(r["hu"] or 0)
     for m in months.values():
         for b in ("own", "external"):
             m[b].sort(key=lambda x: x["sort"])
@@ -317,6 +320,85 @@ def template_totals() -> dict:
 
 
 # ── ダッシュボード（§10-2 ①）────────────────────────────
+def _pipeline(waiting_all=None, launched_no_gate: int = 0) -> dict:
+    """アイデア → 年間プランの枠 → 案件 → 発売。**割合は出さない**（つながりが記録されていないため・点検 §4）。"""
+    from . import gate, idea as _idea, plan as _plan, project as _p, simulate
+    ideas = {r[0]: r[1] for r in store.q("SELECT stage, COUNT(*) FROM idea GROUP BY stage")}
+    fy = simulate.current_fy()
+    v = _plan.current(fy)
+    slots_n = store.val("SELECT COUNT(*) FROM plan_slot WHERE version_id=?", (v["id"],), 0) if v else None
+    conv = store.val("SELECT COUNT(*) FROM plan_slot WHERE version_id=? AND project_id IS NOT NULL", (v["id"],), 0) if v else None
+    by_stage = {r[0]: r[1] for r in store.q("SELECT stage, COUNT(*) FROM project GROUP BY stage")}
+    gates: dict[str, dict] = {}
+    for g in gate.defs():
+        gates[g["gate"]] = {"gate": g["gate"], "name": g["name"], "n": 0}
+    for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了','発売済','追跡中')"):
+        g = gate.next_gate(dict(r))
+        if g and g["gate"] in gates:
+            gates[g["gate"]]["n"] += 1
+    launched = sum(by_stage.get(k, 0) for k in ("発売済", "追跡中", "評価完了"))
+    active = sum(n for k, n in by_stage.items() if k not in ("発売済", "追跡中", "評価完了", "中止"))
+    return {
+        "ideas": {"total": sum(ideas.values()), "by_stage": {k: ideas.get(k, 0) for k in _idea.STAGES}},
+        "slots": {"fy": fy, "version": v["label"] if v else None, "state": v["state"] if v else None,
+                  "n": slots_n, "converted": conv},
+        "projects": {"total": sum(by_stage.values()), "active": active, "launched": launched,
+                     "by_stage": by_stage, "by_next_gate": list(gates.values()), "launched_no_gate": launched_no_gate},
+        "links": {"from_idea": store.val("SELECT COUNT(*) FROM project WHERE idea_id IS NOT NULL", (), 0),
+                  "projects": sum(by_stage.values()), "slot_converted": conv, "slots": slots_n},
+    }
+
+
+def _launch_outlook() -> dict:
+    """発売の見通し: 年度の12か月の枠（発売本数に数えるもの・数えないもの・案件化）と、案件の発売予定日の入り具合。"""
+    from . import idea as _idea, plan as _plan, simulate
+    fy = simulate.current_fy()
+    v = _plan.current(fy)
+    det = _plan.detail(v["id"]) if v else None
+    by = {m["month"]: m for m in (det["months"] if det else [])}
+    months = []
+    for k in range(12):
+        y, mo = fy + (4 + k) // 12, (4 + k) % 12 + 1
+        ym = f"{y:04d}-{mo:02d}"
+        m = by.get(ym)
+        months.append({"month": ym, "launch_n": m["launch_n"] if m else 0, "other_n": (m["n"] - m["launch_n"]) if m else 0,
+                       "converted_n": m["converted_n"] if m else 0, "slots": m["n"] if m else 0,
+                       "effort": m["effort"] if m else None})
+    # 目標の本数は、その版を判定する値にそろえる（承認済みなら承認時の値・ADR-069）。年間プランの画面と食い違わないように
+    tgt = None
+    if v is not None:
+        b = _plan._basis(v["id"])
+        if b.get("snapshot") and b["snapshot"].get("plan.monthly_launch_slots") not in (None, ""):
+            tgt = float(b["snapshot"]["plan.monthly_launch_slots"])
+    if tgt is None:
+        tgt = _plan._num("plan.monthly_launch_slots")
+    dated = store.val("SELECT COUNT(*) FROM project WHERE launch_date IS NOT NULL AND stage NOT IN ('中止')", (), 0)
+    undated = store.val("SELECT COUNT(*) FROM project WHERE launch_date IS NULL AND stage NOT IN ('中止')", (), 0)
+    return {"fy": fy, "months": months, "target_per_month": tgt,
+            "version": v["label"] if v else None, "state": v["state"] if v else None,
+            "projects_dated": dated, "projects_undated": undated,
+            "concept_stock": _idea.concept_stock(), "today_month": store.today().strftime("%Y-%m"),
+            "source": f"年間プラン {fy}年度（{v['label'] if v else '版なし'}・{v['state'] if v else '—'}）"}
+
+
+def _newproduct_sales() -> dict:
+    """新商品（発売から12か月以内）の月別売上と発売本数。**HUB に送る値と同じ関数から**（hubmetrics.series）。"""
+    from . import hubmetrics
+    sr = hubmetrics.series()
+    end = sr["data_end"]
+    last = hubmetrics._add(sr["this_month"], -1)
+    out = []
+    if end:
+        for ym in hubmetrics._months(hubmetrics.REVENUE_FROM, max(end, last)):
+            ok = ym <= end
+            out.append({"month": ym, "revenue": round(sr["rev"].get(ym, 0.0)) if ok else None,
+                        "launches": sr["launches"].get(ym, 0) if ok else None})
+    app_counted = store.val("SELECT COUNT(*) FROM project WHERE revenue_counted=1", (), 0)
+    return {"months": out, "data_end": end, "tax": "税込",
+            "source": "「新商品売上状況」の表（発売から12か月以内の新商品・税込の商品代）",
+            "app_counted": app_counted}
+
+
 def dashboard(user_id: str) -> dict:
     """**1段目は「いま詰まっているもの」。**
 
@@ -335,8 +417,14 @@ def dashboard(user_id: str) -> dict:
     # 自分のゲート待ち。**人ごとに出さないと「誰かがやる」になる**（画面設計 3-1）
     my_roles = set(gate.roles_of(user_id)) if user_id else set()
     waiting, by_role = [], {}
+    launched_no_gate = []
     for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了')"):
         p = dict(r)
+        # 発売済なのにアプリでゲートを1つも通していない（移行した案件）は、起票の判定待ちに数えない（2026-10-09 点検 1-4）
+        if p["stage"] in ("発売済", "追跡中") and not store.val(
+                "SELECT COUNT(*) FROM gate_review WHERE project_id=?", (p["id"],), 0):
+            launched_no_gate.append(p["id"])
+            continue
         g = gate.next_gate(p)
         if not g or g["state"] not in ("判定待ち", "差戻し"):
             continue
@@ -372,10 +460,25 @@ def dashboard(user_id: str) -> dict:
                              "role_label": role_label.get(r["role"], r["role"] or "—"),
                              "by": "担当" if r["assignee"] == user_id else "ロール"})
 
+    # 自分＝担当＋自分の業務ロール。**「自分のやること」と同じ数え方で数える**（2026-10-09 点検 1-4。下のカードは担当だけで 0 件と出ていた）
+    my_counts = {"overdue": None, "today": None, "next7": None}
+    if user_id:
+        cond = ["assignee=?"] + ([f"role IN ({','.join('?' * len(my_roles))})"] if my_roles else [])
+        cp = [user_id] + sorted(my_roles)
+        base = f"status NOT IN ('完了','対象外') AND ({' OR '.join(cond)})"
+        my_counts = {
+            "overdue": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on < ?", cp + [t.isoformat()], 0),
+            "today": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on = ?", cp + [t.isoformat()], 0),
+            "next7": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on > ? AND due_on <= ?",
+                               cp + [t.isoformat(), (t + _dt.timedelta(days=7)).isoformat()], 0)}
     return {
         "today": t.isoformat(),
+        "counts": c,
+        "pipeline": _pipeline(waiting_all=None, launched_no_gate=len(launched_no_gate)),
+        "launch_outlook": _launch_outlook(),
+        "newproduct_sales": _newproduct_sales(),
         "my": {"tasks": my_tasks, "tasks_n": my_n, "gates": waiting[:10], "gates_n": len(waiting),
-               "roles": [role_label.get(x, x) for x in sorted(my_roles)]},
+               "counts": my_counts, "roles": [role_label.get(x, x) for x in sorted(my_roles)]},
         # ── 1段目: いま詰まっているもの ──
         "stuck": {
             "overdue": {
@@ -409,6 +512,8 @@ def dashboard(user_id: str) -> dict:
         ],
         "upcoming": _p.upcoming(4),
         "attention": {
+            "tasks_total": store.val("SELECT COUNT(*) FROM task", (), 0),
+            "projects_total": store.val("SELECT COUNT(*) FROM project WHERE stage != '中止'", (), 0),
             "no_due": c["none"],
             "no_hours": store.val(
                 "SELECT COUNT(*) FROM task WHERE hours IS NULL", (), 0),

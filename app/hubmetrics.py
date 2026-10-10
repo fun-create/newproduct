@@ -55,11 +55,10 @@ def _months(a: str, b: str) -> list[str]:
     return out
 
 
-def build(today: dt.date | None = None) -> dict:
-    """送る点を作る（送らない）。{"rows": [...], "notes": [...]}"""
+def series(today: dt.date | None = None) -> dict:
+    """新商品の月別売上と発売本数（「新商品売上状況」の表から）。**HUB に送る値とダッシュボードの値はここ1か所で作る。**"""
     today = today or store.today()
     this_month = today.strftime("%Y-%m")
-    rows, notes = [], []
     pp = store.rows(store.q("SELECT launch_date, months_json FROM past_product WHERE launch_date IS NOT NULL"))
     rev: dict[str, float] = {}
     for p in pp:
@@ -70,13 +69,22 @@ def build(today: dt.date | None = None) -> dict:
     # 表は数字の無い先の月まで 0 で埋めてあるので、商品ごとの月数から出すと先へ延びて 0 を送ってしまう（2026-10-09 に気づいた）
     filled = [ym for ym, v in rev.items() if v > 0]
     data_end = min(max(filled), _add(this_month, -1)) if filled else None
+    launches: dict[str, int] = {}
+    for p in pp:
+        launches[p["launch_date"][:7]] = launches.get(p["launch_date"][:7], 0) + 1
+    return {"rev": rev, "launches": launches, "data_end": data_end, "this_month": this_month}
+
+
+def build(today: dt.date | None = None) -> dict:
+    """送る点を作る（送らない）。{"rows": [...], "notes": [...]}"""
+    today = today or store.today()
+    rows, notes = [], []
+    sr = series(today)
+    this_month, rev, launches, data_end = sr["this_month"], sr["rev"], sr["launches"], sr["data_end"]
     if data_end:
         for ym in _months(REVENUE_FROM, data_end):
             rows.append({"metric": "revenue_newproduct", "dims": DIMS_MONTH, "captured_at": _month_end(ym),
                          "value": round(rev.get(ym, 0.0))})
-        launches: dict[str, int] = {}
-        for p in pp:
-            launches[p["launch_date"][:7]] = launches.get(p["launch_date"][:7], 0) + 1
         for ym in _months(LAUNCH_FROM, data_end):
             rows.append({"metric": "launches", "dims": DIMS_MONTH, "captured_at": _month_end(ym),
                          "value": launches.get(ym, 0)})
