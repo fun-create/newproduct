@@ -200,6 +200,19 @@ cron の正本は `/etc/cron.d/`。配る前に必ず `diff -u` で突き合わ�
 
 ---
 
+## 着手中: FR-121 カレンダーへタスクを送る（2026-10-13 調べ終わり・実装はこれから）
+
+十文字さんの決定（10-13）: **予定ではなくタスクとして送る**／範囲は**期限と担当の入ったタスク全部**／受け口は Calendar のコードを読んで確かめる（読んだ・書いていない）。
+
+調べて分かったこと（/opt/calfc・読むだけ）:
+- 受け口は既にある: `POST /api/svc/task/upsert`（`ext_ref` で冪等・`title/detail/due_on/status(todo|done)/url`・`members`＝member_id の配列・作るときは `X-Actor`＝共通ログインIDから担当を引く。引けなければ 422）、`POST /api/svc/task/delete`、`GET /api/svc/members`（member_id と user_id の対応）
+- **NEW PRODUCT の鍵（`config/calfc_token`）は `/api/svc/holidays` だけ**（`config/service_tokens.json` の `paths` は完全一致）。→ Calendar 側で `members`・`task/upsert`・`task/delete` を足してもらう依頼が要る
+- Calendar は外から来たタスクの `origin` を **"lpscope" 固定**で作る（`store.upsert_task_ext(origin="lpscope")`）。完了にすると LP SCOPE の `POST /api/svc/todo/done` へ先に伝えに行き、失敗すると 502 で完了にできない。→ NEW PRODUCT 由来は `origin="newproduct"` にし、完了の伝え先を NEW PRODUCT の口（新設 `POST /api/svc/task/done`・専用の鍵）にしてもらう依頼が要る
+- Calendar のメンバーの user_id は NEW PRODUCT の利用者13名と全員一致（送り先に困らない）
+- **本番のタスクは担当（assignee）が全件空**（期限ありの未完了 156 件・案件外 20 件）。担当を入れる画面が案件のタスクに無い（案件外の起票フォームにだけある）。→ 送る前に「担当を入れる」操作（`POST /api/tasks/task/<id>/assign`・カルテのタスク表）が要る
+
+作る予定の形: `app/calfc_tasks.py`（`desired()`＝期限と担当のあるタスク・案件外、`ext_ref=newproduct:task:<id>`／`newproduct:work:<id>`、送った内容を `calfc_task_sent` に残して差分だけ送る、無くなったものは delete）／タスクの書き込みの後に裏で同期／設定に状態と「送り直す」／完了の受け口 `POST /api/svc/task/done`。依頼書は fun-create-ec-agents `docs/product-dev/contracts/` に（未作成・送るかは十文字さんに確認）。
+
 ## 次にやる3件
 
 1. FR-168 自動化依頼から標準タスクのひな形の下書きへ入れる導線
