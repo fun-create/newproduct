@@ -65,6 +65,7 @@ def compute(project_id: str, doc: dict | None = None) -> dict:
     if not days:
         return {"ok": False, "why": f"今日から発売日（{p['launch_date']}）の前日までに営業日がありません", "rows": []}
     hs = [max(float(t["hours"] or 0), 0.0) for t in tasks]
+    unknown = sum(1 for t in tasks if t["hours"] is None)        # 工数が空の行。幅 0（前のタスクと同じ日）になる
     total = sum(hs)
     if total <= 0:
         return {"ok": False, "why": "標準工数が全部空なので、比で割れません", "rows": []}
@@ -74,9 +75,10 @@ def compute(project_id: str, doc: dict | None = None) -> dict:
         cum += h
         b = max(a, min(int(math.ceil(cum / total * n)) - 1, n - 1))
         rows.append({"id": t["id"], "seq": t["seq"], "plan_start": days[a], "plan_due": days[b]})
-    return {"ok": True, "why": "", "rows": rows, "days": n, "from": days[0], "to": days[-1],
+    return {"ok": True, "why": "", "rows": rows, "days": n, "from": days[0], "to": days[-1], "hours_unknown": unknown,
             "basis": f"今日から発売日（{p['launch_date']}）の前日までの営業日 {n} 日を、タスクの順に標準工数の比で割った目安"
-                     "（営業日はカレンダーアプリの会社休業日から）"}
+                     "（営業日はカレンダーアプリの会社休業日から）"
+                     + (f"。工数が空の {unknown} 件は幅を持たず、前のタスクと同じ日に置いています（0 時間とは限りません）" if unknown else "")}
 
 
 def refresh(project_id: str, user_id: str, doc: dict | None = None) -> dict:
@@ -91,7 +93,7 @@ def refresh(project_id: str, user_id: str, doc: dict | None = None) -> dict:
         if r["ok"]:
             c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
                       (project_id, now, user_id, f"タスクの目安を計算（{len(r['rows'])}件・営業日 {r['days']} 日）"))
-    return {k: r.get(k) for k in ("ok", "why", "days", "from", "to", "basis")} | {"n": len(r["rows"])}
+    return {k: r.get(k) for k in ("ok", "why", "days", "from", "to", "basis", "hours_unknown")} | {"n": len(r["rows"])}
 
 
 def adopt(project_id: str, user_id: str) -> dict:
@@ -113,5 +115,7 @@ def summary(project_id: str) -> dict:
     """画面に出す数。目安のあるタスク・まだ期限になっていないタスク。"""
     r = store.one("SELECT COUNT(*) AS n, SUM(plan_due IS NOT NULL) AS planned, "
                   "SUM(plan_due IS NOT NULL AND due_on IS NULL AND status NOT IN ('完了','対象外')) AS adoptable, "
+                  "SUM(plan_due IS NOT NULL AND hours IS NULL) AS hours_unknown, "
                   "MAX(plan_at) AS plan_at FROM task WHERE project_id=?", (project_id,))
-    return {"tasks": r["n"] or 0, "planned": r["planned"] or 0, "adoptable": r["adoptable"] or 0, "plan_at": r["plan_at"]}
+    return {"tasks": r["n"] or 0, "planned": r["planned"] or 0, "adoptable": r["adoptable"] or 0,
+            "hours_unknown": r["hours_unknown"] or 0, "plan_at": r["plan_at"]}

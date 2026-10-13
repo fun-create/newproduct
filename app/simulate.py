@@ -117,7 +117,10 @@ def place(n_releases: int, fy: int, effort_point: float | None) -> dict:
             over.append(m)
         rows.append({"month": m, "n": count[m], "cap": c["cap"], "holiday": c["holiday"], "effort": eff, "state": state})
     return {"months": rows, "unplaced": left, "over_months": over, "effort_min": lo, "effort_max": hi,
-            "note": cap["note"], "capacity": sum((c["cap"] or 0) for c in cap["months"].values())}
+            # 上限の分からない月（枠の設定が無い）があれば、年間の上限も分からない（0 で足さない・FR-144）
+            "capacity": (None if any(c["cap"] is None for c in cap["months"].values())
+                         else sum(c["cap"] for c in cap["months"].values())),
+            "capacity_unknown_months": sum(1 for c in cap["months"].values() if c["cap"] is None)}
 
 
 # 過去の表のチャネル → 経営管理の部門（config/departments.json のキー）。FR-133・ADR-074

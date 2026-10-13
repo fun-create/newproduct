@@ -585,6 +585,17 @@ def check_stage1_screens():
     ]:
         note(OK if s2 in js else NG, f"app.js に {why}", "" if s2 in js else s2)
 
+    # 偽物を本番の経路に流さない（FR-144・ADR-096）。偽物は tests/ とプレビューの写しだけ
+    import re as _re
+    hits = []
+    for p in list((BASE / "app").glob("*.py")) + [BASE / "server.py"] + list((BASE / "tools").glob("*.py")):
+        if _re.search(r"(?i)\b(fake|mock|dummy)\w*\b", p.read_text(encoding="utf-8")):
+            hits.append(p.name)
+    note(OK if not hits else NG, "app/・server.py・tools/ に偽物（fake／mock／dummy）の切替が無い",
+         "偽物は tests/ とプレビューの写しだけ（FR-144）" if not hits else "・".join(hits))
+    note(OK if "受注なし・いまのマスタの材料費" in js and "比べられない" in (BASE / "app" / "costcheck.py").read_text(encoding="utf-8") else NG,
+         "原価の突き合わせは、出どころと比べられない理由を語で出す（N-10）")
+
     css = (UI / "assets" / "np.css").read_text(encoding="utf-8")
     note(OK if "np-grid-2" in css else NG, "np.css に採点の2列組",
          "v1 と v2 を並べて見せる（F-1-10）")

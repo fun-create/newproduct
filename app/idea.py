@@ -614,22 +614,26 @@ def recompute_ranks(version: str = V2_VERSION) -> int:
     rows = store.rows(rs)
     if not rows:
         return 0
+    # **点の無い行は母数に入れない。**0 点として並べると、未採点が「最下位」に見える（N-10・FR-144）。
+    # 2026-10-13 まで common_score が NULL（v1 の移行分 874 件すべて）を 0 で並べ、全件が同じ百分位になっていた
     by_theme: dict[str, list[dict]] = {}
     for r in rows:
-        by_theme.setdefault(r["theme_id"] or "—", []).append(r)
+        if r["total"] is not None:
+            by_theme.setdefault(r["theme_id"] or "—", []).append(r)
     pct = {}
     for _, group in by_theme.items():
-        vals = [r["total"] or 0.0 for r in group]
-        p = _percentiles(vals)
+        p = _percentiles([r["total"] for r in group])
         for i, r in enumerate(group):
             pct[r["id"]] = p[i]
-    commons = [r["common_score"] or 0.0 for r in rows]
-    cp = _percentiles(commons)
-    for i, r in enumerate(rows):
+    scored = [r for r in rows if r["common_score"] is not None]
+    cpv = _percentiles([r["common_score"] for r in scored])
+    cp = {r["id"]: cpv[i] for i, r in enumerate(scored)}
+    for r in rows:
+        pv, cv = pct.get(r["id"]), cp.get(r["id"])
         store.ex("UPDATE idea_score SET percentile=?,common_percentile=?,rank=?,"
                  "rank_basis='percentile' WHERE id=?",
-                 (round(pct[r["id"]], 4), round(cp[i], 4),
-                  _rank_from_percentile(pct[r["id"]]), r["id"]))
+                 (None if pv is None else round(pv, 4), None if cv is None else round(cv, 4),
+                  None if pv is None else _rank_from_percentile(pv), r["id"]))
     store.conn().commit()
     return len(rows)
 

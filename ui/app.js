@@ -2909,7 +2909,8 @@
       text: "目安は、今日から発売日の前日までの営業日（カレンダーアプリの会社休業日を除く）を、タスクの順に標準工数の比で割ったものです。"
           + "期限ではありません。担当が確かめて「目安を期限にする」を押すと期限になります（期限が入っているタスクは変えません）。" }));
     box.appendChild(el("p", { "class": "np-sub",
-      text: sc.planned ? ("目安あり " + sc.planned + " 件（計算 " + sc.plan_at + "）／まだ期限になっていない " + sc.adoptable + " 件")
+      text: sc.planned ? ("目安あり " + sc.planned + " 件（計算 " + sc.plan_at + "）／まだ期限になっていない " + sc.adoptable + " 件"
+                          + (sc.hours_unknown ? "／工数が空の " + sc.hours_unknown + " 件は幅を持たず、前のタスクと同じ日に置いています（0 時間とは限りません）" : ""))
                        : "目安はまだありません。" }));
     if (!h.editable) return box;
     var msg = el("p", { "class": "np-note", role: "status" });

@@ -67,6 +67,9 @@ class Schedule(unittest.TestCase):
         self.assertEqual((t[1]["plan_start"], t[1]["plan_due"]), ("2026-11-02", "2026-11-02"))
         self.assertEqual(t[4]["plan_due"], "2026-11-11", "最後のタスクは発売前の最終営業日")
         self.assertEqual(t[3]["plan_start"], t[3]["plan_due"], "工数が空なら前と同じ日に置く")
+        self.assertEqual(r["hours_unknown"], 1, "工数が空の件数を返す（0 時間として黙って置かない・FR-144）")
+        self.assertIn("工数が空の 1 件", r["basis"])
+        self.assertEqual(self.m.summary(self.pid)["hours_unknown"], 1)
         self.assertIsNone(t[5]["plan_due"], "完了したタスクは割り当てない")
         for x in t.values():
             self.assertIsNone(x["due_on"], "目安は期限に入れない")
