@@ -120,6 +120,15 @@ def main() -> int:
         st, d = cl.get("/api/me")
         note(st == 200 and d["business_roles"] == ["admin"],
              "/api/me が業務ロールを返す", f"{st} {d}")
+        # ログインを保つ長さ（2026-10-13 全アプリをカレンダーと同じに）。既定は「ログアウトするまで」
+        note(d.get("session_keep") == "keep" and d.get("session_default") == "keep"
+             and [c[0] for c in d.get("session_choices", [])] == ["keep", "12h", "1d", "1w", "1m"],
+             "ログインを保つ長さの既定は「ログアウトするまで」・選択肢は5つ", str(d.get("session_choices")))
+        st, d = cl.post("/api/me/session-keep", {"keep": "99999"})
+        note(st == 400, "任意の秒数は受けない（一覧にある鍵だけ）", f"{st} {d}")
+        st, d = cl.post("/api/me/session-keep", {"keep": "12h"})
+        # e2e の利用者は台帳にいない差し込みなので断られる（本物の利用者で変えられることは tests/test_session_keep.py）
+        note(st == 400 and "ユーザー" in d.get("error", ""), "台帳にいない人のログイン保持は変えない", f"{st} {d}")
 
         st, d = cl.get("/api/meta")
         note(st == 200 and len(d["gates"]) == 7 and len(d["flow_types"]) == 7

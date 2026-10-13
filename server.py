@@ -42,6 +42,11 @@ sys.path.insert(0, str(BASE))
 
 import auth  # noqa: E402  （/opt/keiei/app/auth.py の複製。_upstream.json 参照）
 
+# ログインを保つ長さの既定は「ログアウトするまで」（2026-10-13 十文字さん決定・全アプリをカレンダーと同じに・
+# HUB decisions/2026-10.md）。**既定はアプリ側で上書きする**（auth.py は上流の写しなので直さない）。
+# 利用者は設定で 12時間・1日・1週間・1か月 に短くできる
+auth.SESSION_DEFAULT = "keep"
+
 from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
 from app import ai_draft as ai_draft_m  # noqa: E402
@@ -434,7 +439,20 @@ class H(BaseHTTPRequestHandler):
                 # 表示（ADR-057）。配色は共通部品、ほかはこのアプリの設定
                 "theme": auth.theme_of(user), "themes": [["auto", "端末に合わせる"], ["light", "ライト"], ["dark", "ダーク"]],
                 "prefs": prefs_m.get(uid), "pref_options": prefs_m.options(),
+                # ログインを保つ長さ。**選択肢は画面に書き写さない**（正は auth.SESSION_CHOICES）
+                "session_keep": auth.session_keep_of(user),
+                "session_choices": [[k, auth.SESSION_LABELS.get(k, k)] for k in auth.SESSION_CHOICES],
+                "session_default": auth.SESSION_DEFAULT,
             })
+        # ログインを保つ長さを変える。値は auth.SESSION_CHOICES の鍵だけ（任意の秒数を受けない）。
+        # **いまのログインにもすぐ効く**（auth.set_session_keep が生きているセッションも直す）。本人の設定なので誰でも変えられる
+        if parts == ["me", "session-keep"] and method == "POST":
+            d = self.body()
+            rec, err = auth.set_session_keep(uid, d.get("keep", ""))
+            if err:
+                return self.sendj(400, {"error": err})
+            store.audit(uid, "me.session_keep", uid, {"keep": rec.get("session_keep", "")}, ip)
+            return self.sendj(200, {"ok": True, "session_keep": rec.get("session_keep")})
         # 自分の表示を変える。**本人の見た目だけ**なので誰でも変えられる（管理者専用にしない）
         if parts == ["me", "display"] and method == "POST":
             d = self.body()

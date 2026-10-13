@@ -1,10 +1,10 @@
 # ══════════════════════════════════════════════════════════
-# 出どころ: keiei /opt/keiei/app/auth.py（2026-09-28 取得・0cfd760）
-#           さらにその上流は lpscope /opt/lpscope/reports/auth.py（156fd16）
+# 出どころ: keiei /opt/keiei/app/auth.py（2026-10-13 取得・e28ef46）
+#           さらにその上流は lpscope /opt/lpscope/reports/auth.py（10f74eb）
 # **上流をコピーしたもの**。直接編集すると、次に上流を取り込むときに
 # 食い違いが生じる。直したいときは上流を直してから持ってくる。
 # 複製元の指紋は _upstream.json にある。
-# 変更点: 置き場（CONFIG）・SESSION_COOKIE・CSRF_HEADER の3つだけ（下記）
+# 変更点: 置き場（CONFIG）・SESSION_COOKIE・CSRF_HEADER の3つだけ（下記）。既定の長さは server.py で上書き
 # ══════════════════════════════════════════════════════════
 #!/usr/bin/env python3
 """
@@ -79,7 +79,26 @@ THEME_DEFAULT = "auto"
 ROLE_LABEL = dict(ROLES)
 
 SESSION_COOKIE = "newproduct_sid"
-SESSION_TTL = 12 * 3600        # 12時間（業務日1日ぶん）。無操作で切れる
+SESSION_TTL = 12 * 3600        # 選ばれていないときの既定（無操作で切れる）
+
+# ログインを保つ長さ（秒）。**任意の秒数を受けない** —— 画面から来た数値をそのまま
+# 使うと、何年でも切れないセッションを作れてしまう。`keep` の 0 は「ログアウトするまで」。
+# 2026-10-13 全アプリをカレンダーと同じにした（十文字さん決定・HUB decisions/2026-10.md）。
+# **既定はアプリ側で上書きする**（`server.py`）。ここは下流（BUSINESS ANALYSIS・NEW PRODUCT・
+# カレンダー）へ写される部品なので、扱う情報の重さで決まる既定をここに持たない。
+SESSION_CHOICES = {"keep": 0, "12h": 12 * 3600, "1d": 24 * 3600,
+                   "1w": 7 * 24 * 3600, "1m": 30 * 24 * 3600}
+SESSION_LABELS = {"keep": "ログアウトするまで", "12h": "12時間", "1d": "1日",
+                  "1w": "1週間", "1m": "1か月"}
+SESSION_DEFAULT = "12h"
+
+# Cookie は長めに置き、**期限はサーバー側で決める**。Cookie の Max-Age を切れの根拠に
+# すると「最後の操作から」ではなく「ログインしてから」で切れる（12時間だと朝入って夜に切れる）。
+# 期限切れの sid が入った Cookie は、サーバーが知らないので無害。
+COOKIE_MAX_AGE = 400 * 24 * 3600     # ブラウザ側の上限（Chrome は400日で頭打ち）
+# 延長を書き出す間隔。毎回書くと要求ごとにファイル更新が走り、書かないと再起動で延長が消える
+PERSIST_EVERY = 300
+_LAST_PERSIST = 0.0
 CSRF_HEADER = "X-NEWPRODUCT-CSRF"
 
 # scrypt のパラメータ。**レコードごとに保存する**ので、後で上げても古い記録を検証できる。
@@ -550,6 +569,42 @@ def set_theme(user_id, theme):
     return _public(rec), ""
 
 
+def session_keep_of(rec):
+    """その利用者の「ログインを保つ長さ」の鍵。知らない値は既定へ倒す。"""
+    k = (rec or {}).get("session_keep") or SESSION_DEFAULT
+    return k if k in SESSION_CHOICES else SESSION_DEFAULT
+
+
+def set_session_keep(user_id, keep):
+    """ログインを保つ長さ。**本人の使い勝手だけ**を変える設定で、権限にも他人にも
+    影響しない（表示と同じく管理者専用にしない）。値は一覧にあるものに限る。
+
+    **いま生きているセッションにも即座に効かせる。** 次に入り直すまで効かないと、
+    短くしたつもりの人が長いまま使い続けることになる。
+    """
+    if keep not in SESSION_CHOICES:
+        return None, "ログインを保つ長さの指定が不正です"
+    uid = norm_user_id(user_id)
+    with _LOCK:
+        try:
+            doc = _read(for_write=True)
+        except LedgerCorrupt as e:
+            return None, f"利用者台帳が読めません（{e}）"
+        rec = next((u for u in doc["users"] if u.get("user_id") == uid), None)
+        if not rec:
+            return None, "ユーザーが見つかりません"
+        rec["session_keep"] = keep
+        _write(doc)
+    ttl = SESSION_CHOICES[keep]
+    now = time.time()
+    for s in _SESSIONS.values():
+        if s.get("user_id") == uid:
+            s["ttl"] = ttl
+            s["expires"] = 0 if ttl == 0 else now + ttl
+    _persist()
+    return _public(rec), ""
+
+
 def _public(rec):
     """画面へ返す形。**password は絶対に含めない**。
 
@@ -573,6 +628,9 @@ def _public(rec):
             "last_login", "must_change", "updated_at", "updated_by",
             "test", "loopback_only", "expires_on")}
     out["theme"] = theme_of(rec)
+    # **ここに載せないと画面が既定を選び直す。** 未設定の人は
+    # `session_keep_of` がアプリの既定へ倒すので、空にはならない
+    out["session_keep"] = session_keep_of(rec)
     return out
 
 
@@ -1082,10 +1140,16 @@ def _load_sessions():
         return
     now = time.time()
     for r in rows if isinstance(rows, list) else []:
-        if isinstance(r, dict) and r.get("h") and (r.get("expires") or 0) > now:
-            _SESSIONS[r["h"]] = {"h": r["h"], "user_id": r.get("user_id", ""),
-                                 "expires": r["expires"], "ip": r.get("ip", ""),
-                                 "created": r.get("created", now)}
+        if not (isinstance(r, dict) and r.get("h")):
+            continue
+        exp = r.get("expires") or 0
+        # **0 は「期限なし」。** `> now` だけで判定すると、期限なしのセッションが
+        # 再起動のたびに捨てられ、結局入り直すことになる
+        if exp and exp <= now:
+            continue
+        _SESSIONS[r["h"]] = {"h": r["h"], "user_id": r.get("user_id", ""),
+                             "expires": exp, "ttl": r.get("ttl", SESSION_TTL),
+                             "ip": r.get("ip", ""), "created": r.get("created", now)}
 
 
 def _persist():
@@ -1102,8 +1166,12 @@ def _persist():
 def _new_session(uid, ip=""):
     sid = secrets.token_urlsafe(32)
     h = _digest(sid)
-    _SESSIONS[h] = {"h": h, "user_id": uid, "expires": time.time() + SESSION_TTL,
-                    "ip": ip, "created": time.time()}
+    # **長さは利用者の設定から取る**（未設定ならアプリの既定）
+    ttl = SESSION_CHOICES[session_keep_of(get(uid) or {})]
+    now = time.time()
+    _SESSIONS[h] = {"h": h, "user_id": uid, "ttl": ttl,
+                    "expires": 0 if ttl == 0 else now + ttl,
+                    "ip": ip, "created": now}
     _sweep()
     _persist()
     return {"sid": sid, "h": h, "user_id": uid}
@@ -1111,7 +1179,9 @@ def _new_session(uid, ip=""):
 
 def _sweep():
     now = time.time()
-    for h in [k for k, v in _SESSIONS.items() if v["expires"] < now]:
+    # **期限なし（0）は掃かない**
+    for h in [k for k, v in _SESSIONS.items()
+              if (v.get("expires") or 0) and v["expires"] < now]:
         _SESSIONS.pop(h, None)
 
 
@@ -1121,7 +1191,9 @@ def session_of(sid):
         return None, None
     h = _digest(sid)
     s = _SESSIONS.get(h)
-    if not s or s["expires"] < time.time():
+    now = time.time()
+    exp = (s or {}).get("expires") or 0
+    if not s or (exp and exp < now):
         if s:
             _SESSIONS.pop(h, None)
             _persist()
@@ -1156,7 +1228,15 @@ def session_of(sid):
         on, g = False, None
     if on and g and u.get("role") != g:
         u = dict(u, role=g)
-    s["expires"] = time.time() + SESSION_TTL      # 操作のたびに延長（無操作で切れる）
+    ttl = s.get("ttl", SESSION_TTL)
+    if ttl:
+        s["expires"] = now + ttl          # 操作のたびに延長（無操作で切れる）
+        # **たまに書き出す。** 毎回書くと要求ごとにファイル更新が走る。
+        # 書かないと、再起動で延長ぶんが失われて早く切れる
+        global _LAST_PERSIST
+        if now - _LAST_PERSIST > PERSIST_EVERY:
+            _LAST_PERSIST = now
+            _persist()
     return s, _public(u)
 
 
@@ -1261,7 +1341,7 @@ def active_sessions():
             for v in out.values()]
 
 
-def cookie_header(sid, secure, max_age=SESSION_TTL):
+def cookie_header(sid, secure, max_age=COOKIE_MAX_AGE):
     """Set-Cookie。**Secure は HTTPS のときだけ**（httpで付けると保存されずログインできない）。"""
     parts = [f"{SESSION_COOKIE}={sid}", "Path=/", "HttpOnly", "SameSite=Strict",
              f"Max-Age={int(max_age)}"]

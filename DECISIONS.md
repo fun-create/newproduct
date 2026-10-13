@@ -1789,3 +1789,15 @@ app-ui に全ページを点検してもらい（`docs/ui-review-2026-10-09.md`�
 - **新商品の売上は HUB に送る値と同じ関数**（`hubmetrics.series`）から作る（画面と HUB がずれないように）
 - 375px で全ページ横にはみ出さないことをプレビュー（本番 DB の読み取りの写し・確認後に削除）で確かめた。長い URL が折り返されず画面ごと広がっていたのを直した
 
+## ADR-094 — ログインを保つ長さをカレンダーと同じにした（FR-191・2026-10-13）
+
+十文字さんの決定（HUB `decisions/2026-10.md` の 2026-10-13）「全アプリをカレンダーと同じに」。オーケストレーションから代送。
+- `auth.py` は上流 keiei（`/opt/keiei/app/auth.py`・e28ef46・さらに上流は lpscope 10f74eb）をそのまま写し直した。
+  固有の書き換えは従来どおり3つ（置き場 CONFIG の親・Cookie 名 `newproduct_sid`・CSRF ヘッダ `X-NEWPRODUCT-CSRF`）と先頭の由来コメントだけ。
+  `_upstream.json` の指紋を本番の上流（c2a3772…）にそろえ、`tests/test_upstream.py` が 4件実行・skip 0 で通ることを確かめた
+- **既定は `server.py` で `auth.SESSION_DEFAULT = "keep"`（ログアウトするまで）。**上流の部品の既定（12h）は直さない
+- 利用者は設定の「表示」で 12時間・1日・1週間・1か月に短くできる（`POST /api/me/session-keep`・値は `auth.SESSION_CHOICES` の鍵だけ・いまのログインにもすぐ効く・監査に `me.session_keep`）。
+  選択肢は画面に書き写さず `/api/me` の `session_choices` から出す
+- 期限はサーバー側で決める（Cookie は400日置く）。期限なしのセッションは掃かれず、再起動で読み直しても残る（`tests/test_session_keep.py`。上書きを外すと落ちることを確かめた）
+- **すでにログインしている人のセッションは、入り直すまで 12時間のまま**（古いセッションには長さの記録が無いため上流の既定で読み直される）。設定で選び直すとすぐ効く
+

@@ -4701,6 +4701,15 @@
       });
       section(disp, opt.start.label, "アプリを開いたとき（アドレスに画面の指定が無いとき）に出す画面です。",
         choice(me.prefs.start, opt.start.options, savePref("start")));
+      // ログインを保つ長さ（2026-10-13 全アプリをカレンダーと同じに）。選択肢はサーバーの一覧から出す
+      if (me.session_choices) {
+        var defLabel = (me.session_choices.filter(function (c) { return c[0] === me.session_default; })[0] || [])[1] || me.session_default;
+        section(disp, "ログインを保つ", "既定は「" + defLabel + "」です。共用のパソコンや、席を離れることがある端末では短くしてください。"
+          + "時間で選ぶと、操作しないままその時間がたったときに切れます。変えると、いまのログインにもすぐ効きます。",
+          choice(me.session_keep, me.session_choices.map(function (c) { return { value: c[0], label: c[1] }; }), function (v) {
+            return post("/api/me/session-keep", { keep: v });
+          }));
+      }
       b.appendChild(disp);
 
       // トレンドの見せ方
