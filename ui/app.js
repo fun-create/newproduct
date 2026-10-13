@@ -4241,13 +4241,23 @@
         });
         ac.appendChild(chartCard("発売の目安の月ごとのイベント（イベントの2か月前）", grid, { sub: "★は販売可能性が高いイベント。括弧はイベントの月です。" }));
       }
+      // 点（ライフイベントと同じ軸・FR-176）。点の無いものは「未設定」で、0 として並べない
+      var scoredA = d.annual.filter(function (x) { return isNum(x.total); }).sort(function (a, b) { return b.total - a.total; });
+      if (scoredA.length) {
+        ac.appendChild(chartCard("点数のある年間イベント（総合点・上位" + Math.min(10, scoredA.length) + "）", hbars(scoredA.slice(0, 10).map(function (x) {
+          return { label: x.label + (x.month ? "（" + x.month + "月）" : ""), value: x.total, valueText: x.total + " 点" };
+        }), { max: 40, label: "年間イベントの総合点" }), { sub: "満点40（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2）。点のある " + scoredA.length + " 件だけです。未設定の " + (d.annual.length - scoredA.length) + " 件は並べていません。" }));
+      } else {
+        ac.appendChild(el("p", { "class": "np-note", text: "年間イベントの点はまだ1件も入っていません（設定の「年間イベント・ライフイベント」で、ライフイベントと同じ軸で入れられます）。" }));
+      }
       var adet = el("details", { "class": "np-more" });
       adet.appendChild(el("summary", { text: "年間イベントの表を開く（枠を足すボタンはこちら）" }));
       ac.appendChild(adet);
-      adet.appendChild(table(["月", "日", "イベント", "販売可能性が高い", "次の回", "発売の目安", "年間プラン"], d.annual.map(function (x) {
+      adet.appendChild(table(["月", "日", "イベント", "総合", "優先", "販売可能性が高い", "次の回", "発売の目安", "年間プラン"], d.annual.map(function (x) {
         var c = el("td"); slotBtn(x, c);
         return el("tr", null, [el("td", { "class": "np-num", text: x.month ? x.month + "月" : "—" }), el("td", { text: dash(x.day) }),
-          el("td", { text: x.label }), el("td", { text: x.sellable ? "印あり" : "" }),
+          el("td", { text: x.label }), el("td", { "class": "np-num", text: isNum(x.total) ? String(x.total) : "未設定" }),
+          el("td", { "class": "np-num", text: dash(x.priority) }), el("td", { text: x.sellable ? "印あり" : "" }),
           el("td", { text: dash(x.event_month) }), el("td", { text: dash(x.launch_month) }), c]);
       })));
       b.appendChild(ac);
@@ -4957,15 +4967,17 @@
         if (kind === "年間イベント") {
           p1.appendChild(txt(" ")); p1.appendChild(inp("month", "月（必須）", 3, r.month, { inputmode: "numeric" }));
           p1.appendChild(txt(" ")); p1.appendChild(inp("day", "日付（書いたまま残します）", 16, r.day, { placeholder: "例: 11月15日前後の土日" }));
-          f.appendChild(p1);
+        }
+        f.appendChild(p1);
+        // 点は両方の種類で同じ軸（FR-176）。年間イベントは元表に点が無いので、入れるまで未設定
+        var p2 = el("p");
+        d.axes.forEach(function (a) { p2.appendChild(inp(a.key, a.label + "（0〜" + a.max + "）", 3, r[a.key], { inputmode: "numeric" })); p2.appendChild(txt(" ")); });
+        p2.appendChild(inp("priority", "優先順位", 3, r.priority, { inputmode: "numeric" }));
+        f.appendChild(p2);
+        f.appendChild(el("p", { "class": "np-sub", text: "総合点は自動で計算します（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2、満点40）。3つそろわないと未設定のままです。" + (kind === "年間イベント" ? "年間イベントもライフイベントと同じ軸で付けます（点の無いものは機会カレンダーで「未設定」）。" : "") }));
+        if (kind === "年間イベント") {
           f.appendChild(el("p", null, [chk("sellable", "販売可能性が高い", r.sellable), txt(" "), inp("note", "メモ", 24, r.note)]));
         } else {
-          f.appendChild(p1);
-          var p2 = el("p");
-          d.axes.forEach(function (a) { p2.appendChild(inp(a.key, a.label + "（0〜" + a.max + "）", 3, r[a.key], { inputmode: "numeric" })); p2.appendChild(txt(" ")); });
-          p2.appendChild(inp("priority", "優先順位", 3, r.priority, { inputmode: "numeric" }));
-          f.appendChild(p2);
-          f.appendChild(el("p", { "class": "np-sub", text: "総合点は自動で計算します（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2、満点40）。3つそろわないと未設定のままです。" }));
           f.appendChild(el("p", null, [chk("sellable", "販売可能性が高い", r.sellable), txt(" "), chk("product_gap", "商品が作れていない", r.product_gap), txt(" "),
             inp("product_ideas", "商品例", 24, r.product_ideas), txt(" "), inp("note", "メモ", 18, r.note)]));
         }
@@ -4992,7 +5004,7 @@
         var c = el("div", { "class": "np-card", id: kind === "年間イベント" ? "np-ev-annual" : "np-ev-life" });
         c.appendChild(el("h2", { text: kind }));
         var rows = d.rows.filter(function (r) { return r.kind === kind; });
-        var head = kind === "年間イベント" ? ["名前", "月", "日付（原文）", "販売可能性", "枠", "状態", "出どころ", ""]
+        var head = kind === "年間イベント" ? ["名前", "月", "日付（原文）", "総合", "購買意欲", "写真", "頻度", "優先", "販売可能性", "枠", "状態", "出どころ", ""]
           : ["名前", "総合", "購買意欲", "写真", "頻度", "優先", "商品が作れていない", "枠", "状態", "出どころ", ""];
         var slot = el("div");
         c.appendChild(table(head, rows.map(function (r) {
@@ -5010,8 +5022,11 @@
             act.appendChild(e1); act.appendChild(txt(" ")); act.appendChild(e2);
           }
           var common = [el("td", { text: r.slots ? r.slots + " 件" : "—" }), el("td", { text: r.active ? "使う" : "使わない" }), el("td", { text: r.origin }), act];
+          var sc = [el("td", { "class": "np-num", text: r.total === null ? "未設定" : String(r.total) }),
+            el("td", { "class": "np-num", text: dash(r.gift_intent) }), el("td", { "class": "np-num", text: dash(r.photo_fit) }),
+            el("td", { "class": "np-num", text: dash(r.frequency) }), el("td", { "class": "np-num", text: dash(r.priority) })];
           if (kind === "年間イベント") return el("tr", null, [el("td", { text: r.label }), el("td", { "class": "np-num", text: dash(r.month) }),
-            el("td", { text: dash(r.day) }), el("td", { text: r.sellable ? "高い" : "—" })].concat(common));
+            el("td", { text: dash(r.day) })].concat(sc, [el("td", { text: r.sellable ? "高い" : "—" })], common));
           return el("tr", null, [el("td", { text: r.label }), el("td", { "class": "np-num", text: r.total === null ? "未設定" : String(r.total) }),
             el("td", { "class": "np-num", text: dash(r.gift_intent) }), el("td", { "class": "np-num", text: dash(r.photo_fit) }),
             el("td", { "class": "np-num", text: dash(r.frequency) }), el("td", { "class": "np-num", text: dash(r.priority) }),

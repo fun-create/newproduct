@@ -87,6 +87,25 @@ class Events(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.m.save({"kind": "ライフイベント", "label": "結婚", "frequency": "6"}, "dev")   # 頻度は0〜5
 
+    def test_annual_scored_with_same_axes_and_unset_when_untouched(self):
+        """FR-176: 年間イベントにもライフイベントと同じ軸で点を付ける。送らなければ点は触らない（0 にしない）。"""
+        r = self.m.save({"kind": "年間イベント", "label": "推しの誕生月", "month": "7",
+                         "gift_intent": "9", "photo_fit": "8", "frequency": "5", "priority": "2"}, "dev")
+        self.assertEqual(self.store.val("SELECT total FROM theme_score WHERE theme_id=?", (r["id"],)), 9 * 2 + 8 + 5 * 2)
+        from app import opportunity
+        a = next(x for x in opportunity.calendar()["annual"] if x["id"] == r["id"])
+        self.assertEqual((a["total"], a["priority"]), (36, 2))
+        # 月だけ直す（点のキーを送らない）→ 点は残る
+        self.m.save({"id": r["id"], "label": "推しの誕生月", "month": "8"}, "dev")
+        self.assertEqual(self.store.val("SELECT total FROM theme_score WHERE theme_id=?", (r["id"],)), 36)
+        # 点を送らずに足した年間イベントは未設定（theme_score の行が無い）
+        r2 = self.m.save({"kind": "年間イベント", "label": "点なしの祭", "month": "9"}, "dev")
+        self.assertIsNone(self.store.one("SELECT 1 FROM theme_score WHERE theme_id=?", (r2["id"],)))
+        a2 = next(x for x in opportunity.calendar()["annual"] if x["id"] == r2["id"])
+        self.assertIsNone(a2["total"])
+        with self.assertRaises(ValueError):
+            self.m.save({"kind": "年間イベント", "label": "上限超え", "month": "1", "frequency": "6"}, "dev")
+
     def test_import_does_not_overwrite_edited_rows(self):
         sys.path.insert(0, str(BASE / "tools"))
         import import_events as ie

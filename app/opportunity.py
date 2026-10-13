@@ -33,7 +33,9 @@ def calendar() -> dict:
         have = {r["occasion"] for r in store.q(
             "SELECT occasion FROM plan_slot WHERE version_id=? AND occasion IS NOT NULL", (v["id"],))}
     annual = []
-    for r in store.q("SELECT * FROM theme WHERE kind='年間イベント' AND active=1 ORDER BY month, sort"):
+    for r in store.q("SELECT t.*, s.gift_intent, s.photo_fit, s.frequency, s.total, s.priority FROM theme t "
+                     "LEFT JOIN theme_score s ON s.theme_id=t.id WHERE t.kind='年間イベント' AND t.active=1 "
+                     "ORDER BY t.month, t.sort"):
         m = r["month"]
         # 次に来る回（今月より前の月なら来年）
         y = today.year if m is None or m >= today.month else today.year + 1
@@ -41,6 +43,9 @@ def calendar() -> dict:
         annual.append({"id": r["id"], "label": r["label"], "month": m, "day": r["day"],
                        "sellable": bool(r["sellable"]), "note": r["note"],
                        "event_month": _ym(y, m) if m else None, "launch_month": launch,
+                       # 点はライフイベントと同じ軸（FR-176）。無ければ None（未設定。0 にしない）
+                       "gift_intent": r["gift_intent"], "photo_fit": r["photo_fit"], "frequency": r["frequency"],
+                       "total": r["total"], "priority": r["priority"],
                        "in_plan": r["label"] in have})
     life = store.rows(store.q(
         "SELECT t.id, t.label, t.product_gap, t.product_ideas, s.gift_intent, s.photo_fit, s.frequency, "

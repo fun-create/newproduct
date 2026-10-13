@@ -8,9 +8,11 @@
 - **消さない。**「使わない」にすると機会カレンダーから外れる。既存の枠の記録は残る
 - 同じ種類で同じ名前（表記ゆれを除いて）は保存しない。似た名前があれば、確かめてから保存する
 - 日付は**原文のまま**（「11月15日前後の土日」など）。日付の形に直さない（ADR-032）
-- ライフイベントの総合点は**サーバーで計算する**（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2・満点40）。
+- 総合点は**サーバーで計算する**（購買意欲×2 ＋ 写真親和性 ＋ 発生頻度×2・満点40）。
   各軸の上限は 購買意欲10・写真親和性10・発生頻度5（満点40と、取り込んだ19件の実測から）。
   3つそろわなければ総合点は未設定（0 にしない）。優先順位は人が入れる（勝手に付けない）
+- **年間イベントにも同じ軸で点を付けられる**（FR-176・ADR-097・2026-10-13）。元表は年間イベントに点を持っていないので、
+  取り込んだ53件は未設定のまま。点の値は商品開発部が入れる（こちらで発明しない）。点の無いものは機会カレンダーで「未設定」
 - 画面で直した行には印（edited_at）を付け、取り込みツールはその行を上書きしない
 """
 from __future__ import annotations
@@ -108,8 +110,10 @@ def save(f: dict, user_id: str, ip: str = "") -> dict:
         vals["product_gap"] = 1 if str(f.get("product_gap") or "") in ("1", "true", "on") else 0
         vals["product_ideas"] = (f.get("product_ideas") or "").strip()[:300] or None
         vals["sellable"] = 1 if str(f.get("sellable") or "") in ("1", "true", "on") else 0
-    sc = {k: _int(f.get(k), l, 0, m) for k, l, m in AXES} if kind == "ライフイベント" else None
-    prio = _int(f.get("priority"), "優先順位", 1, 999) if kind == "ライフイベント" else None
+    # 点は両方の種類で同じ軸（FR-176）。送られてこなければ触らない（年間イベントの「月だけ直す」で点が消えないように）
+    has_score = any(k in f for k, _l, _m in AXES) or "priority" in f
+    sc = {k: _int(f.get(k), l, 0, m) for k, l, m in AXES} if has_score else None
+    prio = _int(f.get("priority"), "優先順位", 1, 999) if has_score else None
     now = store.now_s()
     with store.tx() as c:
         if cur is None:
