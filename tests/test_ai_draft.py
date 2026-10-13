@@ -125,6 +125,20 @@ class AiDraft(unittest.TestCase):
             self.m.adopt(p["id"], "boss", p["text"])
             self.assertIn("── AI案（claude-sonnet-5・", self._sec(key))
 
+    def test_testorder_is_a_plan_not_an_order(self):
+        """FR-149 の最後（テスト注文・ADR-098）。AI は手順を出すだけで、注文は人が行う。足す先は F.testorder。"""
+        seen = {}
+        self.m.start_run(self.pid, "testorder", "u", sync=True, force=True,
+                         runner=self._runner([{"title": "注文する組み合わせ", "body": "本体 ブラック・名入れ「テスト」"},
+                                              {"title": "手順ごとの確認項目", "body": "カート: 価格が税込表示か"}], seen))
+        self.assertIn("注文は人が行う", seen["prompt"])
+        self.assertIn("お客さまの情報を作らず", seen["prompt"])
+        p = self.m.proposals_of(self.pid)["testorder"][0]
+        self.assertEqual(self.m.KINDS["testorder"]["target"], "F.testorder")
+        self.m.adopt(p["id"], "boss", p["text"])
+        self.assertIn("名入れ「テスト」", self._sec("F.testorder"))
+        self.assertIn("F.testorder", __import__("app.project", fromlist=["SECTION_KEYS"]).SECTION_KEYS)
+
     def test_price_and_goal_get_numbers_from_the_app(self):
         """価格・目標の案。**数字はアプリが計算して渡す**（粗利率ごとの価格・競合の価格の幅・過去の売れ方）。"""
         import json as _j

@@ -942,7 +942,8 @@
         [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"],
          ["concept", "コンセプトまとめの下書き", "np-sec-C", "C節へ"], ["diff", "差別化の下書き", "np-sec-C", "C節へ"],
          ["share", "部内共有文の下書き", "np-sec-C", "C節へ"], ["quality", "「品質について」の下書き", "np-sec-E", "E節へ"],
-         ["price", "販売価格の案", "np-sec-D", "D節へ"], ["goal", "年間目標の案", "np-sec-D", "D節へ"]].forEach(function (k) {
+         ["price", "販売価格の案", "np-sec-D", "D節へ"], ["goal", "年間目標の案", "np-sec-D", "D節へ"],
+         ["testorder", "テスト注文の手順の下書き", "np-sec-F", "F節へ"]].forEach(function (k) {
           if (((d.ai_drafts || {})[k[0]] || []).some(function (p) { return p.state === "提案"; }))
             miss.appendChild(el("p", { "class": "np-warn" }, [txt("AI が出した" + k[1] + "が、確かめるのを待っています。 "), secBtn(k[2], k[3])]));
         });
@@ -978,6 +979,7 @@
             if (fd.key === "D.price") c.appendChild(draftPanel(d, meta, "price"));       // 価格・目標の案（ADR-090）
             if (fd.key === "D.goal") c.appendChild(draftPanel(d, meta, "goal"));
             if (fd.key === "C.competitor") c.appendChild(draftPanel(d, meta, "competitor"));
+            if (fd.key === "F.testorder") c.appendChild(draftPanel(d, meta, "testorder"));   // テスト注文の手順（ADR-098）
             if (fd.key === "C.competitor") c.appendChild(webCompetitorPanel(d, meta));   // ウェブで競合を探す（ADR-088）
           });
           b.appendChild(c);
@@ -2951,6 +2953,8 @@
           about: "生産方法・試作・資材・リスクのメモから、検品で見る点・起きやすい不具合と対策・お客さまへの注意書きの案を出します。数値はカルテに無ければ「要確認」になります。" },
     lp: { title: "AI に LP依頼書の下書きを出させる", target: "LP依頼用",
           about: "カルテの内容から、キャッチコピーの案・ページの構成案・よくある質問の案を出します。" },
+    testorder: { title: "AI にテスト注文の手順の下書きを出させる", target: "テスト注文",
+          about: "注文する組み合わせ・手順ごとの確認項目（商品ページ→カート→決済→確認メール→CIP→現物）・公開ページと仕様の突き合わせの観点を出します。注文は人が行います（AI は注文しません。名入れの入力値はお客さまの情報ではなく検査用の値です）。G5 の「テスト注文チェック済み」は人が確かめて記録します。" },
     competitor: { title: "AI に競合調査の進め方を出させる", target: "競合調査",
           about: "比べる観点・探す競合の種類と検索語・いまの競合の表から読めることを出します。AI はウェブを見られないので、競合の店名・価格・URL は出しません（表に入れるのは人が調べた値だけです）。" }
   };
