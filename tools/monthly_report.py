@@ -39,6 +39,10 @@ def main() -> int:
           + (f"／{h['error']}" if h["error"] else ""))
     for n in h["notes"]:
         print("  " + n)
+    # 発売から60日が締まった「試算 vs 確定」を残す（FR-93・ADR-095）。画面を誰も開かなくても残るように
+    from app import costcheck
+    cc = costcheck.record_due()
+    print(f"原価の突き合わせ: 発売済み {cc['projects']} 件・今回残した {cc['recorded_now']} 件・状態 {cc['counts']}")
     return 1 if (r["problems"] or h["error"] or h["changed"]) else 0     # 落ちない失敗にしない
 
 

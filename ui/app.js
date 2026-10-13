@@ -1603,7 +1603,68 @@
         });
         box.appendChild(el("p", null, [nb]));
       }
+      box.appendChild(costCheckBlock(P));
     }).catch(function (e) { err(box, e); });
+  }
+
+  /** 発売後の「試算 vs 確定」（FR-93・ADR-095）。1個あたり・税抜・直接費＝材料費＋外注費。
+   *  **比べられないときは理由を出す（0 と比べない）。**60日が締まった値は1回だけ残り、いまの値と並べる */
+  function ccPct(dd) { return dd && isNum(dd.pct) ? (dd.pct > 0 ? "+" : "") + dd.pct + "%" : "—"; }
+  function ccYen(v) { return isNum(v) ? (v > 0 ? "+" : "") + Math.round(v).toLocaleString("ja-JP") + "円" : "—"; }
+  function ccBasis(a) {
+    if (!a || !a.basis) return "CIP に原価なし";
+    if (a.basis === "マスタ") return "受注なし・いまのマスタの材料費";
+    var off = (a.no_material_lines || 0) + (a.no_oz_price_lines || 0);
+    return "受注 " + a.costed_lines + "行" + (off ? "（原価の出ない " + off + "行は除外）" : "");
+  }
+  function ccRows(it, est) {
+    var out = [];
+    if (it.recorded) {
+      var rc = it.recorded;
+      out.push([it.code + (it.variant ? "（" + it.variant + "）" : ""), "60日分 " + rc.from + "〜" + rc.to + "（" + rc.at.slice(0, 10) + " に記録）",
+        cyen(rc.estimate && rc.estimate.direct), cyen(rc.actual.direct), ccYen(rc.diff.yen), ccPct(rc.diff), rc.diff.word, ccBasis(rc.actual)]);
+    }
+    // 残した値と、いまの値が同じなら2行にしない（seisan が計算し直したときだけ並べる）
+    var same = it.recorded && it.actual && (it.recorded.actual.direct === it.actual.direct
+      || (isNum(it.recorded.actual.direct) && isNum(it.actual.direct) && Math.abs(it.recorded.actual.direct - it.actual.direct) < 0.5));
+    if (it.actual && !same) {
+      out.push([it.recorded ? "　いまの値" : it.code + (it.variant ? "（" + it.variant + "）" : ""),
+        (it.complete ? "60日分 " : "途中経過 ") + it.from + "〜" + it.to,
+        it.recorded ? "" : cyen(est && est.direct), cyen(it.actual.direct), ccYen(it.diff.yen), ccPct(it.diff), it.diff.word, ccBasis(it.actual)]);
+    }
+    return out;
+  }
+  function costCheckBlock(P) {
+    var w = el("div");
+    w.appendChild(el("h3", { text: "発売後：試算と確定の突き合わせ" }));
+    var st = el("p", { "class": "np-note", text: "読み込み中…" });
+    w.appendChild(st);
+    api(P + "/cost-check").then(function (r) {
+      w.removeChild(st);
+      w.appendChild(el("p", { "class": "np-sub", text: "試算原価の最新の版と、CIP の確定原価（発売日から60日の受注に保存された原価）を、1個あたり・税抜で比べます。直接費＝材料費＋外注費（工数は別）。60日が締まった時点の値を1回だけ残します。" }));
+      if (r.why) w.appendChild(el("p", { "class": "np-note", text: r.state + "：" + r.why }));
+      var rows = [];
+      r.items.forEach(function (it) { rows = rows.concat(ccRows(it, r.estimate)); });
+      if (!rows.length) return;
+      var e = r.estimate;
+      if (e) w.appendChild(el("p", { "class": "np-sub", text: "試算 v" + e.version + "（確度 " + dash(e.confidence) + "）: 直接費 " + cyen(e.direct)
+        + (e.unknown ? "・未確定 " + e.unknown + " 行を含む（試算は実際より小さく出ています）" : "") }));
+      var bars = [];
+      r.items.forEach(function (it) {
+        var a = it.recorded ? it.recorded.actual : it.actual;
+        if (!a) return;
+        bars.push({ label: it.code + " 試算", value: e ? e.direct : null, valueText: cyen(e && e.direct) });
+        bars.push({ label: it.code + " 確定", value: a.direct, valueText: cyen(a.direct), alt: true });
+      });
+      if (bars.length && bars.length <= 12) {
+        w.appendChild(chartCard("1個あたりの直接費（税抜）", hbars(bars, { label: "試算と確定" }),
+          { source: "試算＝この案件の試算原価・確定＝CIP（受注時点の原価）", at: r.as_of, legend: [{ mark: "■", label: "試算" }, { mark: "▨", label: "確定" }] }));
+      }
+      w.appendChild(table(["共通商品コード", "期間", "試算", "確定", "差", "比率", "", "確定の出どころ"],
+        rows.map(function (c) { return el("tr", null, c.map(function (v, i) { return el("td", { "class": i >= 2 && i <= 5 ? "np-num" : null, text: v }); })); })));
+      if (r.error) w.appendChild(el("p", { "class": "np-sub", text: "いまの値は読めませんでした（" + r.error + "）。残した値だけを出しています。" }));
+    }).catch(function (e) { w.removeChild(st); w.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    return w;
   }
 
   /** 採用した候補を seisan に登録する（FR-184）。**マスタは seisan。**ここには「どこに入れたか」だけ残る */
@@ -4391,11 +4452,51 @@
   /** 原価・調達の一覧（案件をまたぐ）。**締切に間に合わない案件を一番上に。**中身は各案件の画面で入れる */
   function viewCost() {
     loading();
-    api("/api/cost").then(function (d) {
+    Promise.all([api("/api/cost"), api("/api/cost/check").catch(function (e) { return { error: e.message }; })]).then(function (res) {
+      var d = res[0], cc = res[1];
       var b = clear();
       setTitle("原価・調達");
       b.appendChild(salesSubnav("#/cost"));
-      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件だけを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は CIP が持ちます。" }));
+      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件の締切と試算、発売後の「試算と確定」の突き合わせを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は CIP が持ちます。" }));
+      b.appendChild(el("h2", { text: "発売前" }));
+      costBoard(b, d);
+      b.appendChild(el("h2", { text: "発売後：試算と確定" }));
+      costCheckBoard(b, cc);
+    }).catch(fail);
+  }
+
+  /** 発売後の一覧（FR-93）。**比率の大きい順。**「外れすぎ」の線は引かない（基準が決まっていない） */
+  function costCheckBoard(b, cc) {
+    if (cc.error) { b.appendChild(el("p", { "class": "np-err", text: cc.error })); return; }
+    b.appendChild(el("p", { "class": "np-sub", text: "発売済みの案件ごとに、試算原価の最新の版と CIP の確定原価（発売日から" + cc.window_days + "日の受注）を1個あたり・税抜の直接費で比べます。60日が締まった値は1回だけ残します。" }));
+    if (!cc.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "発売済みの案件はありません。" })); return; }
+    var order = ["60日分", "途中経過", "CIP の口なし", "試算なし", "コード未登録", "発売日なし"];
+    b.appendChild(kpiRow(order.filter(function (k) { return cc.counts[k]; }).map(function (k) { return kpi(k, cc.counts[k] + " 件"); })));
+    var cmp = cc.rows.filter(function (r) { return isNum(r.max_abs_pct); });
+    if (cmp.length) {
+      b.appendChild(chartCard("試算からの外れ（直接費・比率の大きさ）", hbars(cmp.map(function (r) {
+        return { label: r.internal_name || r.product, href: "#/projects/" + encodeURIComponent(r.id), value: r.max_abs_pct, valueText: r.max_abs_pct + "%" };
+      }), { label: "試算からの外れ" }), { source: "CIP（受注時点の原価）と各案件の試算原価", sub: "高い・低いの向きは表で見てください" }));
+    }
+    var rows = [];
+    cc.rows.forEach(function (r) {
+      var its = [];
+      r.items.forEach(function (it) { its = its.concat(ccRows(it, r.estimate)); });
+      var head = [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.id }), txt(" " + (r.internal_name || r.product))];
+      if (!its.length) {
+        rows.push(el("tr", null, [el("td", null, head), el("td", { text: dash(r.launch_date) }), el("td", { text: r.state }), el("td", { colspan: "6", text: dash(r.why) })]));
+        return;
+      }
+      its.forEach(function (c, k) {
+        rows.push(el("tr", null, [el("td", null, k ? [] : head), el("td", { text: k ? "" : dash(r.launch_date) }), el("td", { text: k ? "" : r.state }),
+          el("td", { text: c[0] + "　" + c[1] }), el("td", { "class": "np-num", text: c[2] }), el("td", { "class": "np-num", text: c[3] }),
+          el("td", { "class": "np-num", text: c[4] + "（" + c[5] + "）" }), el("td", { text: c[6] }), el("td", { text: c[7] })]));
+      });
+    });
+    b.appendChild(table(["案件", "発売日", "状態", "コード・期間", "試算", "確定", "差（比率）", "", "確定の出どころ"], rows));
+  }
+
+  function costBoard(b, d) {
       if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "発売前の案件はありません。" })); return; }
       var nR = d.rows.length;
       b.appendChild(kpiRow([
@@ -4418,7 +4519,6 @@
             el("td", { "class": "np-num", text: r.gross && r.gross.yen !== null ? cyen(r.gross.yen) + (r.gross.rate !== null ? "（" + r.gross.rate + "%）" : "") + (r.gross.overstated ? "　未確定の行あり・実際より高く出ています" : "") : "—" })
           ]);
         })));
-    }).catch(fail);
   }
 
   function salesSubnav(cur) {

@@ -243,6 +243,11 @@ def main() -> int:
         st, d = cl.get(f"/api/projects/{pid}/cost")
         note(st == 200 and d["versions"][0]["totals"]["material"]["yen"] is None,
              "単価の無い行は 0 円ではなく未確定", f"{st}")
+        # 発売後の「試算 vs 確定」（FR-93）。発売前の案件は比べず、理由を言う
+        st, d = cl.get(f"/api/projects/{pid}/cost-check")
+        note(st == 200 and d["state"] == "発売前" and d["why"], "突き合わせ: 発売前は比べず理由を言う", f"{st} {d.get('state')}")
+        st, d = cl.get("/api/cost/check")
+        note(st == 200 and "rows" in d and d["window_days"] == 60, "/api/cost/check が応える", f"{st}")
 
         # ── 売上実績（2026-10-01）。出どころが無い環境では「無い」と言う（0 にしない）──
         st, d = cl.get("/api/sales?site=goods")

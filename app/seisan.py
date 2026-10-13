@@ -209,6 +209,39 @@ def materials(category: str = "", q: str = "") -> dict:
             "categories": list(j.get("categories") or [])}
 
 
+# ── 発売後の確定原価（FR-93・ADR-095）────────────────────────────
+# 口は吉田さんへ依頼中（fun-create-ec-agents docs/product-dev/contracts/2026-10-13_seisan_確定原価API.md）。
+# 中身は seisan の「売れ筋の分析」（analytics.analyze(by="product")）と同じ集計を、決めた商品・期間だけ。
+# **粗利・原価の規約は seisan の1か所に従う**（FR-94）。ここで受注明細を集計しない
+ACTUAL_ORDER_KEYS = ("lines", "qty", "sales", "costed_lines", "qty_costed", "sales_costed",
+                     "material_costed", "outsource_costed", "no_material_lines", "no_oz_price_lines",
+                     "zero_material_lines", "outsourced_lines", "labor_lines", "qty_labor", "labor_yen")
+ACTUAL_MASTER_KEYS = ("material_cost", "labor_cost", "labor_minutes")
+
+
+def cost_actuals(codes: list[str], d_from: str, d_to: str) -> dict:
+    """共通商品コードごとの、期間の受注の原価（受注時点に保存した値）と、いまのマスタの原価。
+
+    **名前が混ざって返ってきても持たない**（決めた列だけを拾う）。"""
+    try:
+        j = _call("GET", "/api/svc/cost/actuals", {"codes": ",".join(codes), "from": d_from, "to": d_to})
+    except Refused as e:
+        # seisan は知らない口に 404「ありません」と答える（2026-10-13 に server.py を読んで確認）
+        if str(e) == "ありません":
+            raise NotConfigured("CIP に確定原価の口（/api/svc/cost/actuals）がまだありません") from None
+        raise
+    out = {}
+    for it in (j.get("items") or []):
+        code = str(it.get("code") or "")
+        if code not in codes:
+            continue
+        o, m = it.get("orders") or {}, it.get("master") or {}
+        out[code] = {"found": bool(it.get("found", True)),
+                     "orders": {k: o.get(k) for k in ACTUAL_ORDER_KEYS},
+                     "master": {k: m.get(k) for k in ACTUAL_MASTER_KEYS}}
+    return {"as_of": j.get("as_of"), "yield_pct_now": j.get("yield_pct_now"), "items": out}
+
+
 def _write(path: str, body: dict, actor: str, ref: str) -> dict:
     return _call("POST", path, body={**body, "actor": actor, "ref": ref})
 

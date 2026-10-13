@@ -594,6 +594,10 @@ class H(BaseHTTPRequestHandler):
         # 原価・調達の一覧（案件をまたぐ）。見るだけ
         if parts == ["cost"] and method == "GET":
             return self.sendj(200, {"rows": cost_m.board()})
+        # 発売後の「試算 vs 確定」（FR-93・ADR-095）。見るだけ（60日が締まった分は1回だけ残す）
+        if parts == ["cost", "check"] and method == "GET":
+            from app import costcheck
+            return self.sendj(200, costcheck.board(uid))
 
         # 売上実績（2026-10-01 決定）。**見るだけ。**利用者全員（十文字さん「利用者全員」）
         if parts == ["sales", "new-products"] and method == "GET":
@@ -804,6 +808,9 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(200, cost_m.overview(pid, uid))
             if what == "cost-seisan-vocab" and method == "GET":
                 return self.sendj(200, cost_m.seisan_vocab())
+            if what == "cost-check" and method == "GET":
+                from app import costcheck
+                return self.sendj(200, costcheck.check(pid, uid))
             if method != "POST":
                 return self.sendj(404, {"error": "not found"})
             d = self.body()
