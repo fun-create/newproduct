@@ -1862,3 +1862,12 @@ app-ui に全ページを点検してもらい（`docs/ui-review-2026-10-09.md`�
 - 足す先はカルテ F 節に新設した「テスト注文（手順と確認項目）」（`F.testorder`）。G5 の手の確認「テスト注文チェック済み」はそのまま人が記録する
 - **名入れの入力値にお客さまの情報を作らせない**（指示文に明記。「テスト」などの検査用の値）
 - これで FR-149 の用途（文章作成・LP依頼書・競合調査・ネーミング・価格/目標・テスト注文）は全部そろった → 実装済
+
+## ADR-099 — 夜間バックアップを root でなく newproduct 利用者で動かす（2026-10-14）
+
+十文字さんの判断（10-14・seisan と同じ形。オーケストレーション経由で代送・このセッションで十文字さんに確認して実施）。
+- `/etc/cron.d/newproduct-backup` の実行者を root → newproduct（控え `.bak-20261014`）。リポジトリの `deploy/cron.d-newproduct-backup` も同じ
+- `/var/backups/newproduct`・中の控え5本・`/var/log/newproduct-backup.log` の持ち主を newproduct に
+- **なぜ**: root が newproduct 持ちの台本（`deploy/backup.sh`）を動かすと、アプリが乗っ取られたとき root まで広がる。台本が読むのは newproduct 持ちの data/・config/、書くのは置き場だけなので root は要らない
+- 台本のコメント「雛形: /opt/calfc/deploy/backup.sh」は作ったときに手本にしたという意味で、実行していない
+- 実施後に newproduct で1回流して通った（296K・config と DB の静止点）。翌朝 04:15 の控えが通ったら HUB `status/new-product.md` に1行（宿題）
