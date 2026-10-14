@@ -69,7 +69,7 @@ matcher は selfcheck が見るようにしたが、**/etc の正本は見られ
    **`ReadWritePaths` から `config` と `/opt/accounts/state` を外さない**（同上・エラーが出ない）
 4. Caddy に `deploy/Caddyfile.fragment` を追記 → `caddy validate` → `systemctl reload caddy`
    **validate を通してから reload する。**Caddyfile は7アプリの共有資産
-5. `cp deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup`（04:15）
+5. `install -m 644 -o root -g root deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup`（04:15・**実行者は newproduct**。2026-10-14 十文字さん判断）。置き場 `/var/backups/newproduct` とログ `/var/log/newproduct-backup.log` は `chown newproduct:newproduct`
    **`backup.sh` の置き場を 700 にしない。**755 でないと watchdog の glob から見えず、
    **警報も出ないまま監視から外れる**（2026-09-21 実測）
 6. 利用者を足す。**2026-09-28 から、入れるか・admin/user かは共通台帳の利用許可

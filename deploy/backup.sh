@@ -2,7 +2,11 @@
 # NEW PRODUCT（FUN-CREATE 新商品開発管理）— 日次バックアップ
 # 雛形: /opt/calfc/deploy/backup.sh
 #
-#   15 4 * * * root /opt/newproduct/deploy/backup.sh >> /var/log/newproduct-backup.log 2>&1
+#   15 4 * * * newproduct /opt/newproduct/deploy/backup.sh >> /var/log/newproduct-backup.log 2>&1
+#
+# **newproduct 利用者で動かす**（2026-10-14 十文字さん判断・seisan と同じ）。root で動かすと、
+# この台本を書き換えられる人（newproduct になれる人）が root になれる。
+# 読むのは newproduct 持ちの data/・config/ だけ、書くのは /var/backups/newproduct（newproduct 持ち）だけ。
 #
 # **04:15。**他と重ねない（lpscope 3:15 / calfc 3:30 / autogrowth・seisan 3:45 /
 # keiei 4:00）。既存タイマーは 06:42〜11:04 に集中しているのでそこも避ける。
@@ -24,7 +28,7 @@ mkdir -p "$DEST"
 # 「3日途切れ」を報せるが、**glob は読めないディレクトリで例外を出さず空を返す**。
 # 700 にすると「まだバックアップを持たないアプリ」と区別がつかず、
 # **警報も出ないまま監視から外れる**（2026-09-21 実測。他5アプリは 755）。
-# 中のファイルは `-rw------- root:root` なので、755 でも中身は読めない。
+# 中のファイルは `-rw------- newproduct:newproduct` なので、755 でも中身は読めない。
 # 「置き場は誰でも一覧でき、中身は読めない」が watchdog の前提。
 chmod 755 "$DEST"
 STAMP=$(date +%Y%m%d-%H%M%S)
