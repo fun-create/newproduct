@@ -261,6 +261,33 @@ class TestChatWorkHandoff(Base):
         self.assertIn("他のアプリのトークンを写さないでください",
                       " ".join(b or "" for b in st["blockers"]))
 
+    def test_room_by_category_falls_back_to_the_default(self):
+        """FR-175: 種類ごとの部屋があればそれ、無ければ既定の部屋。設定の書式も検査する。"""
+        from app import store, admin
+        self._ready(room="99")
+        store.ex("UPDATE setting SET value=? WHERE key=?", ("調査=12345、書類作成=67890", self.m.ROOMS_BY_CATEGORY_SETTING))
+        store.conn().commit()
+        a = self.one(title="競合の価格を調べる", category="調査")
+        b = self.one(title="登録", category="登録作業")
+        c = self.one(title="種類なし")
+        self.assertEqual(self.m.room_for("調査"), {"room_id": "12345", "basis": "種類「調査」の部屋（設定 automation.chatwork_rooms_by_category）"})
+        self.assertEqual(self.m.room_for("登録作業")["room_id"], "99")
+        self.assertIn("決めていません", self.m.room_for("登録作業")["basis"])
+        self.assertEqual(self.m.room_for(None)["room_id"], "99")
+        self.assertEqual(self.m.chatwork_status(a)["config"]["room_id"], "12345")
+        self.assertEqual(self.m.chatwork_status(b)["config"]["room_id"], "99")
+        self.answer_all(a)
+        self.m.chatwork_send(a, "tester", sender=self.fake)
+        self.assertEqual(self.sent[-1][0], "12345", "送るときも同じ部屋")
+        self.assertEqual(store.val("SELECT sent_room FROM automation_request WHERE id=?", (a,)), "12345")
+        self.assertEqual(self.m.chatwork_status(c)["config"]["room_id"], "99")
+        self.assertEqual(admin._rooms_by_category("調査=111 ; 書類作成＝222", "x"), "調査=111、書類作成=222")
+        with self.assertRaises(ValueError):
+            admin._rooms_by_category("調査", "x")
+        with self.assertRaises(ValueError):
+            admin._rooms_by_category("調査=abc", "x")
+        self.assertEqual(admin._rooms_by_category("", "x"), "")
+
     def test_cannot_send_before_the_answers_are_in(self):
         self._ready()
         rid = self.one()

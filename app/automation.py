@@ -29,6 +29,8 @@ AI予算枠（`newproduct-*`）は未取得（FR-146）。**いま AI を呼ぶ�
 """
 from __future__ import annotations
 
+import re
+
 from . import chatwork as cw
 from . import store
 
@@ -424,6 +426,38 @@ def requirement_text(request_id: str) -> str:
 # ══════════════════════════════════════════════════════════
 ROOM_SETTING = "automation.chatwork_room_id"
 BASE_URL_SETTING = "automation.app_base_url"
+# 依頼の種類（category）ごとの部屋（FR-175・ADR-103）。書式は「種類=部屋ID」を 改行か 、 で区切る。無い種類は既定の部屋
+ROOMS_BY_CATEGORY_SETTING = "automation.chatwork_rooms_by_category"
+
+
+def parse_rooms_by_category(text: str | None) -> dict:
+    """「種類=部屋ID」の並びを読む（admin の検査と同じ規則）。壊れた行は ValueError。"""
+    out = {}
+    for part in re.split(r"[\n、,;；]+", text or ""):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part and "＝" not in part:
+            raise ValueError(f"「{part}」は「種類=部屋ID」の形で入れてください")
+        k, v = re.split(r"[=＝]", part, 1)
+        k, v = k.strip(), v.strip()
+        if not k or not re.fullmatch(r"\d{3,15}", v):
+            raise ValueError(f"「{part}」の部屋IDは数字だけで入れてください")
+        out[k] = v
+    return out
+
+
+def room_for(category: str | None) -> dict:
+    """この依頼の送り先。{"room_id", "basis"}。種類の部屋があればそれ、無ければ既定の部屋。"""
+    try:
+        m = parse_rooms_by_category(_setting(ROOMS_BY_CATEGORY_SETTING))
+    except ValueError:
+        m = {}                                     # 設定が壊れていても既定の部屋で送れる（画面には検査が出る）
+    cat = (category or "").strip()
+    if cat and cat in m:
+        return {"room_id": m[cat], "basis": f"種類「{cat}」の部屋（設定 {ROOMS_BY_CATEGORY_SETTING}）"}
+    return {"room_id": _setting(ROOM_SETTING), "basis": "既定の部屋（設定 automation.chatwork_room_id）"
+            + (f"。種類「{cat}」の部屋は決めていません" if cat else "")}
 
 
 def _setting(key: str, default=None):
@@ -440,6 +474,8 @@ def seed_settings() -> int:
          "トークンは config/chatwork.env（0600・このアプリ専用に発行）に置きます。"
          "他のアプリのトークンを写さないでください"),
         (BASE_URL_SETTING, "本文に載せるこのアプリのURL", "text", None, None),
+        (ROOMS_BY_CATEGORY_SETTING, "依頼の種類ごとの ChatWork の部屋ID", "text", None,
+         "未設定です。全部の依頼が既定の部屋に行きます。「種類=部屋ID」を 、 で区切って入れます（例: 調査=123456789、書類作成=987654321）"),
     ]
     for key, label, kind, unit, why in rows:
         store.ex("INSERT INTO setting (key,value,label,kind,unit,why) "
@@ -497,8 +533,10 @@ def chatwork_status(request_id: str) -> dict:
     r = store.one("SELECT * FROM automation_request WHERE id=?", (request_id,))
     if r is None:
         raise ValueError("その依頼がありません")
-    room = _setting(ROOM_SETTING)
+    dest = room_for(r["category"])
+    room = dest["room_id"]
     st = cw.status(room)
+    st["basis"] = dest["basis"]
     p = progress(request_id)
     blockers = []
     if not st["ready"]:
@@ -530,7 +568,7 @@ def chatwork_send(request_id: str, user_id: str, *, sender=None,
         raise ValueError(
             f"この依頼は {r['sent_at']} に既に送っています（{r['sent_count']} 回）。"
             "もう一度送るなら「再送する」を選んでください。ChatWork は取り消せません")
-    room = _setting(ROOM_SETTING)
+    room = st["config"]["room_id"]                 # 種類ごとの部屋か既定の部屋（status と同じ決め方）
     res = cw.post(room, st["preview"], sender=sender)
     with store.tx() as c:
         c.execute("UPDATE automation_request SET sent_at=?,sent_room=?,sent_by=?,"

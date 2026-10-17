@@ -3655,6 +3655,7 @@
           if (x) box.appendChild(el("p", { "class": "np-sub", text: "・" + x }));
         });
       }
+      box.appendChild(el("p", { "class": "np-sub", text: "送り先: 部屋 " + dash(s.config && s.config.room_id) + "（" + ((s.config && s.config.basis) || "—") + "）" }));
       box.appendChild(el("p", { "class": "np-sub", text: "送る文面（このまま出ます）" }));
       box.appendChild(el("div", { "class": "np-raw", text: s.preview }));
       if (s.ready) {
@@ -5146,7 +5147,7 @@
             bt.addEventListener("click", function () {
               if (act.querySelector("form")) return;
               var f = el("form", { "class": "np-inline" });
-              var vi = el("input", { name: "value", size: "8", "aria-label": x.label, value: x.value === null ? "" : String(x.value) });
+              var vi = el("input", { name: "value", size: x.key === "automation.chatwork_rooms_by_category" ? "40" : "8", "aria-label": x.label, value: x.value === null ? "" : String(x.value) });
               var ri = el("input", { name: "reason", size: "24", "aria-label": "根拠", placeholder: "根拠（必須）" });
               [vi, ri, el("button", { type: "submit", text: "保存" })].forEach(function (n) { f.appendChild(n); });
               f.appendChild(el("span", { "class": "np-sub", text: " 空欄で保存すると未設定に戻ります" }));

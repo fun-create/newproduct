@@ -52,6 +52,12 @@ def _room(v, label):
     return v.strip()
 
 
+def _rooms_by_category(v, label):
+    from app import automation
+    m = automation.parse_rooms_by_category(v)
+    return "、".join(f"{k}={r}" for k, r in m.items())
+
+
 def _onoff(v, label):
     t = v.strip().lower()
     if t in ("1", "on", "true", "使う"):
@@ -79,6 +85,7 @@ EDITABLE = {
     "plan.ratio_tolerance_slots":   (BIZ_CORE, _num(0, 50), "年間プランの挿入ルール"),
     "plan.task_setup_lead_months":  (BIZ_DEV, _num(0, 12, integer=True), "年間プランの挿入ルール"),
     "automation.chatwork_room_id":  (APP_ADMIN, _room, "接続先"),
+    "automation.chatwork_rooms_by_category": (APP_ADMIN, _rooms_by_category, "接続先"),
     "automation.app_base_url":      (APP_ADMIN, _url, "接続先"),
     "ai_scoring_enabled":           (APP_ADMIN, _onoff, "接続先"),
 }
@@ -133,7 +140,8 @@ DESC = {
     "plan.holiday_month_max_slots": "長期連休のある月に置ける枠の数の上限。月ごとに年間プランの画面に出す",
     "plan.holiday_months": "長期連休のある月（連休ルールの判定に使う）。カレンダーアプリの会社休業日から決める",
     "plan.fiscal_year_start_month": "年度の開始月",
-    "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋",
+    "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋（既定）",
+    "automation.chatwork_rooms_by_category": "依頼の種類（画像/データ作成・登録作業・調査・書類作成 など）ごとに送り先の部屋を分けるとき。「種類=部屋ID」を 、 で区切る。無い種類は既定の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
     "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",
     "ai_scoring_enabled": "AI に案を出させるか（アイデアの採点・商品名。1=使う・0=使わない）。使うには、サーバで claude にログインしてあることと、AI予算の残りが要ります",
@@ -257,7 +265,7 @@ ACTION_LABEL = {"role.grant": "業務ロールを付けた", "role.revoke": "業
                 "flow.effort_point": "工数ポイント係数を決めた", "ideas.import": "アイデアを一括登録", "ideas.import.undo": "一括登録を取り消した"}
 
 
-CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id")
+CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id", "automation.chatwork_rooms_by_category")
 
 
 def change_log(limit: int = 50, app_role: str = "") -> list[dict]:
