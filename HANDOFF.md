@@ -213,9 +213,14 @@ cron の正本は `/etc/cron.d/`。配る前に必ず `diff -u` で突き合わ�
 
 作る予定の形: `app/calfc_tasks.py`（`desired()`＝期限と担当のあるタスク・案件外、`ext_ref=newproduct:task:<id>`／`newproduct:work:<id>`、送った内容を `calfc_task_sent` に残して差分だけ送る、無くなったものは delete）／タスクの書き込みの後に裏で同期／設定に状態と「送り直す」／完了の受け口 `POST /api/svc/task/done`。依頼書は fun-create-ec-agents `docs/product-dev/contracts/` に（未作成・送るかは十文字さんに確認）。
 
-## 宿題: 2026-10-15 朝、夜間バックアップが newproduct で通ったか確かめて HUB に1行（ADR-099）
+## 済: 夜間バックアップが newproduct で通った（2026-10-17 確認・ADR-099）
 
-`ls -l /var/backups/newproduct | tail -2`（10-15 04:15 の控えが newproduct 持ちで 300K 前後）と `tail -3 /var/log/newproduct-backup.log`。通っていたら `status/new-product.md` に1行。落ちていたら `/etc/cron.d/newproduct-backup.bak-20261014` を戻す。
+10-15・16・17 の 04:15 の控えが3日とも newproduct 持ちで通った（HUB に1行入れた）。`/etc/cron.d/newproduct-backup.bak-20261014` は残してある。
+
+## ChatWork（Lucky Field×FUN-CREATE 345914105）の読んだ位置
+
+最後に読んだ message_id: **2162956664415064064**（2026-10-16 23:57 吉田さん）。次はこの次から読む。
+10-14 の「専用商品を基準の商品に紐づける」提案（十文字さん名義で送信・2162021444492861440）は、吉田さんが同日 10:34 に「そのとおりに作り本番に反映」と回答。以後のやりとりは CIP の FBA 入数・ハメパチの材料費（杉浦さん・吉田さん）で、NEW PRODUCT への依頼は無い。
 
 ## 次にやる3件
 
