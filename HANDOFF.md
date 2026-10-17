@@ -203,7 +203,7 @@ cron の正本は `/etc/cron.d/`。配る前に必ず `diff -u` で突き合わ�
 ## FR-121 カレンダーへタスク（2026-10-17 NEW PRODUCT 側は実装済み・Calendar 側待ち）
 
 ADR-100。送るのは期限と担当の入ったタスク。担当の入力（カルテのタスク表・タスク一覧）を足した。**本番は担当が全件空**なので、商品開発部が担当を入れるまで送るものは無い。
-Calendar 側の3点（鍵の道・origin・完了の伝え先）は依頼書 fun-create-ec-agents `docs/product-dev/contracts/2026-10-17_calfc_タスク連携.md`（**未送付**・送るかは十文字さんに確認）。
+Calendar 側の3点（鍵の道・origin・完了の伝え先）は依頼書 fun-create-ec-agents `docs/product-dev/contracts/2026-10-17_calfc_タスク連携.md`（**10-17 オーケストレーション経由で送付済み**・十文字さん了承）。
 鍵 `config/calfc_callback_token` は本番で作成済み（newproduct 0600）。
 
 ## 次にやる3件
