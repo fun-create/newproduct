@@ -243,6 +243,15 @@ def main() -> int:
         st, d = cl.get(f"/api/projects/{pid}/cost")
         note(st == 200 and d["versions"][0]["totals"]["material"]["yen"] is None,
              "単価の無い行は 0 円ではなく未確定", f"{st}")
+        # カレンダーへのタスク（FR-121）。鍵の無い環境では「鍵がありません」と言う（0 件と言わない）
+        st, d = cl.get("/api/settings/calfc-tasks")
+        note(st == 200 and d["configured"] is False and "target" in d, "カレンダーへのタスク: 鍵が無ければそう言う", f"{st} {d}")
+        st, d = cl.get("/api/users")
+        note(st == 200 and isinstance(d.get("rows"), list) and all(set(r) <= {"user_id", "name"} for r in d["rows"]),
+             "/api/users は ID と名前だけ", f"{st}")
+        st, d = cl.req("POST", "/api/svc/task/done", {"ext_ref": "newproduct:task:1", "done": "1"})
+        note(st == 403, "カレンダーからの完了の受け口は、鍵が無ければ 403", f"{st}")
+
         # 発売後の「試算 vs 確定」（FR-93）。発売前の案件は比べず、理由を言う
         st, d = cl.get(f"/api/projects/{pid}/cost-check")
         note(st == 200 and d["state"] == "発売前" and d["why"], "突き合わせ: 発売前は比べず理由を言う", f"{st} {d.get('state')}")

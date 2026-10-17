@@ -198,6 +198,21 @@ def set_status(kind: str, task_id: int, status: str, user_id: str,
                       (status, done, task_id))
 
 
+def set_assignee(kind: str, task_id: int, assignee: str, user_id: str) -> dict:
+    """担当を入れる・外す（FR-121 の前提。担当が無いタスクはカレンダーへ送れない）。
+    **知らない利用者は入れない**（綴り違いで誰の一覧にも出ないタスクになる）。空は「担当なし」。"""
+    import auth
+    table = "task" if kind == "task" else "work_item"
+    a = (assignee or "").strip()
+    if a and a not in {u.get("user_id") for u in auth.users()}:
+        raise ValueError(f"利用者 {a!r} はこのアプリの利用者台帳にいません")
+    if store.one(f"SELECT 1 FROM {table} WHERE id=?", (task_id,)) is None:
+        raise LookupError("そのタスクがありません")
+    with store.tx() as c:
+        c.execute(f"UPDATE {table} SET assignee=? WHERE id=?", (a or None, task_id))
+    return {"ok": True, "assignee": a or None}
+
+
 # ── ロール別の負荷（F-5-5）───────────────────────────────
 def load_by_month_role() -> dict:
     """月 × ロール。**管理者を先頭に。**他部署は別列（自部署と混ぜない）。

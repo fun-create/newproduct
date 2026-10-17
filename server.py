@@ -50,6 +50,7 @@ auth.SESSION_DEFAULT = "keep"
 from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
 from app import ai_draft as ai_draft_m  # noqa: E402
+from app import calfc_tasks as calfc_tasks_m  # noqa: E402
 from app import ai_web as ai_web_m  # noqa: E402
 from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
@@ -95,6 +96,15 @@ CONTRACT_VERSION = "0.1.0"
 STARTED_AT = time.strftime("%Y-%m-%d %H:%M:%S")
 
 SVC_TOKEN_PATH = CONFIG_DIR / "svc_token"
+# カレンダー → NEW PRODUCT の完了・未完了だけを通す鍵（FR-121）。svc_token を配らない（道ごとに鍵を分ける）
+CALFC_CALLBACK_TOKEN_PATH = CONFIG_DIR / "calfc_callback_token"
+
+
+def _touches_tasks(path: str) -> bool:
+    """タスクの期限・担当・状態が変わり得る書き込み（カレンダーへ送り直す合図）。"""
+    p = path[len("/api/"):] if path.startswith("/api/") else path
+    return (p.startswith("tasks/") or p.startswith("work-items") or p == "projects"
+            or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
 
 # Caddy を通ると必ず付くヘッダ。1つでもあれば「外から来た」とみなす
 FORWARD_HEADERS = ("X-Forwarded-Proto", "X-Real-IP", "X-Forwarded-For",
@@ -211,7 +221,7 @@ class H(BaseHTTPRequestHandler):
         _, u = auth.session_of(sid)
         return u
 
-    def svc_ok(self) -> bool:
+    def svc_ok(self, token_path=None) -> bool:
         """サーバ間API の3点判定（全体設計書 §6）。
 
         **2番目が要。**loopback チェックだけでは、Caddy が 127.0.0.1 へ
@@ -223,7 +233,8 @@ class H(BaseHTTPRequestHandler):
             return False
         tok = (self.headers.get("Authorization") or "")
         tok = tok[7:] if tok.lower().startswith("bearer ") else ""
-        return bool(tok) and hmac.compare_digest(tok, svc_token())
+        want = _token_file(token_path) if token_path else svc_token()   # 道ごとに鍵を分ける（FR-121 の受け口）
+        return bool(tok) and hmac.compare_digest(tok, want)
 
     def csrf_ok(self) -> bool:
         """画面からの POST。**Origin ＋ Content-Type の2つ**（全体設計書 §6）。
@@ -345,6 +356,20 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/health":
             # 監視用。**外からは Caddy が /api/* を落とす。**
             return self.sendj(200, health())
+        if path == "/api/svc/task/done":
+            # カレンダーからの完了・未完了（FR-121・ADR-100）。**専用の鍵**（config/calfc_callback_token）だけを通す
+            if not self.svc_ok(CALFC_CALLBACK_TOKEN_PATH) or method != "POST":
+                return self.sendj(403, {"error": "forbidden"})
+            d = self.body()
+            actor = str(d.get("actor") or self.headers.get("X-Actor") or "calfc")[:40]
+            try:
+                r = calfc_tasks_m.set_done(str(d.get("ext_ref") or ""), str(d.get("done")).lower() in ("1", "true"), actor)
+            except LookupError as e:
+                return self.sendj(404, {"error": str(e)})
+            except ValueError as e:
+                return self.sendj(400, {"error": str(e)})
+            store.audit("svc:" + actor, "task.done_from_calfc", str(d.get("ext_ref") or ""), r, self.client_address[0])
+            return self.sendj(200, r)
         if path.startswith("/api/svc/"):
             # 既定拒否。3点判定を通ったものだけ
             if not self.svc_ok():
@@ -356,7 +381,10 @@ class H(BaseHTTPRequestHandler):
             if not user:
                 return self.sendj(401, {"error": "ログインしてください"})
             try:
-                return self.app_api(method, path, u, user)
+                r = self.app_api(method, path, u, user)
+                if method == "POST" and _touches_tasks(path):
+                    calfc_tasks_m.sync_later()          # カレンダーへタスク（FR-121）。失敗しても画面は止めない
+                return r
             except PermissionError as e:
                 return self.sendj(403, {"error": str(e)})
             except LookupError as e:
@@ -942,6 +970,23 @@ class H(BaseHTTPRequestHandler):
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
                 qs.get("role", ""), qs.get("assignee", ""),
                 mine=uid if qs.get("mine") == "1" else ""))
+        if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "assignee" and method == "POST":
+            d = self.body()
+            r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)
+            store.audit(uid, "task.assignee", f"{parts[1]}:{parts[2]}", r, ip)
+            return self.sendj(200, r)
+        if parts == ["users"] and method == "GET":
+            # 担当を選ぶための一覧（共通ログインIDと名前だけ。秘密は返さない）
+            return self.sendj(200, {"rows": sorted(({"user_id": x.get("user_id"), "name": x.get("name") or x.get("user_id")}
+                                                     for x in auth.users() if x.get("active", True)), key=lambda x: x["user_id"])})
+        if parts == ["settings", "calfc-tasks"] and method == "GET":
+            return self.sendj(200, calfc_tasks_m.status())
+        if parts == ["settings", "calfc-tasks", "sync"] and method == "POST":
+            if user.get("role") != "admin":
+                return self.sendj(403, {"error": "カレンダーへ送り直せるのは、このアプリの管理者です"})
+            r = calfc_tasks_m.sync()
+            store.audit(uid, "calfc_tasks.sync", "-", {k: r[k] for k in ("error", "sent", "deleted")}, ip)
+            return self.sendj(200, r)
         if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "status" \
                 and method == "POST":
             d = self.body()

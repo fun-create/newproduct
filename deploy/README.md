@@ -111,3 +111,6 @@ sudo systemctl restart newproduct && sudo -u newproduct python3 /opt/newproduct/
 ```
 
 `data/` は git の外。**戻しても消えない。**バックアップは `/var/backups/newproduct/`（30世代）。
+
+`config/calfc_callback_token`（newproduct 0600・git 管理外）は、Calendar からの完了・未完了（`POST /api/svc/task/done`）だけを通す鍵（FR-121）。
+初回の呼び出しで無ければ作られる。Calendar 側に写すのは root で読める人（NEW PRODUCT からは書かない）。

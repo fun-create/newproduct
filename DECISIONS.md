@@ -1871,3 +1871,13 @@ app-ui に全ページを点検してもらい（`docs/ui-review-2026-10-09.md`�
 - **なぜ**: root が newproduct 持ちの台本（`deploy/backup.sh`）を動かすと、アプリが乗っ取られたとき root まで広がる。台本が読むのは newproduct 持ちの data/・config/、書くのは置き場だけなので root は要らない
 - 台本のコメント「雛形: /opt/calfc/deploy/backup.sh」は作ったときに手本にしたという意味で、実行していない
 - 実施後に newproduct で1回流して通った（296K・config と DB の静止点）。翌朝 04:15 の控えが通ったら HUB `status/new-product.md` に1行（宿題）
+
+## ADR-100 — カレンダーへは「タスク」として送る。範囲は期限と担当の入ったタスク全部。正は NEW PRODUCT（FR-121・2026-10-17）
+
+十文字さんの決定（10-13）: 予定ではなくタスク／範囲は期限と担当の入ったタスク全部／受け口は Calendar のコードを読んで確かめる。
+- 送り先は Calendar の既存の口（LP SCOPE 用の `task/upsert`・`task/delete`・`members`）。`ext_ref=newproduct:task:<id>`／`newproduct:work:<id>` で冪等
+- **正は NEW PRODUCT の一方向。**題・期限・URL は次の同期で戻る。完了・未完了だけは Calendar から `POST /api/svc/task/done`（専用の鍵 `config/calfc_callback_token`・`svc_token` は配らない）で受ける
+- 送った中身の指紋を `calfc_task_sent`（039）に残し、変わったものだけ送る。対象から外れたら消す。画面の書き込み（タスク・案件外・案件・目安・発売日・関門）の後に裏で同期、設定に状態と「いま送り直す」（管理者）
+- 期限なし・担当なし・担当がカレンダーのメンバーに無い行は送らず、件数と理由を出す（黙って落とさない・N-10）
+- **担当の入力を足した**（`POST /api/tasks/<kind>/<id>/assignee`・カルテのタスク表とタスク一覧）。本番のタスクは担当が全件空だったため、入れないと1件も送れない。利用者台帳に無い ID は入れない
+- **Calendar 側の対応待ち（3点）**: 鍵に道を足す・`origin` を呼び出し元の名前に・完了を NEW PRODUCT に伝える（fun-create-ec-agents `docs/product-dev/contracts/2026-10-17_calfc_タスク連携.md`・**未送付**）。それまで設定ページは「この鍵に許可されていません」と出す

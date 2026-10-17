@@ -1174,10 +1174,11 @@
                 el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
                 el("td", { text: dash(t.role_label) }),
-                el("td", { text: dash(t.assignee) }),
+                h.editable ? assigneeCell("task", t) : el("td", { text: dash(t.assignee) }),
                 el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) })
               ]);
             }))]));
+          tv.appendChild(el("p", { "class": "np-note", text: "担当を入れると、期限のあるタスクが担当者のカレンダー（Calendar アプリ）のタスクに出ます（FR-121）。担当が無いタスクは送られません。" }));
           tv.appendChild(el("p", { "class": "np-note",
             text: "標準h は予備時間を含まない実作業hです（テンプレート由来）。" }));
         }
@@ -1538,6 +1539,34 @@
         box.appendChild(det);
       }
     }).catch(function (e) { box.appendChild(el("p", { "class": "np-err", text: e.message })); });
+  }
+
+  /** 担当を入れる（FR-121 の前提）。一覧は /api/users（共通ログインID）。空は「担当なし」 */
+  var USERS = null;
+  function assigneeCell(kind, t) {
+    var c = el("td", { "class": "np-nowrap" });
+    var sel = el("select", { "aria-label": "担当" });
+    sel.appendChild(el("option", { value: "", text: "（担当なし）" }));
+    function fill(rows) {
+      rows.forEach(function (u) {
+        var o = el("option", { value: u.user_id, text: u.user_id + (u.name && u.name !== u.user_id ? " " + u.name : "") });
+        if (u.user_id === t.assignee) o.setAttribute("selected", "selected");
+        sel.appendChild(o);
+      });
+      if (t.assignee && !rows.some(function (u) { return u.user_id === t.assignee; })) {
+        var o2 = el("option", { value: t.assignee, text: t.assignee + "（台帳に無い）" }); o2.setAttribute("selected", "selected"); sel.appendChild(o2);
+      }
+    }
+    (USERS ? Promise.resolve(USERS) : api("/api/users").then(function (r) { USERS = r.rows; return USERS; })).then(fill)
+      .catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); });
+    var st = el("span", { "class": "np-status", role: "status" });
+    sel.addEventListener("change", function () {
+      st.textContent = "保存中…";
+      post("/api/tasks/" + kind + "/" + t.id + "/assignee", { assignee: sel.value })
+        .then(function () { st.textContent = "保存しました"; }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+    });
+    c.appendChild(sel); c.appendChild(txt(" ")); c.appendChild(st);
+    return c;
   }
 
   /** 原価・調達（第3段・ADR-047）。
@@ -2163,7 +2192,7 @@
                 : txt("—")]),
               el("td", { text: t.title }),
               el("td", { text: t.role_label + (t.role_external ? "（他部署）" : "") }),
-              el("td", { text: dash(t.assignee) }),
+              assigneeCell(t.project_id ? "task" : "work", t),
               el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
               el("td", { text: t.ai_used ? "適用済" : "未" }),
               el("td", { "class": "np-num",
@@ -4844,6 +4873,36 @@
       mc.appendChild(el("p", { "class": "np-sub", text: "画面ごとに、何をするところか・よく使う操作を書いています。" }));
       mc.appendChild(btnRow([navBtn("#/manual", "操作マニュアルを開く")]));
       b.appendChild(mc);
+
+      // カレンダーへのタスク（FR-121・ADR-100）
+      var cc = el("div", { "class": "np-card" });
+      cc.appendChild(el("h2", { text: "カレンダー（Calendar アプリ）へのタスク" }));
+      cc.appendChild(el("p", { "class": "np-sub", text: "期限と担当の入ったタスク（案件のタスク・案件外の仕事）を、担当者のタスクとしてカレンダーへ送ります。正は NEW PRODUCT で、カレンダーで変えた題や期限は次の同期で戻ります。完了・未完了だけはカレンダーからも変えられます。" }));
+      var ccs = el("p", { "class": "np-note", text: "読み込み中…" });
+      cc.appendChild(ccs);
+      api("/api/settings/calfc-tasks").then(function (c) {
+        var sk = c.skipped || {};
+        ccs.textContent = (c.configured ? "" : "鍵がありません（" + c.why + "）。 ")
+          + "送る対象 " + c.target + " 件／送った " + c.sent + " 件（最後 " + (c.last_sent_at || "—") + "）／送らない: 期限なし " + (sk["期限なし"] || 0) + " 件・担当なし " + (sk["担当なし"] || 0) + " 件";
+        if (c.last_sync) {
+          var ls = c.last_sync;
+          cc.appendChild(el("p", { "class": ls.error ? "np-warn" : "np-note", text: "最後の同期（" + (c.last_sync_at || "—") + "）: "
+            + (ls.error ? "止まりました: " + ls.error : "送った " + ls.sent + " 件・消した " + ls.deleted + " 件")
+            + (ls.unsendable && Object.keys(ls.unsendable).length ? "／送れない " + Object.keys(ls.unsendable).length + " 件（" + Object.keys(ls.unsendable).map(function (k) { return ls.unsendable[k]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join("・") + "）" : "") }));
+        }
+        if (me.role === "admin") {
+          var sb = el("button", { type: "button", "class": "np-btn", text: "いま送り直す" });
+          var sm = el("p", { "class": "np-note", role: "status" });
+          sb.addEventListener("click", function () {
+            sb.setAttribute("disabled", "disabled"); sm.textContent = "送っています…";
+            post("/api/settings/calfc-tasks/sync", {}).then(function (r) {
+              sm.textContent = r.error ? "止まりました: " + r.error : "送った " + r.sent + " 件・消した " + r.deleted + " 件";
+            }).catch(function (e) { sm.textContent = "できませんでした: " + e.message; }).then(function () { sb.removeAttribute("disabled"); });
+          });
+          cc.appendChild(btnRow([sb])); cc.appendChild(sm);
+        }
+      }).catch(function (e) { ccs.textContent = e.message; });
+      b.appendChild(cc);
 
       // データの登録（ADR-060〜）。重い登録は別の画面に分ける
       var dc = el("div", { "class": "np-card" });
