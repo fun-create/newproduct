@@ -83,7 +83,10 @@ class Calibrate(unittest.TestCase):
         p3 = self._launched("途中", "2026-06-01", i3, {"axes": {"demand": 5}, "total": 50})
         self.revenue[p3] = 1000
         v = self.m.view("dev")
-        self.assertEqual(v["pairs"]["skipped"], {"アイデアにつながっていない": 1, "点がない": 1, "売上が未計測": 1, "12か月に満たない": 1})
+        self.store.ex("UPDATE project SET launch_date=NULL WHERE internal_name='移行分'")
+        self.store.conn().commit()
+        v = self.m.view("dev")
+        self.assertEqual(v["pairs"]["skipped"], {"発売日なし": 1, "アイデアにつながっていない": 0, "点がない": 1, "売上が未計測": 1, "12か月に満たない": 1})
         self.assertEqual(v["pairs"]["usable"], 0)
         self.assertEqual(v["check"]["versions"], [], "そろっていなければ相関を出さない")
         row = [r for r in v["pairs"]["rows"] if r["project_id"] == p3][0]
@@ -111,7 +114,9 @@ class Calibrate(unittest.TestCase):
         self.store.conn().commit()
         ver = self.m.view("dev")["check"]["versions"][0]
         self.assertEqual(ver["state"], "未計測")
-        self.assertIsNone(ver["axes"][0]["rho"])
+        ax = {a["code"]: a for a in ver["axes"]}
+        self.assertIsNone(ax["demand"]["rho"], "件数が足りないあいだは、並べられる軸でも相関を出さない")
+        self.assertEqual(ax["demand"]["word"], "未計測")
 
     def test_spearman_ties_and_reverse(self):
         self.assertEqual(self.m.spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1.0)

@@ -3310,7 +3310,7 @@
       b.appendChild(kpiRow([
         kpi("発売済みの案件", pr.launched + " 件"),
         kpi("突き合わせられる（12か月そろった）", pr.usable + " 件", "相関を出すには " + d.check.min_n + " 件要ります"),
-        kpi("アイデアにつながっていない", (sk["アイデアにつながっていない"] || 0) + " 件", "移行した案件はアイデアの記録が無い"),
+        kpi("発売日なし／アイデアにつながっていない", (sk["発売日なし"] || 0) + " / " + (sk["アイデアにつながっていない"] || 0) + " 件", "移行した案件は発売日やアイデアの記録が無い"),
         kpi("売上が未計測／12か月に満たない", (sk["売上が未計測"] || 0) + " / " + (sk["12か月に満たない"] || 0) + " 件")]));
       // 版ごとの軸の相関
       var cc = el("div", { "class": "np-card" });
@@ -3357,7 +3357,11 @@
         var ver = el("select", { name: "rubric_version", "aria-label": "版" });
         var axis = el("select", { name: "axis", "aria-label": "軸" });
         api("/api/rubrics").then(function (rb) {
-          rb.rows.forEach(function (r) { ver.appendChild(el("option", { value: r.version, text: r.version })); });
+          rb.rows.forEach(function (r) {
+            var o = el("option", { value: r.version, text: r.version });
+            if (r.version === "v2") o.setAttribute("selected", "selected");      // いま採点に使う版を先に
+            ver.appendChild(o);
+          });
           function fillAxes() {
             while (axis.firstChild) axis.removeChild(axis.firstChild);
             var r = rb.rows.filter(function (x) { return x.version === ver.value; })[0];

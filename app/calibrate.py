@@ -52,11 +52,14 @@ def _first12(ps: dict, launch: str, today: dt.date) -> dict:
 def pairs(today: dt.date | None = None) -> dict:
     from app import sales
     today = today or store.today()
-    rows, skipped = [], {"アイデアにつながっていない": 0, "点がない": 0, "売上が未計測": 0, "12か月に満たない": 0}
+    rows, skipped = [], {"発売日なし": 0, "アイデアにつながっていない": 0, "点がない": 0, "売上が未計測": 0, "12か月に満たない": 0}
     for p in store.q("SELECT p.id, p.idea_id, p.internal_name, p.launch_date, p.stage, i.title AS idea_title "
                      "FROM project p LEFT JOIN idea i ON i.id=p.idea_id "
-                     "WHERE p.stage IN (%s) AND p.launch_date IS NOT NULL ORDER BY p.launch_date"
+                     "WHERE p.stage IN (%s) ORDER BY (p.launch_date IS NULL), p.launch_date"
                      % ",".join("?" * len(LAUNCHED)), LAUNCHED):
+        if not p["launch_date"]:
+            skipped["発売日なし"] += 1                 # 移行した発売済みに多い。黙って外さない
+            continue
         if not p["idea_id"]:
             skipped["アイデアにつながっていない"] += 1
             continue
