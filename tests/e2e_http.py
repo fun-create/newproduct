@@ -255,6 +255,13 @@ def main() -> int:
              "/api/users は ID と名前だけ", f"{st}")
         st, d = cl.req("POST", "/api/svc/task/done", {"ext_ref": "newproduct:task:1", "done": "1"})
         note(st == 403, "カレンダーからの完了の受け口は、鍵が無ければ 403", f"{st}")
+        tok = (app / "config" / "calfc_callback_token").read_text().strip() if (app / "config" / "calfc_callback_token").exists() else ""
+        if tok:
+            c = http.client.HTTPConnection("127.0.0.1", cl.port, timeout=10)
+            c.request("POST", "/api/svc/task/done", json.dumps({"ext_ref": "newproduct:task:999999", "done": True}),
+                      {"Content-Type": "application/json", "Authorization": "Bearer " + tok, "X-Actor": "e2e"})
+            r = c.getresponse(); st = r.status; r.read(); c.close()
+            note(st == 404, "完了の受け口は JSON を読み、無いタスクは 404", f"{st}")
 
         # 発売後の「試算 vs 確定」（FR-93）。発売前の案件は比べず、理由を言う
         st, d = cl.get(f"/api/projects/{pid}/cost-check")

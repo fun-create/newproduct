@@ -288,6 +288,14 @@ class H(BaseHTTPRequestHandler):
         if n <= 0:
             return {}
         raw = self.rfile.read(n).decode("utf-8", "replace")
+        ct = (self.headers.get("Content-Type") or "").split(";")[0].strip()
+        if ct == "application/json":
+            # サーバ間の口（カレンダーからの完了・未完了）は JSON で来る。画面はフォーム形式のまま
+            try:
+                d = json.loads(raw or "{}")
+            except ValueError:
+                raise ValueError("JSON が読めません") from None
+            return {k: ("" if v is None else v) for k, v in d.items()} if isinstance(d, dict) else {}
         return {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
 
     # ── 入口 ────────────────────────────────────────────
@@ -363,8 +371,10 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(403, {"error": "forbidden"})
             d = self.body()
             actor = str(d.get("actor") or self.headers.get("X-Actor") or "calfc")[:40]
+            done = d.get("done")
+            done = done if isinstance(done, bool) else str(done).lower() in ("1", "true")
             try:
-                r = calfc_tasks_m.set_done(str(d.get("ext_ref") or ""), str(d.get("done")).lower() in ("1", "true"), actor)
+                r = calfc_tasks_m.set_done(str(d.get("ext_ref") or ""), done, actor)
             except LookupError as e:
                 return self.sendj(404, {"error": str(e)})
             except ValueError as e:
