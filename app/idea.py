@@ -804,6 +804,8 @@ def detail(idea_id: str) -> dict | None:
                          else (d["origin_note"] or "不明"))
     d["scores"] = scores_of(idea_id)
     d["similar"] = similar_of(idea_id)
+    from app import sametype
+    d["sametype"] = sametype.check(d.get("title") or "", d.get("summary") or "", d.get("theme_id"), exclude_id=idea_id)   # FR-139
     d["margin_points"] = margin_points(d["expected_margin_yen"])
     d["feasibility_factor"] = feasibility_factor(d["production_feasibility"])
     # v2 の母数（テーマ内）。**少ない母数の百分位は動きやすいので画面に出す**

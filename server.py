@@ -1020,8 +1020,12 @@ class H(BaseHTTPRequestHandler):
         # 起票の前に似た案を出す（F-1-12）。**外部APIを使わない**
         if parts == ["ideas", "similar"] and method == "POST":
             d = self.body()
+            from app import sametype
             return self.sendj(200, {"rows": idea_m.similar_to_title(
-                d.get("title", ""), exclude_id=d.get("exclude") or None)})
+                d.get("title", ""), exclude_id=d.get("exclude") or None),
+                # 同型の検知（FR-139・ADR-104）。止めない・数えて見せるだけ
+                "sametype": sametype.check(d.get("title", ""), d.get("summary", ""), d.get("theme_id") or None,
+                                           exclude_id=d.get("exclude") or None)})
         if parts == ["rubrics"] and method == "GET":
             return self.sendj(200, {"rows": idea_m.rubrics()})
         # 新機種調査（FR-140・ADR-102）。見るのは全員・調べさせる/決める/表を直すのは業務ロール

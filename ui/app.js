@@ -2607,8 +2607,9 @@
       var t = title.value.trim();
       simBox.innerHTML = "";
       if (t.length < 2) return;
-      post("/api/ideas/similar", { title: t }).then(function (r) {
+      post("/api/ideas/similar", { title: t, summary: (summary && summary.value) || "", theme_id: (theme && theme.value) || "" }).then(function (r) {
         simBox.innerHTML = "";
+        simBox.appendChild(sametypeNote(r.sametype));
         if (!r.rows.length) {
           simBox.appendChild(el("p", { "class": "np-note", text: "似た案は見つかりませんでした。" }));
           return;
@@ -2643,6 +2644,22 @@
   }
 
   // ── アイデア1件（採点画面を含む）────────────────────────
+  /** 同型の検知（FR-139・ADR-104）。構成の印（商品の形の語）が同じ案を数えて見せる。止めない */
+  function sametypeNote(s) {
+    var w = el("div", { "class": "np-sametype" });
+    if (!s) return w;
+    if (s.state === "判定できない") { w.appendChild(el("p", { "class": "np-note", text: "同型: 判定できない — " + s.why })); return w; }
+    var head = "構成の印: " + s.signature.join("＋") + "。";
+    if (s.state === "同型なし") { w.appendChild(el("p", { "class": "np-note", text: head + "同じ構成の案・過去の新商品はありません。" })); return w; }
+    w.appendChild(el("p", { "class": s.other_theme ? "np-warn" : "np-note",
+      text: head + "同じ構成の案が " + s.ideas.length + " 件（別テーマ " + s.other_theme + " 件・同じテーマ " + s.same_theme + " 件）、過去の新商品に " + s.past.length + " 件。"
+        + (s.other_theme ? "テーマが違うのに構成が同じ＝使い回しの疑いです。構成を変えるか、違いを概要に書いてください。" : "") }));
+    if (s.ideas.length) w.appendChild(el("ul", { "class": "np-miss" }, s.ideas.slice(0, 10).map(function (x) {
+      return el("li", null, [el("a", { href: "#/ideas/" + x.id, text: x.title }), txt(" — " + x.stage + (x.other_theme ? "・別テーマ" : ""))]); })));
+    if (s.past.length) w.appendChild(el("p", { "class": "np-sub", text: "過去の新商品: " + s.past.slice(0, 5).map(function (p) { return p.name + "（" + (p.launch_date || "—") + "）"; }).join("、") + (s.past.length > 5 ? " ほか" : "") }));
+    return w;
+  }
+
   function viewIdea(id) {
     loading();
     Promise.all([api("/api/ideas/" + encodeURIComponent(id)), api("/api/meta"),
@@ -2680,6 +2697,9 @@
           text: "起票経路が不明です（移行分）。元のシートに起票経路の列がありません。推測では埋めていません。分かる人が下のフォームで入れてください。" }));
       }
 
+      // ── 同型（FR-139）──
+      b.appendChild(el("h2", { text: "同型の案（商品の形の組み合わせが同じもの）" }));
+      b.appendChild(sametypeNote(d.sametype));
       // ── 似た案（F-1-12）──
       b.appendChild(el("h2", { text: "似た案" }));
       if (!d.similar.length) {
