@@ -43,6 +43,13 @@ def main() -> int:
     from app import costcheck
     cc = costcheck.record_due()
     print(f"原価の突き合わせ: 発売済み {cc['projects']} 件・今回残した {cc['recorded_now']} 件・状態 {cc['counts']}")
+    # 新機種調査（FR-140・ADR-102）。AI が使える状態なら毎月1回、裏で走らせる（候補は画面で人が決める）
+    from app import device
+    try:
+        dr = device.start_run("timer")
+        print("新機種調査:", "始めた" if dr.get("started") else f"始めなかった（{dr.get('reason')}）")
+    except Exception as e:                                   # noqa: BLE001
+        print(f"新機種調査: 始められなかった（{e}）")
     return 1 if (r["problems"] or h["error"] or h["changed"]) else 0     # 落ちない失敗にしない
 
 

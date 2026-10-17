@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -2471,7 +2471,7 @@
       var ai = meta.ai_scoring || {};
       b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
         navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : "")),
-        navBtn("#/calibration", "採点の校正（発売後の実績と）")]));
+        navBtn("#/calibration", "採点の校正（発売後の実績と）"), navBtn("#/devices", "新機種調査（スキンシール）")]));
 
       // ── 全体の形（絞り込み後の全件で数える。表は上限まで）──
       var sm = d.summary || {};
@@ -3295,6 +3295,128 @@
       }).catch(function (e) { msg.textContent = "様子を見られませんでした: " + e.message; });
     }
     tick();
+  }
+
+  /** 新機種調査（FR-140・ADR-102）。AI がウェブで探した新機種の候補を人が決める。展開の表の正本はここ */
+  function viewDevices() {
+    loading();
+    api("/api/devices").then(function (d) {
+      var b = clear();
+      setTitle("新機種調査（スキンシール）");
+      b.appendChild(btnRow([navBtn("#/ideas", "アイデアへ戻る")]));
+      b.appendChild(el("p", { "class": "np-note", text: "毎月、AI がウェブで対象12シリーズの新機種（直近3か月に発売・半年以内に発売予定）を探し、展開の表に無いものだけを候補に出します。候補を「案件にする」と ④ニューモデル追加の案件ができ、「展開済み」は表に入ります。発売日や内容は AI が書いたもので、確かめるのは人です。" }));
+      var c0 = d.counts || {};
+      b.appendChild(kpiRow([kpi("確認待ちの候補", (c0["提案"] || 0) + " 件"), kpi("案件にした", (c0["案件にした"] || 0) + " 件"),
+        kpi("展開済みにした", (c0["展開済み"] || 0) + " 件"), kpi("展開の表", d.models.length + " 行", d.sheets.length + " シート")]));
+      // 調べさせる
+      var rc = el("div", { "class": "np-card" });
+      rc.appendChild(el("h2", { text: "AI に調べさせる" }));
+      var ai = d.ai || {};
+      if (d.last) rc.appendChild(el("p", { "class": "np-sub", text: "最後の回: " + d.last.created_at + "・" + d.last.model + "・候補 " + ((d.last.body || {}).rows || []).length + " 件・該当なし " + (((d.last.body || {}).none) || []).join("・") + "・既知として落とした " + ((d.last.body || {}).dropped || 0) + " 件" }));
+      else rc.appendChild(el("p", { "class": "np-note", text: "まだ1回も調べていません。毎月2日の自動実行でも走ります。" }));
+      if (d.can_edit && ai.can_run) {
+        var btn = el("button", { type: "button", "class": "np-btn", text: "いま AI に調べさせる（1回 $0.6 まで）" });
+        if (!ai.enabled) btn.setAttribute("disabled", "disabled");
+        var m2 = el("p", { "class": "np-note", role: "status" });
+        btn.addEventListener("click", function () {
+          btn.setAttribute("disabled", "disabled");
+          post("/api/devices/run", {}).then(function (r) {
+            if (!r.started) { m2.textContent = r.reason; btn.removeAttribute("disabled"); return; }
+            pollRun(r.run_id, m2, go);
+          }).catch(function (e) { m2.textContent = "できませんでした: " + e.message; btn.removeAttribute("disabled"); });
+        });
+        if (!ai.enabled) rc.appendChild(el("p", { "class": "np-warn", text: ai.reason }));
+        rc.appendChild(btnRow([btn])); rc.appendChild(m2);
+      }
+      if (d.last && d.last.trace) {
+        var det = el("details", { "class": "np-more" });
+        det.appendChild(el("summary", { text: "AI が検索した言葉・開いたページ（最後の回）" }));
+        var tr = d.last.trace;
+        det.appendChild(el("p", { "class": "np-sub", text: "検索 " + (tr.calls || []).filter(function (x) { return x.tool === "WebSearch"; }).length + " 回・開いたページ " + (tr.opened || []).length + " 件" }));
+        det.appendChild(el("ul", null, (tr.calls || []).map(function (x) { return el("li", { text: x.tool + ": " + x.what }); })));
+        if ((d.last.unverified || []).length) { det.appendChild(el("p", { "class": "np-sub", text: "未確認:" })); det.appendChild(el("ul", null, d.last.unverified.map(function (u) { return el("li", { text: u }); }))); }
+        rc.appendChild(det);
+      }
+      b.appendChild(rc);
+      // 候補
+      var cc = el("div", { "class": "np-card" });
+      cc.appendChild(el("h2", { text: "候補（AI が出したもの）" }));
+      var pend = d.candidates.filter(function (c) { return c.state === "提案"; });
+      if (!pend.length) cc.appendChild(el("p", { "class": "np-note", text: "確認待ちの候補はありません。" }));
+      else cc.appendChild(el("div", { "class": "np-tablewrap" }, [table(["シリーズ", "機種", "発売日（AI）", "国内", "確からしさ", "概要", "出典", ""], pend.map(function (c) {
+        var act = el("td", { "class": "np-nowrap" });
+        if (d.can_edit) {
+          [["案件にした", "案件にする"], ["展開済み", "展開済み"], ["見送り", "見送る"]].forEach(function (x) {
+            var bt = el("button", { type: "button", text: x[1] });
+            bt.addEventListener("click", function () {
+              if (x[0] === "案件にした" && !window.confirm("「" + c.model + " スキンシール」を ④ニューモデル追加の案件として作ります。よろしいですか")) return;
+              post("/api/devices/candidates/" + c.id + "/decide", { state: x[0] }).then(function () { go(); })
+                .catch(function (e) { act.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            act.appendChild(bt); act.appendChild(txt(" "));
+          });
+        }
+        return el("tr", null, [el("td", { text: c.series_label }), el("td", { text: c.model }), el("td", { "class": "np-nowrap", text: dash(c.release_date) }),
+          el("td", { text: dash(c.jp_released) }), el("td", { text: dash(c.confidence) }), el("td", { text: dash(c.summary) }),
+          el("td", null, [c.url && /^https?:\/\//i.test(c.url) ? el("a", { href: c.url, rel: "noopener noreferrer", target: "_blank", text: c.seen }) : txt(c.seen || "—")]), act]);
+      }))]));
+      var done = d.candidates.filter(function (c) { return c.state !== "提案"; });
+      if (done.length) {
+        var dd = el("details", { "class": "np-more" });
+        dd.appendChild(el("summary", { text: "決めた候補（" + done.length + " 件）" }));
+        dd.appendChild(table(["シリーズ", "機種", "判断", "誰が", "いつ", "案件"], done.map(function (c) {
+          return el("tr", null, [el("td", { text: c.series_label }), el("td", { text: c.model }), el("td", { text: c.state }), el("td", { text: dash(c.decided_by) }),
+            el("td", { "class": "np-nowrap", text: dash(c.decided_at) }), el("td", null, [c.project_id ? el("a", { href: "#/projects/" + c.project_id, text: c.project_id }) : txt("—")])]);
+        })));
+        cc.appendChild(dd);
+      }
+      b.appendChild(cc);
+      // 展開の表
+      var mc = el("div", { "class": "np-card" });
+      mc.appendChild(el("h2", { text: "展開の表（本体モデル × スキンシール展開）" }));
+      mc.appendChild(el("p", { "class": "np-sub", text: "元の Google シートの写しです。正本はここに移しました（取り込みは画面で直した行を上書きしません）。" }));
+      var bySheet = {};
+      d.models.forEach(function (m) { (bySheet[m.sheet] = bySheet[m.sheet] || []).push(m); });
+      mc.appendChild(chartCard("シートごとの行数（○＝展開あり）", hbars(d.sheets.map(function (sh) {
+        var ms = bySheet[sh] || [];
+        return { label: sh, value: ms.length, valueText: ms.length + " 行（○ " + ms.filter(function (m) { return (m.deploy || "").indexOf("○") === 0; }).length + "）" };
+      }), { unit: "行" }), {}));
+      var slot = el("div");
+      function form(m) {
+        var f = el("form", { "class": "np-field" });
+        f.appendChild(el("h3", { text: m ? "直す: " + m.model : "行を足す" }));
+        var sh = el("select", { name: "sheet", "aria-label": "シート" });
+        d.sheets.forEach(function (x) { var o = el("option", { value: x, text: x }); if (m && m.sheet === x) o.setAttribute("selected", "selected"); sh.appendChild(o); });
+        function inp(name, label, size, val) { return el("label", null, [label + " ", el("input", { name: name, size: size, value: val === null || val === undefined ? "" : String(val) })]); }
+        var p1 = el("p", null, [txt("シート "), sh, txt(" "), inp("model", "本体モデル（必須）", 22, m && m.model), txt(" "), inp("model_no", "モデル番号", 10, m && m.model_no)]);
+        var p2 = el("p", null, [inp("deploy", "展開（○／互換性あり／しない／掲載終了）", 12, m && m.deploy), txt(" "), inp("release", "発売日", 10, m && m.release), txt(" "), inp("ended", "掲載終了", 10, m && m.ended), txt(" "), inp("url", "URL", 28, m && m.url), txt(" "), inp("note", "メモ", 20, m && m.note)]);
+        var bar = el("p", null, [el("button", { type: "submit", text: m ? "直す" : "足す" })]);
+        f.appendChild(p1); f.appendChild(p2); f.appendChild(bar);
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var o = { id: m ? String(m.id) : "", sheet: sh.value };
+          ["model", "model_no", "deploy", "release", "ended", "url", "note"].forEach(function (k) { o[k] = f.elements[k].value; });
+          post("/api/devices/model", o).then(function () { go(); }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        return f;
+      }
+      d.sheets.forEach(function (sh) {
+        var ms = bySheet[sh] || [];
+        var det = el("details", { "class": "np-more" });
+        det.appendChild(el("summary", { text: sh + "（" + ms.length + " 行）" }));
+        det.appendChild(el("div", { "class": "np-tablewrap" }, [table(["本体モデル", "モデル番号", "展開", "発売日", "掲載終了", "URL", "メモ", "出どころ", ""], ms.map(function (m) {
+          var act = el("td");
+          if (d.can_edit) { var e1 = el("button", { type: "button", text: "直す" }); e1.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(m)); slot.scrollIntoView({ block: "nearest" }); }); act.appendChild(e1); }
+          return el("tr", null, [el("td", { text: m.model }), el("td", { text: dash(m.model_no) }), el("td", { text: dash(m.deploy) }), el("td", { text: dash(m.release) }), el("td", { text: dash(m.ended) }),
+            el("td", null, [m.url && /^https?:\/\//i.test(m.url) ? el("a", { href: m.url, rel: "noopener noreferrer", target: "_blank", text: "開く" }) : txt(dash(m.url))]),
+            el("td", { text: dash(m.note) }), el("td", { text: m.edited_at ? "画面で " + (m.edited_by || "") + " " + m.edited_at : (m.source_row !== null ? "取り込み 行" + m.source_row : "—") }), act]);
+        }))]));
+        mc.appendChild(det);
+      });
+      mc.appendChild(slot);
+      if (d.can_edit) { var add = el("button", { type: "button", "class": "np-btn", text: "行を足す" }); add.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(null)); }); mc.appendChild(el("p", { "class": "np-btnrow" }, [add])); }
+      b.appendChild(mc);
+    }).catch(fail);
   }
 
   /** 採点の校正（FR-111・ADR-101）。発売から12か月の売上と、採点時の軸の点を突き合わせる。
@@ -5685,6 +5807,7 @@
     if (path === "#/simulate") return viewSimulate();
     if (path === "#/ai-score") return viewAiScore();
     if (path === "#/calibration") return viewCalibration();
+    if (path === "#/devices") return viewDevices();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();

@@ -52,6 +52,7 @@ from app import ai_name as ai_name_m  # noqa: E402
 from app import ai_draft as ai_draft_m  # noqa: E402
 from app import calfc_tasks as calfc_tasks_m  # noqa: E402
 from app import calibrate as calibrate_m  # noqa: E402
+from app import device as device_m  # noqa: E402
 from app import ai_web as ai_web_m  # noqa: E402
 from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
@@ -1023,6 +1024,23 @@ class H(BaseHTTPRequestHandler):
                 d.get("title", ""), exclude_id=d.get("exclude") or None)})
         if parts == ["rubrics"] and method == "GET":
             return self.sendj(200, {"rows": idea_m.rubrics()})
+        # 新機種調査（FR-140・ADR-102）。見るのは全員・調べさせる/決める/表を直すのは業務ロール
+        if parts == ["devices"] and method == "GET":
+            return self.sendj(200, device_m.view(uid))
+        if parts == ["devices", "run"] and method == "POST":
+            r = device_m.start_run(uid)
+            store.audit(uid, "device.run", "-", r, ip)
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[0] == "devices" and parts[1] == "candidates" and parts[3] == "decide" and method == "POST":
+            d = self.body()
+            r = device_m.decide(int(parts[2]), d.get("state", ""), uid, d.get("note", ""))
+            store.audit(uid, "device.decide", parts[2], r, ip)
+            return self.sendj(200, r)
+        if parts == ["devices", "model"] and method == "POST":
+            d = self.body()
+            r = device_m.save_model(d, uid)
+            store.audit(uid, "device.model", str(r["id"]), {"sheet": d.get("sheet"), "model": d.get("model")}, ip)
+            return self.sendj(200, r)
         # 採点の校正（FR-111・ADR-101）。見るのは全員・記録は業務ロール
         if parts == ["calibration"] and method == "GET":
             return self.sendj(200, calibrate_m.view(uid))

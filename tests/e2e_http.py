@@ -243,6 +243,10 @@ def main() -> int:
         st, d = cl.get(f"/api/projects/{pid}/cost")
         note(st == 200 and d["versions"][0]["totals"]["material"]["yen"] is None,
              "単価の無い行は 0 円ではなく未確定", f"{st}")
+        # 新機種調査（FR-140）。展開の表が入り、候補が無ければそう言う
+        st, d = cl.get("/api/devices")
+        note(st == 200 and len(d["series"]) == 12 and "counts" in d and d["last"] is None, "新機種調査: 12シリーズと表を出し、調べていなければ最後の回は無し", f"{st}")
+
         # 採点の校正（FR-111）。突き合わせられる案件が無ければ「未計測」（相関を出さない）
         st, d = cl.get("/api/calibration")
         note(st == 200 and d["check"]["versions"] == [] and "skipped" in d["pairs"], "採点の校正: 件数が無ければ相関を出さない", f"{st}")

@@ -206,6 +206,11 @@ ADR-100。送るのは期限と担当の入ったタスク。担当の入力（�
 Calendar 側の3点（鍵の道・origin・完了の伝え先）は依頼書 fun-create-ec-agents `docs/product-dev/contracts/2026-10-17_calfc_タスク連携.md`（**10-17 オーケストレーション経由で送付済み**・十文字さん了承）。
 鍵 `config/calfc_callback_token` は本番で作成済み（newproduct 0600）。
 
+## 注意: 元シートにログイン情報（2026-10-18 発見）
+
+「スキンシール本体モデル展開管理」のアイコス・プルームの表に、公式ショップのログイン情報（ID・パスワード）が書かれたセルがある。
+アプリは取り込まない（`app/device.py` の `_SECRET`）。`seed/09_*.tsv` からは消した。**元の Google シートと fun-create-ec-agents `data/raw/product-dev/09_*.tsv` には残っている**（十文字さんに報告済み・消すかは十文字さん）。
+
 ## 次にやる3件
 
 1. FR-168 自動化依頼から標準タスクのひな形の下書きへ入れる導線
