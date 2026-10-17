@@ -51,6 +51,7 @@ from app import ai_score as ai_m  # noqa: E402
 from app import ai_name as ai_name_m  # noqa: E402
 from app import ai_draft as ai_draft_m  # noqa: E402
 from app import calfc_tasks as calfc_tasks_m  # noqa: E402
+from app import calibrate as calibrate_m  # noqa: E402
 from app import ai_web as ai_web_m  # noqa: E402
 from app import schedule as sched_m  # noqa: E402
 from app import automation as auto_m  # noqa: E402
@@ -1012,6 +1013,14 @@ class H(BaseHTTPRequestHandler):
                 d.get("title", ""), exclude_id=d.get("exclude") or None)})
         if parts == ["rubrics"] and method == "GET":
             return self.sendj(200, {"rows": idea_m.rubrics()})
+        # 採点の校正（FR-111・ADR-101）。見るのは全員・記録は業務ロール
+        if parts == ["calibration"] and method == "GET":
+            return self.sendj(200, calibrate_m.view(uid))
+        if parts == ["calibration", "note"] and method == "POST":
+            d = self.body()
+            r = calibrate_m.add_note(d, uid)
+            store.audit(uid, "calibration.note", str(r["id"]), {k: d.get(k) for k in ("rubric_version", "axis", "verdict")}, ip)
+            return self.sendj(200, r)
         if parts == ["settings"] and method == "GET":
             # 接続先（ChatWork の部屋・AI予算の口・本文の URL）は**アプリ権限 admin にだけ**見せる。
             # 業務の数え方ではなく、他のシステムへのつなぎ方なので（2026-10-06 app-ui の提案・ADR-058）

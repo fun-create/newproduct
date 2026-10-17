@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas",
                 "#/automation": "#/tasks" };
 
   var links = Array.prototype.slice.call(
@@ -2470,7 +2470,8 @@
       });
       var ai = meta.ai_scoring || {};
       b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
-        navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : ""))]));
+        navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : "")),
+        navBtn("#/calibration", "採点の校正（発売後の実績と）")]));
 
       // ── 全体の形（絞り込み後の全件で数える。表は上限まで）──
       var sm = d.summary || {};
@@ -3294,6 +3295,94 @@
       }).catch(function (e) { msg.textContent = "様子を見られませんでした: " + e.message; });
     }
     tick();
+  }
+
+  /** 採点の校正（FR-111・ADR-101）。発売から12か月の売上と、採点時の軸の点を突き合わせる。
+   *  **当たった・外したを決めるのは人**（記録を rubric に残す）。件数が足りなければ「未計測」 */
+  function viewCalibration() {
+    loading();
+    api("/api/calibration").then(function (d) {
+      var b = clear();
+      setTitle("採点の校正");
+      b.appendChild(btnRow([navBtn("#/ideas", "アイデアへ戻る")]));
+      b.appendChild(el("p", { "class": "np-note", text: "発売した案件について、アイデアの採点時の軸の点と、発売から12か月の売上（税込・CIP の商品コードから売上フィードで集計。Amazon は入っていません）を突き合わせます。軸ごとに「点が高いほど売れたか」（順位相関）を出し、当たった軸・外した軸は人が判断して記録します。アプリは重みを変えません。" }));
+      var pr = d.pairs, sk = pr.skipped || {};
+      b.appendChild(kpiRow([
+        kpi("発売済みの案件", pr.launched + " 件"),
+        kpi("突き合わせられる（12か月そろった）", pr.usable + " 件", "相関を出すには " + d.check.min_n + " 件要ります"),
+        kpi("アイデアにつながっていない", (sk["アイデアにつながっていない"] || 0) + " 件", "移行した案件はアイデアの記録が無い"),
+        kpi("売上が未計測／12か月に満たない", (sk["売上が未計測"] || 0) + " / " + (sk["12か月に満たない"] || 0) + " 件")]));
+      // 版ごとの軸の相関
+      var cc = el("div", { "class": "np-card" });
+      cc.appendChild(el("h2", { text: "軸ごとの当たり外れ（順位相関）" }));
+      if (!d.check.versions.length) {
+        cc.appendChild(el("p", { "class": "np-note", text: "未計測: 突き合わせられる案件がまだありません（発売済みで、アイデアにつながっていて、点があり、12か月の売上がそろったもの）。" }));
+      }
+      d.check.versions.forEach(function (v) {
+        cc.appendChild(el("h3", { text: "版 " + v.version + "（" + v.n + " 件・" + v.state + "）" }));
+        if (v.why) cc.appendChild(el("p", { "class": "np-note", text: v.why }));
+        cc.appendChild(table(["軸", "順位相関 ρ", "読み方"], v.axes.map(function (a) {
+          return el("tr", null, [el("td", { text: a.label }), el("td", { "class": "np-num", text: isNum(a.rho) ? String(a.rho) : "—" }), el("td", { text: a.word })]);
+        })));
+      });
+      cc.appendChild(el("p", { "class": "np-sub", text: "ρ は −1〜1。0.5 以上なら「点が高いほど売れた」、0 付近は関係が見えない、負なら逆です。同点が多い軸は並べられないことがあります。" }));
+      b.appendChild(cc);
+      // 突き合わせの表
+      var pc = el("div", { "class": "np-card" });
+      pc.appendChild(el("h2", { text: "突き合わせ（案件ごと）" }));
+      if (!pr.rows.length) pc.appendChild(el("p", { "class": "np-note", text: "対象なし（アイデアにつながった発売済みの案件がありません）。" }));
+      else pc.appendChild(el("div", { "class": "np-tablewrap" }, [table(["案件", "アイデア", "発売日", "版", "総合", "ランク", "軸の点", "12か月の売上", ""], pr.rows.map(function (r) {
+        return el("tr", null, [
+          el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.project_id), text: r.name })]),
+          el("td", null, [el("a", { href: "#/ideas/" + encodeURIComponent(r.idea_id), text: r.idea_title || r.idea_id })]),
+          el("td", { "class": "np-nowrap", text: r.launch_date }), el("td", { text: r.version }),
+          el("td", { "class": "np-num", text: isNum(r.total) ? String(r.total) : "—" }), el("td", { text: dash(r.rank) }),
+          el("td", { text: Object.keys(r.axes).map(function (k) { return k + " " + r.axes[k]; }).join("・") }),
+          el("td", { "class": "np-num", text: r.actual ? yen(r.actual.yen) + (r.actual.complete ? "" : "（途中）") : "未計測" }),
+          el("td", { text: dash(r.why) })]);
+      }))]));
+      b.appendChild(pc);
+      // 判断の記録
+      var nc = el("div", { "class": "np-card" });
+      nc.appendChild(el("h2", { text: "当たった軸・外した軸の記録（rubric へのフィードバック）" }));
+      nc.appendChild(el("p", { "class": "np-sub", text: "判断は人が書きます。重みを変えるときは新しい版の採点基準を作ります（記録はその根拠になります）。" }));
+      if (d.notes.length) nc.appendChild(table(["日時", "誰が", "版", "軸", "判断", "理由", "件数", "ρ"], d.notes.map(function (n) {
+        return el("tr", null, [el("td", { "class": "np-nowrap", text: n.noted_at }), el("td", { text: n.noted_by }), el("td", { text: n.rubric_version }),
+          el("td", { text: n.axis }), el("td", { text: n.verdict }), el("td", { text: n.reason }),
+          el("td", { "class": "np-num", text: dash(n.n_pairs) }), el("td", { "class": "np-num", text: isNum(n.rho) ? String(n.rho) : "—" })]);
+      })));
+      else nc.appendChild(el("p", { "class": "np-note", text: "まだ記録がありません。" }));
+      if (d.can_note) {
+        var f = el("form", { "class": "np-field" });
+        var ver = el("select", { name: "rubric_version", "aria-label": "版" });
+        var axis = el("select", { name: "axis", "aria-label": "軸" });
+        api("/api/rubrics").then(function (rb) {
+          rb.rows.forEach(function (r) { ver.appendChild(el("option", { value: r.version, text: r.version })); });
+          function fillAxes() {
+            while (axis.firstChild) axis.removeChild(axis.firstChild);
+            var r = rb.rows.filter(function (x) { return x.version === ver.value; })[0];
+            ((r && r.axes) || []).forEach(function (a) { axis.appendChild(el("option", { value: a.code, text: a.label })); });
+            axis.appendChild(el("option", { value: "total", text: "総合点" }));
+          }
+          ver.addEventListener("change", fillAxes); fillAxes();
+        });
+        var vd = el("select", { name: "verdict", "aria-label": "判断" });
+        d.verdicts.forEach(function (v) { vd.appendChild(el("option", { value: v, text: v })); });
+        var reason = el("input", { name: "reason", size: "40", "aria-label": "理由", placeholder: "理由（必須）" });
+        var bar = el("p", null, [txt("版 "), ver, txt(" 軸 "), axis, txt(" 判断 "), vd, txt(" "), reason, txt(" "), el("button", { type: "submit", text: "記録する" })]);
+        f.appendChild(bar);
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var chk = (d.check.versions.filter(function (v) { return v.version === ver.value; })[0] || {});
+          var ax = ((chk.axes || []).filter(function (a) { return a.code === axis.value; })[0] || {});
+          post("/api/calibration/note", { rubric_version: ver.value, axis: axis.value, verdict: vd.value, reason: reason.value,
+            n_pairs: chk.n === undefined ? "" : String(chk.n), rho: isNum(ax.rho) ? String(ax.rho) : "" })
+            .then(function () { go(); }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        nc.appendChild(f);
+      }
+      b.appendChild(nc);
+    }).catch(fail);
   }
 
   function viewAiScore() {   // 採点の案の一覧。商品名の案の回もここの「最近の回」に並ぶ
@@ -5591,6 +5680,7 @@
     if (path === "#/settings") return viewSettings();
     if (path === "#/simulate") return viewSimulate();
     if (path === "#/ai-score") return viewAiScore();
+    if (path === "#/calibration") return viewCalibration();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();
