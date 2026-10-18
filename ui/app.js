@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/tasks", "#/tasks/assign": "#/tasks" };
+                "#/automation": "#/tasks", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -2240,6 +2240,79 @@
     }).catch(fail);
   }
 
+  /** 繰り返しの仕事（ADR-108）。毎年・毎月・毎週は、時期が近づいたら「案件外の仕事」に起きる。毎日は一覧で見るだけ */
+  var WEEKDAY = "月火水木金土日";
+  function viewRoutines(after) {
+    loading();
+    Promise.all([api("/api/routines"), api("/api/meta")]).then(function (r) {
+      var d = r[0], meta = r[1], b = clear();
+      setTitle("繰り返しの仕事（ルーティン）");
+      b.appendChild(btnRow([navBtn("#/tasks", "タスクへ戻る")]));
+      b.appendChild(el("p", { "class": "np-note", text: "毎年・毎月・毎週の仕事は、時期が近づくと（毎週は6日前・毎月は14日前・毎年は30日前）「案件外の仕事」に1件ずつ起きます。担当が入っていれば、その人のカレンダーのタスクにも出ます。毎日の仕事はタスクにせず、ここで見るだけです。「使わない」にしてある行は起きません。" }));
+      var c = d.counts || {};
+      b.appendChild(kpiRow([kpi("毎年", (c.yearly || 0) + " 件"), kpi("毎月", (c.monthly || 0) + " 件"), kpi("毎週", (c.weekly || 0) + " 件"),
+        kpi("毎日（見るだけ）", (c.daily || 0) + " 件"), kpi("使う", d.active + " 件", "残りは「使わない」")]));
+      var slot = el("div");
+      function form(x) {
+        x = x || { cadence: "weekly", active: 1 };
+        var f = el("form", { "class": "np-field" });
+        f.appendChild(el("h3", { text: x.id ? "直す: " + x.title : "繰り返しの仕事を足す" }));
+        var cad = el("select", { name: "cadence", "aria-label": "繰り返し" });
+        d.cadences.forEach(function (k) { var o = el("option", { value: k.code, text: k.label }); if (k.code === x.cadence) o.setAttribute("selected", "selected"); cad.appendChild(o); });
+        function inp(name, label, size, val, ph) { return el("label", null, [label + " ", el("input", { name: name, size: size, value: val === null || val === undefined ? "" : String(val), placeholder: ph || "" })]); }
+        var wd = el("span");
+        var cur = (x.weekdays || "").split(",");
+        WEEKDAY.split("").forEach(function (ch, i) {
+          var cb = el("input", { type: "checkbox", name: "wd", value: String(i) }); if (cur.indexOf(String(i)) >= 0) cb.setAttribute("checked", "checked");
+          wd.appendChild(el("label", null, [cb, txt(ch)])); wd.appendChild(txt(" "));
+        });
+        var act = el("input", { type: "checkbox", name: "active" }); if (x.active) act.setAttribute("checked", "checked");
+        f.appendChild(el("p", null, [inp("title", "何をするか（必須）", 30, x.title), txt(" "), cad]));
+        var pY = el("p", null, [inp("months", "月（毎年・例 4,8,12）", 10, x.months), txt(" "), inp("day", "日（1〜31 か 月末）", 5, x.day === "last" ? "月末" : x.day)]);
+        var pW = el("p", null, [txt("曜日（毎週） "), wd]);
+        var pD = el("p", null, [inp("timing", "いつ（毎日・例 出勤時）", 14, x.timing)]);
+        f.appendChild(pY); f.appendChild(pW); f.appendChild(pD);
+        function show() { var v = cad.value; pY.hidden = !(v === "yearly" || v === "monthly"); pW.hidden = v !== "weekly"; pD.hidden = v !== "daily"; }
+        cad.addEventListener("change", show); show();
+        f.appendChild(el("p", null, [txt("ロール "), roleSelect(meta, x.role), txt(" "), inp("assignee", "担当（ログインID）", 10, x.assignee), txt(" "), inp("hours", "時間", 4, x.hours), txt(" "), inp("lead_days", "何日前に起こすか", 4, x.lead_days, "既定")]));
+        f.appendChild(el("p", null, [inp("reason", "なぜ（実行理由）", 30, x.reason), txt(" "), inp("manual", "マニュアル・記入シート", 30, x.manual)]));
+        f.appendChild(el("p", null, [el("label", null, [act, txt(" 使う（時期が来たら仕事を起こす）")]), txt(" "), inp("note", "メモ", 24, x.note)]));
+        var st = el("span", { "class": "np-status", role: "status" });
+        f.appendChild(el("p", null, [el("button", { type: "submit", text: x.id ? "直す" : "足す" }), txt(" "), st]));
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var o = { id: x.id ? String(x.id) : "", cadence: cad.value, active: act.checked ? "1" : "0", role: f.elements.role.value,
+            weekdays: Array.prototype.filter.call(f.querySelectorAll("input[name=wd]"), function (c2) { return c2.checked; }).map(function (c2) { return c2.value; }).join(",") };
+          ["title", "months", "day", "timing", "assignee", "hours", "lead_days", "reason", "manual", "note"].forEach(function (k) { o[k] = f.elements[k].value; });
+          st.textContent = "保存中…";
+          post("/api/routines", o).then(function () { viewRoutines(); }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+        });
+        return f;
+      }
+      ["yearly", "monthly", "weekly", "daily"].forEach(function (k) {
+        var rows = d.rows.filter(function (x) { return x.cadence === k; });
+        if (!rows.length) return;
+        var card = el("div", { "class": "np-card" });
+        card.appendChild(el("h2", { text: (d.cadences.filter(function (c2) { return c2.code === k; })[0] || {}).label }));
+        var head = k === "daily" ? ["いつ", "何をするか", "なぜ", "マニュアル・記入シート", "状態", ""] : ["時期", "何をするか", "次の回", "ロール・担当", "前の回", "状態", ""];
+        card.appendChild(el("div", { "class": "np-tablewrap" }, [table(head, rows.map(function (x) {
+          var a = el("td");
+          if (d.can_edit) { var e1 = el("button", { type: "button", text: "直す" }); e1.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(x)); slot.scrollIntoView({ block: "nearest" }); }); a.appendChild(e1); }
+          var state = el("td", { text: (x.active ? "使う" : "使わない") + (x.note ? "（" + x.note + "）" : "") });
+          var manual = x.manual && /^https?:\/\//i.test(x.manual) ? el("a", { href: x.manual, rel: "noopener noreferrer", target: "_blank", text: "開く" }) : txt(dash(x.manual));
+          if (k === "daily") return el("tr", null, [el("td", { text: dash(x.timing) }), el("td", { text: x.title }), el("td", { text: dash(x.reason) }), el("td", null, [manual]), state, a]);
+          return el("tr", null, [el("td", { "class": "np-nowrap", text: x.rule }), el("td", null, [txt(x.title), x.reason ? el("div", { "class": "np-sub", text: x.reason }) : txt("")]),
+            el("td", { "class": "np-nowrap", text: x.active ? dash(x.next) : "—" }), el("td", { text: dash(x.role_label) + (x.assignee ? "・" + x.assignee : "") }),
+            el("td", { "class": "np-nowrap", text: x.last ? x.last.occurs_on + "（" + (x.last.status || "—") + "）" : "—" }), state, a]);
+        }))]));
+        b.appendChild(card);
+      });
+      b.appendChild(slot);
+      if (d.can_edit) { var add = el("button", { type: "button", "class": "np-btn", text: "繰り返しの仕事を足す" }); add.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(null)); }); b.appendChild(btnRow([add])); }
+      else b.appendChild(el("p", { "class": "np-note", text: "登録・修正できるのは、商品開発部・管理者・社長の業務ロールの人です。" }));
+    }).catch(fail);
+  }
+
   function viewTasks() {
     loading();
     var q = hashQuery();
@@ -2283,7 +2356,7 @@
         var mf = el("div", { "class": "np-filters" });
         mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab, text: "全員の分", "aria-current": mine ? null : "true" }));
         mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1", text: "自分の分だけ", "aria-current": mine ? "true" : null }));
-        b.appendChild(btnRow([navBtn("#/tasks/assign", "担当をまとめて割り振る")]));
+        b.appendChild(btnRow([navBtn("#/tasks/assign", "担当をまとめて割り振る"), navBtn("#/routines", "繰り返しの仕事（ルーティン）")]));
         b.appendChild(mf);
         b.appendChild(el("p", { "class": "np-note",
           text: "きょうは " + d.today + " です。期限切れ " + d.overdue_total
@@ -5935,6 +6008,7 @@
     if (path === "#/ideas") return viewIdeas();
     if (path === "#/projects") return viewProjects();
     if (path === "#/tasks/assign") return viewAssign();
+    if (path === "#/routines") return viewRoutines();
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }
     if (path === "#/sales") return viewSales();

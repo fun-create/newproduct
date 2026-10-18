@@ -998,6 +998,16 @@ class H(BaseHTTPRequestHandler):
             r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)
             store.audit(uid, "task.assignee", f"{parts[1]}:{parts[2]}", r, ip)
             return self.sendj(200, r)
+        # 繰り返しの仕事（ADR-108）
+        if parts == ["routines"] and method == "GET":
+            from app import routine
+            return self.sendj(200, {**routine.listing(), "can_edit": routine.can_edit(uid)})
+        if parts == ["routines"] and method == "POST":
+            from app import routine
+            d = self.body()
+            r = routine.save(d, uid)
+            store.audit(uid, "routine.save", str(r["id"]), {"title": d.get("title"), "cadence": d.get("cadence"), "active": d.get("active")}, ip)
+            return self.sendj(200, r)
         if parts == ["tasks", "unassigned"] and method == "GET":
             return self.sendj(200, {**task_m.unassigned_summary(), "can_assign": task_m.can_assign(uid)})
         if parts == ["tasks", "assign-bulk"] and method == "POST":

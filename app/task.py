@@ -98,6 +98,8 @@ def _mine(user_id: str, pfx: str):
 
 def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             role: str = "", assignee: str = "", mine: str = "") -> dict:
+    from app import routine
+    routine.ensure()                              # 繰り返しの仕事の、時期が近づいた回を起こす（ADR-108）
     t = store.today()
     ep: list = []
     if tab == "project":
@@ -481,6 +483,8 @@ def dashboard(user_id: str) -> dict:
     毎朝開く人が最初に要るのは「何をすればいいか」。
     コンセプト在庫月数は捨てずに2段目へ置く（経営の問いとして残す）。
     """
+    from app import routine
+    routine.ensure()                              # 繰り返しの仕事の、時期が近づいた回を起こす（ADR-108）
     from . import gate, idea as _idea, project as _p
     t = store.today()
     c = counts()
