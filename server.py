@@ -912,6 +912,12 @@ class H(BaseHTTPRequestHandler):
             except seisan_m.Refused as e:
                 return self.sendj(409, {"error": "CIP が断りました: " + str(e)})
 
+        # タスクを足す（ADR-107）。**下の汎用の口より先に置く**（そちらは知らない what を 404 にする）
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "tasks" and method == "POST":
+            d = self.body()
+            r = task_m.add_task(parts[1], d, uid)
+            store.audit(uid, "task.add", parts[1], {"title": d.get("title"), "after_seq": d.get("after_seq")}, ip)
+            return self.sendj(200, r)
         if len(parts) == 3 and parts[0] == "projects" and method == "POST":
             pid, what = parts[1], parts[2]
             d = self.body()
@@ -982,6 +988,11 @@ class H(BaseHTTPRequestHandler):
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
                 qs.get("role", ""), qs.get("assignee", ""),
                 mine=uid if qs.get("mine") == "1" else ""))
+        if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "edit" and method == "POST":
+            d = self.body()
+            r = task_m.update_task(parts[1], int(parts[2]), d, uid)
+            store.audit(uid, "task.edit", f"{parts[1]}:{parts[2]}", {k: d.get(k) for k in task_m.EDIT_FIELDS if k in d}, ip)
+            return self.sendj(200, r)
         if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "assignee" and method == "POST":
             d = self.body()
             r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)

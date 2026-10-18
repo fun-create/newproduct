@@ -606,6 +606,101 @@ def dashboard(user_id: str) -> dict:
 WORK_KINDS = ("案件外", "他部署依頼")
 
 
+# ── タスクを足す・直す（2026-10-18・ADR-107）──────────────────────────
+# シートでは行を足したり期限・名前・時間を書き換えたりしていた。アプリにそれが無いと 11/9 の切り替え後に回らない。
+# **消す代わりに「対象外」**（進捗の選択肢）。直した値は同期（ADR-105）で上書きされない（衝突として出る）。
+EDIT_FIELDS = ("title", "role", "start_on", "due_on", "hours")
+
+
+def _clean_fields(f: dict, partial: bool) -> dict:
+    out = {}
+    if "title" in f or not partial:
+        t = (f.get("title") or "").strip()[:200]
+        if not t:
+            raise ValueError("タスク名を入れてください")
+        out["title"] = t
+    if "role" in f:
+        r = (f.get("role") or "").strip() or None
+        if r and store.one("SELECT 1 FROM role WHERE code=?", (r,)) is None:
+            raise ValueError("知らないロールです")
+        out["role"] = r
+    for k, lab in (("start_on", "開始"), ("due_on", "期限")):
+        if k in f:
+            v = (f.get(k) or "").strip() or None
+            if v:
+                try:
+                    _dt.date.fromisoformat(v)
+                except ValueError:
+                    raise ValueError(f"{lab}は YYYY-MM-DD で入れてください") from None
+            out[k] = v
+    if "hours" in f:
+        h = (str(f.get("hours")) if f.get("hours") is not None else "").strip()
+        try:
+            out["hours"] = float(h) if h else None
+        except ValueError:
+            raise ValueError("時間は数字で入れてください") from None
+        if out["hours"] is not None and out["hours"] < 0:
+            raise ValueError("時間は0以上で入れてください")
+    return out
+
+
+def _check_order(start, due):
+    if start and due and start > due:
+        raise ValueError("開始が期限より後になっています")
+
+
+def add_task(project_id: str, f: dict, user_id: str) -> dict:
+    """案件にタスクを1行足す。`after_seq` があればその次に差し込む（後ろの行の番号を1つずつずらす）。"""
+    p = store.one("SELECT source_of_truth FROM project WHERE id=?", (project_id,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+    v = _clean_fields(f, partial=False)
+    _check_order(v.get("start_on"), v.get("due_on"))
+    after = str(f.get("after_seq") or "").strip()
+    with store.tx() as c:
+        if after.isdigit():
+            seq = int(after) + 1
+            # 予備時間（998・999）の番号は動かさない
+            c.execute("UPDATE task SET seq=seq+1 WHERE project_id=? AND seq>=? AND seq<900", (project_id, seq))
+        else:
+            seq = c.execute("SELECT COALESCE(MAX(seq),0)+1 FROM task WHERE project_id=? AND seq<900", (project_id,)).fetchone()[0]
+        tid = c.execute("INSERT INTO task (project_id,seq,title,role,assignee,start_on,due_on,hours,status,created_at,kind) "
+                        "VALUES (?,?,?,?,?,?,?,?,'未着手',?,'実作業')",
+                        (project_id, seq, v["title"], v.get("role"), (f.get("assignee") or "").strip() or None,
+                         v.get("start_on"), v.get("due_on"), v.get("hours"), store.now_s())).lastrowid
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                  (project_id, store.now_s(), user_id, f"タスクを足した: {seq} {v['title']}"))
+    return {"ok": True, "id": tid, "seq": seq}
+
+
+def update_task(kind: str, task_id: int, f: dict, user_id: str) -> dict:
+    """タスク（案件タスク・案件外の仕事）の名前・ロール・開始・期限・時間を直す。送られてきた欄だけ直す。"""
+    table = "task" if kind == "task" else "work_item"
+    cur = store.one(f"SELECT * FROM {table} WHERE id=?", (task_id,))
+    if cur is None:
+        raise LookupError("そのタスクがありません")
+    if table == "task":
+        p = store.one("SELECT source_of_truth FROM project WHERE id=?", (cur["project_id"],))
+        if p is not None and p["source_of_truth"] != "app":
+            raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+    v = _clean_fields({k: f[k] for k in EDIT_FIELDS if k in f}, partial=True)
+    if not v:
+        return {"ok": True, "changed": []}
+    _check_order(v.get("start_on", cur["start_on"]), v.get("due_on", cur["due_on"]))
+    changed = [k for k in v if (cur[k] if k in cur.keys() else None) != v[k]]
+    if not changed:
+        return {"ok": True, "changed": []}
+    with store.tx() as c:
+        c.execute(f"UPDATE {table} SET {','.join(k + '=?' for k in changed)} WHERE id=?", (*[v[k] for k in changed], task_id))
+        if table == "task":
+            what = "・".join(f"{k} {cur[k] if cur[k] is not None else '空'}→{v[k] if v[k] is not None else '空'}" for k in changed)
+            c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                      (cur["project_id"], store.now_s(), user_id, f"タスク {cur['seq']} を直した: {what}"[:400]))
+    return {"ok": True, "changed": changed}
+
+
 def create_work_item(f: dict, user_id: str) -> dict:
     kind = (f.get("kind") or "案件外").strip()
     if kind not in WORK_KINDS:

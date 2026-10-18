@@ -1165,7 +1165,7 @@
             tv.appendChild(chartCard("タスクの期間（塗り＝期限・白抜きの点線＝目安・灰色＝完了）", timeline(tl, { today: d.today,
               title: "タスクの期間" }), { note: "縦の破線が今日です。" }));
           }
-          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table(["#", "進捗", "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h"],
+          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table(["#", "進捗", "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""],
             d.tasks.map(function (t) {
               return el("tr", null, [
                 el("td", { "class": "np-num", text: String(t.seq) }),
@@ -1175,9 +1175,11 @@
                 el("td", { text: t.title }),
                 el("td", { text: dash(t.role_label) }),
                 h.editable ? assigneeCell("task", t) : el("td", { text: dash(t.assignee) }),
-                el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) })
+                el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
+                h.editable ? taskEditCell("task", t, meta, d.id) : el("td")
               ]);
             }))]));
+          if (h.editable) tv.appendChild(taskAddForm(d.id, meta, d.tasks));
           tv.appendChild(el("p", { "class": "np-note", text: "担当を入れると、期限のあるタスクが担当者のカレンダー（Calendar アプリ）のタスクに出ます（FR-121）。担当が無いタスクは送られません。" }));
           tv.appendChild(el("p", { "class": "np-note",
             text: "標準h は予備時間を含まない実作業hです（テンプレート由来）。" }));
@@ -1539,6 +1541,70 @@
         box.appendChild(det);
       }
     }).catch(function (e) { box.appendChild(el("p", { "class": "np-err", text: e.message })); });
+  }
+
+  /** タスクを直す・足す（ADR-107）。シートで行を足したり期限を書き換えていた代わり。消す代わりに進捗を「対象外」に */
+  function roleSelect(meta, cur, name) {
+    var sel = el("select", { name: name || "role", "aria-label": "ロール" });
+    sel.appendChild(el("option", { value: "", text: "（ロールなし）" }));
+    (meta.roles || []).forEach(function (r) { var o = el("option", { value: r.code, text: r.label }); if (r.code === cur) o.setAttribute("selected", "selected"); sel.appendChild(o); });
+    return sel;
+  }
+  function taskFields(meta, t) {
+    t = t || {};
+    var f = {
+      title: el("input", { name: "title", size: "30", value: t.title || "", "aria-label": "タスク名", placeholder: "タスク名（必須）" }),
+      role: roleSelect(meta, t.role),
+      start_on: el("input", { name: "start_on", type: "date", value: t.start_on || "", "aria-label": "開始" }),
+      due_on: el("input", { name: "due_on", type: "date", value: t.due_on || "", "aria-label": "期限" }),
+      hours: el("input", { name: "hours", size: "4", inputmode: "decimal", value: t.hours === null || t.hours === undefined ? "" : String(t.hours), "aria-label": "標準時間（h）", placeholder: "h" })
+    };
+    var row = el("p", { "class": "np-inline" }, [f.title, txt(" ロール "), f.role, txt(" 開始 "), f.start_on, txt(" 期限 "), f.due_on, txt(" 時間 "), f.hours]);
+    return { f: f, row: row, values: function () { var o = {}; Object.keys(f).forEach(function (k) { o[k] = f[k].value; }); return o; } };
+  }
+  function taskEditCell(kind, t, meta, pid) {
+    var c = el("td", { "class": "np-nowrap" });
+    var bt = el("button", { type: "button", text: "直す" });
+    bt.addEventListener("click", function () {
+      if (c.querySelector("form")) return;
+      if (!meta) { api("/api/meta").then(function (m) { meta = m; bt.click(); }).catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); }); return; }
+      var tf = taskFields(meta, t);
+      var form = el("form", { "class": "np-field" }, [tf.row]);
+      var st = el("span", { "class": "np-status", role: "status" });
+      var bar = el("p", null, [el("button", { type: "submit", text: "保存" }), txt(" "), st]);
+      form.appendChild(bar);
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        st.textContent = "保存中…";
+        post("/api/tasks/" + kind + "/" + t.id + "/edit", tf.values())
+          .then(function (r) { st.textContent = r.changed.length ? "保存しました" : "変わったところはありません"; if (r.changed.length) setTimeout(go, 400); })
+          .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+      });
+      c.appendChild(form);
+    });
+    c.appendChild(bt);
+    return c;
+  }
+  function taskAddForm(pid, meta, tasks) {
+    var det = el("details", { "class": "np-more" });
+    det.appendChild(el("summary", { text: "タスクを足す" }));
+    var tf = taskFields(meta, null);
+    var after = el("select", { name: "after_seq", "aria-label": "どこに足すか" });
+    after.appendChild(el("option", { value: "", text: "いちばん後ろに" }));
+    (tasks || []).filter(function (t) { return t.seq < 900; }).forEach(function (t) { after.appendChild(el("option", { value: String(t.seq), text: t.seq + " 「" + t.title.slice(0, 24) + "」の次に" })); });
+    var form = el("form", { "class": "np-field" }, [tf.row, el("p", null, [txt("位置 "), after])]);
+    var st = el("span", { "class": "np-status", role: "status" });
+    form.appendChild(el("p", null, [el("button", { type: "submit", text: "足す" }), txt(" "), st]));
+    form.appendChild(el("p", { "class": "np-sub", text: "要らなくなったタスクは消さずに、進捗を「対象外」にしてください（記録が残ります）。" }));
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = tf.values(); o.after_seq = after.value;
+      st.textContent = "足しています…";
+      post("/api/projects/" + encodeURIComponent(pid) + "/tasks", o).then(function () { go(); })
+        .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+    });
+    det.appendChild(form);
+    return det;
   }
 
   /** 担当を入れる（FR-121 の前提）。一覧は /api/users（共通ログインID）。空は「担当なし」 */
@@ -2233,7 +2299,7 @@
             if (!t.due_on && !sepDone) {
               sepDone = true;
               rows.push(el("tr", { "class": "np-sep" }, [
-                el("td", { colspan: "9", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
+                el("td", { colspan: "10", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
             }
             rows.push(el("tr", null, [
               el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t)]),
@@ -2248,11 +2314,12 @@
               el("td", { text: t.ai_used ? "適用済" : "未" }),
               el("td", { "class": "np-num",
                 text: t.ai_reduction_rate === null || t.ai_reduction_rate === undefined
-                  ? "—" : Math.round(t.ai_reduction_rate * 100) + "%" })
+                  ? "—" : Math.round(t.ai_reduction_rate * 100) + "%" }),
+              taskEditCell(t.project_id ? "task" : "work", t, null, t.project_id)
             ]));
           });
           b.appendChild(table(["進捗", "期限", "案件（分類）", "タスク名", "ロール",
-            "担当", "標準h", "AI適用", "削減見込"], rows));
+            "担当", "標準h", "AI適用", "削減見込", ""], rows));
         }
         if (tab === "work" || tab === "request") b.appendChild(workItemForm(tab));
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
