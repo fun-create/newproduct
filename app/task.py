@@ -85,15 +85,25 @@ def counts() -> dict:
     return out
 
 
-def _mine(user_id: str, pfx: str):
-    """「自分の分だけ」＝ 担当者が自分 ＋ 自分の業務ロール（ダッシュボードの「自分のやること」と同じ）。"""
-    from . import gate
-    roles = sorted(set(gate.roles_of(user_id)))
+def _mine_cond(user_id: str, roles, pfx: str = ""):
+    """自分の＝ 担当者が自分 ＋ **担当の空いている**自分の業務ロールのもの。
+
+    担当が入ったタスクは、その人だけのもの（2026-10-18 通しの点検。ロールで数えると、
+    佐藤さんに割り振ったメンバーのタスクが鈴木さんの「自分のやること」にも残り続けた）。
+    """
+    roles = sorted(set(roles))
     cond, prm = [f"{pfx}assignee=?"], [user_id]
     if roles:
-        cond.append(f"{pfx}role IN ({','.join('?' * len(roles))})")
+        cond.append(f"(({pfx}assignee IS NULL OR {pfx}assignee='') AND {pfx}role IN ({','.join('?' * len(roles))}))")
         prm += roles
-    return " AND (" + " OR ".join(cond) + ")", prm
+    return "(" + " OR ".join(cond) + ")", prm
+
+
+def _mine(user_id: str, pfx: str):
+    """「自分の分だけ」（ダッシュボードの「自分のやること」と同じ数え方）。"""
+    from . import gate
+    sql, prm = _mine_cond(user_id, gate.roles_of(user_id), pfx)
+    return " AND " + sql, prm
 
 
 def listing(when: str = DEFAULT_WHEN, tab: str = "project",
@@ -519,38 +529,42 @@ def dashboard(user_id: str) -> dict:
 
     # ── 0段目: 自分のやること（2026-10-06 十文字さん選択「ダッシュボードを自分のやること中心に」）──
     # **タスクは人ではなく業務ロールに付いている**（移行した 310 件はすべて担当者が空）ので、
-    # 「自分の」＝ 自分が担当者のもの ＋ 自分の業務ロールのもの。期限切れ（未完）と、7日先まで
+    # 「自分の」＝ 自分が担当者のもの ＋ 担当の空いている自分の業務ロールのもの（_mine_cond）。期限切れ（未完）と、7日先まで
+    # 2026-10-18: 案件外の仕事（繰り返しの仕事から起きたものを含む）も入れる。入れないと 11/9 から毎朝ここだけ見る人が落とす
     my_tasks, my_n = [], 0
-    if user_id:
-        cond = ["t.assignee=?"]
-        cp = [user_id]
-        if my_roles:
-            cond.append(f"t.role IN ({','.join('?' * len(my_roles))})")
-            cp += sorted(my_roles)
-        until = (t + _dt.timedelta(days=7)).isoformat()
-        where = (f"t.status NOT IN ('完了','対象外') AND t.due_on IS NOT NULL AND t.due_on <= ? "
-                 f"AND ({' OR '.join(cond)})")
-        my_n = store.val(f"SELECT COUNT(*) FROM task t WHERE {where}", [until] + cp, 0)
-        for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size, p.internal_name FROM task t "
-                         f"LEFT JOIN project p ON p.id=t.project_id WHERE {where} "
-                         f"ORDER BY t.due_on, t.project_id, t.seq LIMIT 12", [until] + cp):
-            my_tasks.append({"project_id": r["project_id"], "product": _p.display_name(dict(r)),
-                             "seq": r["seq"], "title": r["title"], "due_on": r["due_on"],
-                             "status": r["status"], "overdue": r["due_on"] < t.isoformat(),
-                             "role_label": role_label.get(r["role"], r["role"] or "—"),
-                             "by": "担当" if r["assignee"] == user_id else "ロール"})
-
-    # 自分＝担当＋自分の業務ロール。**「自分のやること」と同じ数え方で数える**（2026-10-09 点検 1-4。下のカードは担当だけで 0 件と出ていた）
     my_counts = {"overdue": None, "today": None, "next7": None}
     if user_id:
-        cond = ["assignee=?"] + ([f"role IN ({','.join('?' * len(my_roles))})"] if my_roles else [])
-        cp = [user_id] + sorted(my_roles)
-        base = f"status NOT IN ('完了','対象外') AND ({' OR '.join(cond)})"
-        my_counts = {
-            "overdue": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on < ?", cp + [t.isoformat()], 0),
-            "today": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on = ?", cp + [t.isoformat()], 0),
-            "next7": store.val(f"SELECT COUNT(*) FROM task WHERE {base} AND due_on > ? AND due_on <= ?",
-                               cp + [t.isoformat(), (t + _dt.timedelta(days=7)).isoformat()], 0)}
+        mc, cp = _mine_cond(user_id, my_roles)
+        until = (t + _dt.timedelta(days=7)).isoformat()
+        open_ = "status NOT IN ('完了','対象外')"
+        where = f"{open_} AND due_on IS NOT NULL AND due_on <= ? AND {mc}"
+        my_n = (store.val(f"SELECT COUNT(*) FROM task WHERE {where}", [until] + cp, 0)
+                + store.val(f"SELECT COUNT(*) FROM work_item WHERE {where}", [until] + cp, 0))
+        rows = []
+        tmc, _ = _mine_cond(user_id, my_roles, "t.")
+        for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size, p.internal_name FROM task t "
+                         f"LEFT JOIN project p ON p.id=t.project_id WHERE t.status NOT IN ('完了','対象外') "
+                         f"AND t.due_on IS NOT NULL AND t.due_on <= ? AND {tmc} "
+                         f"ORDER BY t.due_on, t.project_id, t.seq LIMIT 12", [until] + cp):
+            rows.append(({"project_id": r["project_id"], "product": _p.display_name(dict(r)), "kind": "task",
+                          "seq": r["seq"], "title": r["title"], "due_on": r["due_on"]}, r))
+        for r in store.q(f"SELECT * FROM work_item WHERE {where} ORDER BY due_on, id LIMIT 12", [until] + cp):
+            rows.append(({"project_id": None, "product": "案件外の仕事", "kind": "work", "work_id": r["id"],
+                          "seq": None, "title": r["title"], "due_on": r["due_on"]}, r))
+        rows.sort(key=lambda x: (x[0]["due_on"], x[0]["kind"]))
+        for o, r in rows[:12]:
+            o.update({"status": r["status"], "overdue": r["due_on"] < t.isoformat(),
+                      "role_label": role_label.get(r["role"], r["role"] or "—"),
+                      "by": "担当" if r["assignee"] == user_id else "ロール"})
+            my_tasks.append(o)
+
+        # **「自分のやること」と同じ数え方で数える**（2026-10-09 点検 1-4。下のカードは担当だけで 0 件と出ていた）
+        def _n(extra, prm):
+            return sum(store.val(f"SELECT COUNT(*) FROM {tb} WHERE {open_} AND {mc} AND {extra}", cp + prm, 0)
+                       for tb in ("task", "work_item"))
+        my_counts = {"overdue": _n("due_on < ?", [t.isoformat()]),
+                     "today": _n("due_on = ?", [t.isoformat()]),
+                     "next7": _n("due_on > ? AND due_on <= ?", [t.isoformat(), until])}
     return {
         "today": t.isoformat(),
         "counts": c,

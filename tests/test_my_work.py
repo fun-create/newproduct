@@ -2,8 +2,9 @@
 """
 ダッシュボードの「自分のやること」（2026-10-06）。
 
-タスクは人ではなく業務ロールに付いている。「自分の」＝ 担当者が自分 ＋ 自分の業務ロール。
+タスクは人ではなく業務ロールに付いている。「自分の」＝ 担当者が自分 ＋ 担当の空いている自分の業務ロール。
 期限切れ（未完）と7日先まで。完了・対象外・8日以上先・他のロールは出さない。
+2026-10-18: 同じロールの別の人に割り振ったタスクは出さない。案件外の仕事も出す。
 """
 from __future__ import annotations
 
@@ -71,6 +72,34 @@ class MyWork(unittest.TestCase):
         self.assertTrue(lst["mine"])
         everyone = {r["title"] for r in self.task.listing("next7", "project")["rows"]}
         self.assertIn("生産・明日", everyone, "全員の分には他のロールも出る")
+
+    def test_assigned_to_someone_else_leaves_my_list(self):
+        """同じロールの人に割り振ったら、そのタスクはその人だけのもの（「自分の分だけ」の一覧も同じ）。"""
+        with self.store.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('devdept','dev2')")
+            c.execute("UPDATE task SET assignee='dev2' WHERE project_id=? AND seq=1", (self.pid,))
+        mine = [t["title"] for t in self.task.dashboard("dev")["my"]["tasks"]]
+        self.assertNotIn("開発・期限切れ", mine)
+        self.assertEqual(self.task.dashboard("dev")["my"]["counts"]["overdue"], 0)
+        self.assertIn("開発・期限切れ", [t["title"] for t in self.task.dashboard("dev2")["my"]["tasks"]])
+        self.assertNotIn("開発・期限切れ", {r["title"] for r in self.task.listing("overdue", "project", mine="dev")["rows"]})
+
+    def test_work_items_are_in_my_list(self):
+        """案件外の仕事（繰り返しの仕事から起きたものを含む）も「自分のやること」に出る。"""
+        with self.store.tx() as c:
+            c.execute("INSERT INTO work_item (kind,title,role,assignee,due_on,status,created_at) VALUES "
+                      "('案件外','翌週のプラン作成',NULL,'dev','2026-10-09','未着手','2026-10-01'),"
+                      "('案件外','人の仕事','devdept','dev2','2026-10-05','未着手','2026-10-01'),"
+                      "('案件外','ロールの仕事','devdept',NULL,'2026-10-05','未着手','2026-10-01')")
+        my = self.task.dashboard("dev")["my"]
+        titles = [t["title"] for t in my["tasks"]]
+        self.assertIn("翌週のプラン作成", titles)
+        self.assertIn("ロールの仕事", titles)
+        self.assertNotIn("人の仕事", titles)
+        w = next(t for t in my["tasks"] if t["title"] == "翌週のプラン作成")
+        self.assertEqual((w["kind"], w["project_id"], w["by"]), ("work", None, "担当"))
+        self.assertEqual(my["tasks_n"], 5)
+        self.assertEqual((my["counts"]["overdue"], my["counts"]["next7"]), (2, 3))
 
     def test_no_roles_sees_only_assigned(self):
         my = self.task.dashboard("nobody")["my"]

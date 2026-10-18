@@ -52,9 +52,11 @@ def _day_of(year: int, month: int, day: str | None) -> dt.date:
 
 
 def occurrences(r: dict, start: dt.date, end: dt.date) -> list[dt.date]:
-    """[start, end] にかかる回の期限。"""
+    """[start, end] にかかる回の期限。**時期の決まっていない行（月・日が空）は回を作らない。**"""
     out = []
     cad = r["cadence"]
+    if undetermined(r):
+        return out
     if cad == "weekly":
         wds = _ints(r["weekdays"], 0, 6)
         d = start
@@ -108,8 +110,19 @@ def ensure(today: dt.date | None = None) -> int:
     return n
 
 
+def undetermined(r: dict) -> str | None:
+    """時期が決まっていなければ、何が足りないか（取り込みで読めなかった行。2026-10-18 通しの点検）。"""
+    if r["cadence"] == "yearly" and not (r["months"] or "").strip():
+        return "月が未定"
+    if r["cadence"] in ("yearly", "monthly") and not (r["day"] or "").strip():
+        return "日が未定"
+    return None
+
+
 def rule_text(r: dict) -> str:
     cad = r["cadence"]
+    if undetermined(r):
+        return CADENCES.get(cad, cad) + "（" + undetermined(r) + "）"
     try:
         if cad == "weekly":
             return "毎週 " + "・".join(WEEK[i] for i in _ints(r["weekdays"], 0, 6)) + "曜"
@@ -164,7 +177,9 @@ def save(f: dict, user_id: str) -> dict:
         day = (f.get("day") or "").strip()
         if day and day not in ("last", "月末") and not (day.isdigit() and 1 <= int(day) <= 31):
             raise ValueError("日は 1〜31 か「月末」で入れてください")
-        vals["day"] = "last" if day == "月末" else (day or "1")
+        if not day:
+            raise ValueError("日を入れてください（1〜31 か「月末」）")
+        vals["day"] = "last" if day == "月末" else day
     if cad == "weekly":
         if not _ints(f.get("weekdays"), 0, 6):
             raise ValueError("毎週のときは曜日を選んでください")
@@ -184,7 +199,10 @@ def save(f: dict, user_id: str) -> dict:
         raise ValueError("何日前に起こすかは 0〜120 で入れてください")
     vals.update({"reason": (f.get("reason") or "").strip()[:300] or None, "manual": (f.get("manual") or "").strip()[:500] or None,
                  "role": role, "assignee": (f.get("assignee") or "").strip() or None, "hours": hours,
-                 "lead_days": int(lead) if lead else None, "note": (f.get("note") or "").strip()[:300] or None,
+                 "lead_days": int(lead) if lead else None,
+                 # 取り込みで付けた「時期を決めてください」は、時期を決めて保存したら外す
+                 "note": re.sub(r"^時期「[^」]*」が1つの(月|日)に決まらないので、使う前に(月|日)を決めてください$", "",
+                                (f.get("note") or "").strip())[:300] or None,
                  "active": 0 if str(f.get("active", "1")) in ("0", "false") else 1})
     now = store.now_s()
     rid = f.get("id")

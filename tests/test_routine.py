@@ -86,11 +86,30 @@ class Routine(unittest.TestCase):
         self.assertEqual((g["cadence"], g["months"]), ("yearly", "4,8,12"))
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM work_item"), 0, "使わないものは起こさない")
 
+    def test_undetermined_timing(self):
+        """時期の読めなかった行は「1日」と見せず、使うにしても回を作らない。時期を決めて保存したら注意を外す。"""
+        self.m.import_sheet("import", active=False)
+        r = dict(self.store.one("SELECT * FROM routine WHERE title='FUN-Meeting-商品開発'"))
+        self.assertEqual(self.m.rule_text(r), "毎月（日が未定）")
+        ip = dict(self.store.one("SELECT * FROM routine WHERE title='新型iPhone用商品準備'"))
+        self.assertEqual(self.m.rule_text(ip), "毎年（月が未定）")
+        self.store.ex("UPDATE routine SET active=1 WHERE id=?", (r["id"],))
+        self.store.conn().commit()
+        self.assertEqual(self.m.occurrences(r, self.d("2026-10-01"), self.d("2027-10-01")), [])
+        self.assertEqual(self.m.ensure(), 0, "時期が未定なら起こさない")
+        f = {"id": r["id"], "title": r["title"], "cadence": "monthly", "day": "", "note": r["note"]}
+        with self.assertRaises(ValueError):
+            self.m.save(f, "chieko")                                 # 日を空のまま
+        self.m.save({**f, "day": "15"}, "chieko")
+        r2 = self.store.one("SELECT day, note FROM routine WHERE id=?", (r["id"],))
+        self.assertEqual((r2["day"], r2["note"]), ("15", None))
+
     def test_permission_and_validation(self):
         with self.assertRaises(PermissionError):
             self.m.save({"title": "x", "cadence": "weekly", "weekdays": "0"}, "nobody")
         for bad in ({"title": "x", "cadence": "weekly"}, {"title": "x", "cadence": "yearly"},
-                    {"title": "x", "cadence": "monthly", "day": "40"}, {"title": "", "cadence": "daily"},
+                    {"title": "x", "cadence": "monthly", "day": "40"}, {"title": "x", "cadence": "monthly"},
+                    {"title": "", "cadence": "daily"},
                     {"title": "x", "cadence": "hourly"}):
             with self.assertRaises(ValueError):
                 self.m.save(bad, "chieko")

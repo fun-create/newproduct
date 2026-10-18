@@ -608,7 +608,7 @@
       var my = d.my, mc = el("div", { "class": "np-card" });
       mc.appendChild(el("h2", { text: "自分のやること" }));
       mc.appendChild(el("p", { "class": "np-sub", text: my.roles.length
-        ? "あなたが担当のタスクと、あなたの業務ロール（" + my.roles.join("・") + "）のタスクです。"
+        ? "あなたが担当のタスクと、まだ担当のいない、あなたの業務ロール（" + my.roles.join("・") + "）のタスクです。案件外の仕事（繰り返しの仕事を含む）も入っています。"
         : "あなたに業務ロールが割り当てられていないため、担当者があなたのタスクだけを数えています（いまのタスクは業務ロールに付いています）。" }));
       var mcnt = my.counts || {};
       mc.appendChild(kpiRow([
@@ -620,10 +620,12 @@
         mc.appendChild(table(["期限", "タスク", "案件", "なぜ自分か"], my.tasks.slice(0, 5).map(function (t) {
           return el("tr", null, [el("td", { "class": "np-nowrap", text: t.due_on + (t.overdue ? "（期限切れ）" : "") }),
             el("td", { text: t.title }),
-            el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product }) : txt("—")]),
+            el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product })
+              : t.kind === "work" ? el("a", { href: "#/tasks?when=next7&tab=work&mine=1", text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
         })));
-        if (my.tasks_n > 5) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - 5) + " 件も含めて、自分のタスクをすべて見る")]));
+        if (my.tasks_n > 5) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - 5) + " 件も含めて、自分のタスクをすべて見る"),
+          navBtn("#/tasks?when=next7&tab=work&mine=1", "自分の案件外の仕事を見る", "sm")]));
       }
       if (my.gates_n) {
         var gg = {};
@@ -1141,7 +1143,11 @@
         // タスク
         var tv = el("div", { "class": "np-card", id: "np-sec-tasks" });
         tv.appendChild(el("h2", { text: "タスク（" + d.tasks.length + "件）" }));
-        if (!d.template_defined) {
+        if (!d.header.flow_type) {
+          // 進捗管理シートから移した案件は開発タイプが空（2026-10-18 通しの点検。⑦の注意が 20 件に誤って出ていた）
+          tv.appendChild(el("p", { "class": "np-note",
+            text: "開発タイプが未設定です（進捗管理シートから移した案件）。タスクはシートから写したもので、標準タスクのひな形とは別です。" }));
+        } else if (!d.template_defined) {
           tv.appendChild(el("p", { "class": "np-warn",
             text: "標準タスク未定義。この開発タイプ（ページリニューアル）には標準タスクが"
               + "存在しません。178行の種データに1行もなく、発明もしていません。"
@@ -1608,7 +1614,7 @@
   }
 
   /** 担当を入れる（FR-121 の前提）。一覧は /api/users（共通ログインID）。空は「担当なし」 */
-  var USERS = null;
+  var USERS = null;                                // /api/users の約束（画面を開いている間は1回）
   function assigneeCell(kind, t) {
     var c = el("td", { "class": "np-nowrap" });
     var sel = el("select", { "aria-label": "担当" });
@@ -1623,7 +1629,9 @@
         var o2 = el("option", { value: t.assignee, text: t.assignee + "（台帳に無い）" }); o2.setAttribute("selected", "selected"); sel.appendChild(o2);
       }
     }
-    (USERS ? Promise.resolve(USERS) : api("/api/users").then(function (r) { USERS = r.rows; return USERS; })).then(fill)
+    // 約束ごと持つ（2026-10-18: 値だけ持つと、最初の返事より前に描いた行の数だけ取りに行っていた。カルテ 20 行で 20 回）
+    if (!USERS) USERS = api("/api/users").then(function (r) { return r.rows; }, function (e) { USERS = null; throw e; });
+    USERS.then(fill)
       .catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); });
     var st = el("span", { "class": "np-status", role: "status" });
     sel.addEventListener("change", function () {
@@ -2222,10 +2230,15 @@
         td.appendChild(sel); td.appendChild(txt(" ")); td.appendChild(bt); td.appendChild(txt(" ")); td.appendChild(st);
         return td;
       }
+      // 2026-10-18 通しの点検: 発売済の案件にも未完了のタスクが残っている（シートで閉じていなかったもの）
+      if (d.rows.some(function (x) { return x.stage === "発売済"; }))
+        b.appendChild(el("p", { "class": "np-note", text: "「（発売済）」の案件に残っているタスクは、担当を入れる前に、もう済んでいないか（完了か対象外にできないか）を確かめてください。" }));
       if (!d.rows.length) b.appendChild(el("p", { "class": "np-note", text: "担当のいない未完了の案件タスクはありません。" }));
       else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["案件", "発売予定日", "ロール（シートの担当者）", "件数", "いちばん早い期限", "割り振る人"],
         d.rows.map(function (x) {
-          return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: x.internal_name || x.project_id })]),
+          var nm = [el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: x.internal_name || x.project_id })];
+          if (x.stage === "発売済") nm.push(txt("（発売済）"));
+          return el("tr", null, [el("td", null, nm),
             el("td", { "class": "np-nowrap", text: dash(x.launch_date) }), el("td", { text: x.role_label || "（ロールなし）" }),
             el("td", { "class": "np-num", text: String(x.n) }), el("td", { "class": "np-nowrap", text: dash(x.first_due) }), picker(x, "task")]);
         }))]));
@@ -2346,7 +2359,7 @@
           title: "期限ごとのタスクの件数", xfmt: function (x) { return x; } }), {
           sub: "いま見ている期間: " + (WHEN_LABEL[when] || when) + "。斜線は期限なし（別の扱い）。" }));
         var fl = el("div", { "class": "np-filters" });
-        ["overdue+today", "week", "next7", "all"].forEach(function (k) {
+        ["overdue+today", "week", "next7", "none", "all"].forEach(function (k) {    // 期限なし: 手順書「期限なしを選ぶ」（2026-10-18）
           var n = mine ? undefined : d.counts[k];
           fl.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq,
             text: WHEN_LABEL[k] + (n === undefined ? "" : " " + n), "aria-current": k === when ? "true" : null }));

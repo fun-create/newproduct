@@ -425,7 +425,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, _page(
                 "index.html", USER=html.escape(str(user.get("name") or
                                                    user.get("user_id") or "")),
-                ROOTATTR=_root_attrs(user)))
+                ROOTATTR=_root_attrs(user)),
+                # 外枠は毎回取り直させる（2026-10-18 通しの点検。古い外枠が古い app.js?v= を読み続けた）
+                extra=[("Cache-Control", "no-cache, private")])
         return self.not_found()
 
     # ── ログイン ────────────────────────────────────────
