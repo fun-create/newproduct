@@ -3352,7 +3352,7 @@
         var det = el("details", { "class": "np-more" });
         det.appendChild(el("summary", { text: "AI が検索した言葉・開いたページ（最後の回）" }));
         var tr = d.last.trace;
-        det.appendChild(el("p", { "class": "np-sub", text: "検索 " + (tr.calls || []).filter(function (x) { return x.tool === "WebSearch"; }).length + " 回・開いたページ " + (tr.opened || []).length + " 件" }));
+        det.appendChild(el("p", { "class": "np-sub", text: "検索 " + (tr.calls || []).filter(function (x) { return x.tool === "検索" || x.tool === "WebSearch"; }).length + " 回・開いたページ " + (tr.opened || []).length + " 件" }));
         det.appendChild(el("ul", null, (tr.calls || []).map(function (x) { return el("li", { text: x.tool + ": " + x.what }); })));
         if ((d.last.unverified || []).length) { det.appendChild(el("p", { "class": "np-sub", text: "未確認:" })); det.appendChild(el("ul", null, d.last.unverified.map(function (u) { return el("li", { text: u }); }))); }
         rc.appendChild(det);
