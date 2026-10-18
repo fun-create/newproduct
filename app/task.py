@@ -213,6 +213,67 @@ def set_assignee(kind: str, task_id: int, assignee: str, user_id: str) -> dict:
     return {"ok": True, "assignee": a or None}
 
 
+# ── 担当のまとめ割り振り（2026-10-18・ADR-106）────────────────────────
+# 移行の準備週に、担当が空の未完了タスク（本番で約180件）を1件ずつ選ぶと終わらない。
+# **案件 × ロール**の単位で「このロールの、まだ担当のいないタスクを○○さんに」とまとめて入れる。
+# 入れるのは担当が空の行だけ（**誰かが入れた担当は変えない**）。完了・対象外は触らない。
+OPEN = ("未着手", "着手", "保留")
+ASSIGNERS = ("devdept", "admin", "president")
+
+
+def can_assign(user_id: str) -> bool:
+    from app import gate
+    return bool(set(gate.roles_of(user_id)) & set(ASSIGNERS))
+
+
+def unassigned_summary() -> dict:
+    """担当が空の未完了タスクを、案件 × ロールで数える（中止・保留の案件は外す）。案件外の仕事はロールで。"""
+    marks = ",".join("?" * len(OPEN))
+    rows = store.rows(store.q(
+        f"SELECT t.project_id, p.internal_name, p.stage, p.launch_date, t.role, r.label AS role_label, COUNT(*) AS n, "
+        f"MIN(t.due_on) AS first_due FROM task t JOIN project p ON p.id=t.project_id LEFT JOIN role r ON r.code=t.role "
+        f"WHERE t.status IN ({marks}) AND (t.assignee IS NULL OR t.assignee='') AND p.stage NOT IN ('中止','保留') "
+        f"GROUP BY t.project_id, t.role ORDER BY (p.launch_date IS NULL), p.launch_date, p.internal_name, r.sort", OPEN))
+    work = store.rows(store.q(
+        f"SELECT w.role, r.label AS role_label, COUNT(*) AS n, MIN(w.due_on) AS first_due FROM work_item w "
+        f"LEFT JOIN role r ON r.code=w.role WHERE w.status IN ({marks}) AND (w.assignee IS NULL OR w.assignee='') "
+        f"GROUP BY w.role ORDER BY r.sort", OPEN))
+    members = {}
+    for m in store.q("SELECT role_code, user_id FROM role_member ORDER BY user_id"):
+        members.setdefault(m["role_code"], []).append(m["user_id"])
+    return {"rows": rows, "work": work, "members": members,
+            "total": sum(r["n"] for r in rows) + sum(w["n"] for w in work)}
+
+
+def assign_bulk(kind: str, project_id: str | None, role: str | None, assignee: str, user_id: str) -> dict:
+    """担当が空の未完了タスクに、まとめて担当を入れる。**入っている担当は変えない。**"""
+    import auth
+    if not can_assign(user_id):
+        raise PermissionError("担当をまとめて割り振れるのは、商品開発部・管理者・社長の業務ロールの人です")
+    a = (assignee or "").strip()
+    if not a or a not in {u.get("user_id") for u in auth.users()}:
+        raise ValueError("割り振る人を選んでください（このアプリの利用者だけ）")
+    role = (role or "").strip() or None
+    marks = ",".join("?" * len(OPEN))
+    rcond = "role=?" if role else "(role IS NULL OR role='')"
+    rprm = [role] if role else []
+    with store.tx() as c:
+        if kind == "task":
+            if not project_id or c.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone() is None:
+                raise LookupError("その案件がありません")
+            n = c.execute(f"UPDATE task SET assignee=? WHERE project_id=? AND {rcond} AND status IN ({marks}) "
+                          f"AND (assignee IS NULL OR assignee='')", (a, project_id, *rprm, *OPEN)).rowcount
+            if n:
+                c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                          (project_id, store.now_s(), user_id, f"担当をまとめて割り振り（ロール {role or 'なし'} の {n} 件 → {a}）"))
+        elif kind == "work":
+            n = c.execute(f"UPDATE work_item SET assignee=? WHERE {rcond} AND status IN ({marks}) "
+                          f"AND (assignee IS NULL OR assignee='')", (a, *rprm, *OPEN)).rowcount
+        else:
+            raise ValueError("task か work を選んでください")
+    return {"ok": True, "assigned": n, "assignee": a}
+
+
 # ── ロール別の負荷（F-5-5）───────────────────────────────
 def load_by_month_role() -> dict:
     """月 × ロール。**管理者を先頭に。**他部署は別列（自部署と混ぜない）。

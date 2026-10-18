@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/tasks" };
+                "#/automation": "#/tasks", "#/tasks/assign": "#/tasks" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -2124,6 +2124,56 @@
   };
   var TAB_LABEL = { project: "案件タスク", work: "案件外の仕事", request: "他部署への依頼" };
 
+  /** 担当のまとめ割り振り（ADR-106）。案件 × ロールで「まだ担当のいないタスク」を数え、人を選んでまとめて入れる。
+   *  **入っている担当は変えない**（空の行だけ）。担当が入ると、その人のカレンダーのタスクにも出る */
+  function viewAssign() {
+    loading();
+    Promise.all([api("/api/tasks/unassigned"), api("/api/users")]).then(function (r) {
+      var d = r[0], users = r[1].rows, b = clear();
+      setTitle("担当のまとめ割り振り");
+      b.appendChild(btnRow([navBtn("#/tasks", "タスクへ戻る")]));
+      b.appendChild(el("p", { "class": "np-note", text: "まだ担当のいない未完了のタスクを、案件とロールごとにまとめています。人を選んで「入れる」を押すと、その行のタスクにまとめて担当が入ります。すでに担当の入っているタスクは変えません。担当が入ったタスクは、その人のカレンダー（Calendar アプリ）のタスクにも出ます。" }));
+      b.appendChild(kpiRow([kpi("担当のいない未完了のタスク", d.total + " 件"), kpi("案件 × ロール", d.rows.length + " 行"),
+        kpi("案件外の仕事", d.work.reduce(function (a, w) { return a + w.n; }, 0) + " 件")]));
+      if (!d.can_assign) b.appendChild(el("p", { "class": "np-warn", text: "割り振れるのは、商品開発部・管理者・社長の業務ロールの人です。見ることはできます。" }));
+      function picker(row, kind) {
+        var td = el("td", { "class": "np-nowrap" });
+        if (!d.can_assign) return td;
+        var sel = el("select", { "aria-label": "割り振る人" });
+        sel.appendChild(el("option", { value: "", text: "（人を選ぶ）" }));
+        var pref = (d.members[row.role] || []);
+        users.slice().sort(function (a, b2) { return (pref.indexOf(b2.user_id) >= 0) - (pref.indexOf(a.user_id) >= 0) || a.user_id.localeCompare(b2.user_id); })
+          .forEach(function (u) { sel.appendChild(el("option", { value: u.user_id, text: u.user_id + (u.name && u.name !== u.user_id ? " " + u.name : "") + (pref.indexOf(u.user_id) >= 0 ? "（このロール）" : "") })); });
+        var bt = el("button", { type: "button", text: "入れる" });
+        var st = el("span", { "class": "np-status", role: "status" });
+        bt.addEventListener("click", function () {
+          if (!sel.value) { st.textContent = "人を選んでください"; return; }
+          bt.setAttribute("disabled", "disabled"); st.textContent = "入れています…";
+          post("/api/tasks/assign-bulk", { kind: kind, project_id: row.project_id || "", role: row.role || "", assignee: sel.value })
+            .then(function (res) { st.textContent = res.assigned + " 件に入れました"; bt.textContent = "済み"; })
+            .catch(function (e) { st.textContent = "できませんでした: " + e.message; bt.removeAttribute("disabled"); });
+        });
+        td.appendChild(sel); td.appendChild(txt(" ")); td.appendChild(bt); td.appendChild(txt(" ")); td.appendChild(st);
+        return td;
+      }
+      if (!d.rows.length) b.appendChild(el("p", { "class": "np-note", text: "担当のいない未完了の案件タスクはありません。" }));
+      else b.appendChild(el("div", { "class": "np-tablewrap" }, [table(["案件", "発売予定日", "ロール（シートの担当者）", "件数", "いちばん早い期限", "割り振る人"],
+        d.rows.map(function (x) {
+          return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: x.internal_name || x.project_id })]),
+            el("td", { "class": "np-nowrap", text: dash(x.launch_date) }), el("td", { text: x.role_label || "（ロールなし）" }),
+            el("td", { "class": "np-num", text: String(x.n) }), el("td", { "class": "np-nowrap", text: dash(x.first_due) }), picker(x, "task")]);
+        }))]));
+      if (d.work.length) {
+        b.appendChild(el("h2", { text: "案件外の仕事" }));
+        b.appendChild(table(["ロール", "件数", "いちばん早い期限", "割り振る人"], d.work.map(function (x) {
+          return el("tr", null, [el("td", { text: x.role_label || "（ロールなし）" }), el("td", { "class": "np-num", text: String(x.n) }),
+            el("td", { "class": "np-nowrap", text: dash(x.first_due) }), picker(x, "work")]);
+        })));
+      }
+      b.appendChild(btnRow([navBtn("#/tasks/assign", "数え直す")]));
+    }).catch(fail);
+  }
+
   function viewTasks() {
     loading();
     var q = hashQuery();
@@ -2167,6 +2217,7 @@
         var mf = el("div", { "class": "np-filters" });
         mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab, text: "全員の分", "aria-current": mine ? null : "true" }));
         mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1", text: "自分の分だけ", "aria-current": mine ? "true" : null }));
+        b.appendChild(btnRow([navBtn("#/tasks/assign", "担当をまとめて割り振る")]));
         b.appendChild(mf);
         b.appendChild(el("p", { "class": "np-note",
           text: "きょうは " + d.today + " です。期限切れ " + d.overdue_total
@@ -5816,6 +5867,7 @@
     if (ma) return viewAutomationOne(ma[1]);
     if (path === "#/ideas") return viewIdeas();
     if (path === "#/projects") return viewProjects();
+    if (path === "#/tasks/assign") return viewAssign();
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }
     if (path === "#/sales") return viewSales();

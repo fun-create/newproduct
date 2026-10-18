@@ -987,6 +987,15 @@ class H(BaseHTTPRequestHandler):
             r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)
             store.audit(uid, "task.assignee", f"{parts[1]}:{parts[2]}", r, ip)
             return self.sendj(200, r)
+        if parts == ["tasks", "unassigned"] and method == "GET":
+            return self.sendj(200, {**task_m.unassigned_summary(), "can_assign": task_m.can_assign(uid)})
+        if parts == ["tasks", "assign-bulk"] and method == "POST":
+            d = self.body()
+            r = task_m.assign_bulk(d.get("kind", "task"), d.get("project_id") or None, d.get("role") or None,
+                                   d.get("assignee", ""), uid)
+            store.audit(uid, "task.assign_bulk", d.get("project_id") or "work",
+                        {"role": d.get("role"), "assignee": d.get("assignee"), "n": r["assigned"]}, ip)
+            return self.sendj(200, r)
         if parts == ["users"] and method == "GET":
             # 担当を選ぶための一覧（共通ログインIDと名前だけ。秘密は返さない）
             return self.sendj(200, {"rows": sorted(({"user_id": x.get("user_id"), "name": x.get("name") or x.get("user_id")}
