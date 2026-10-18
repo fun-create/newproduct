@@ -3335,7 +3335,7 @@
       if (d.last) rc.appendChild(el("p", { "class": "np-sub", text: "最後の回: " + d.last.created_at + "・" + d.last.model + "・候補 " + ((d.last.body || {}).rows || []).length + " 件・該当なし " + (((d.last.body || {}).none) || []).join("・") + "・既知として落とした " + ((d.last.body || {}).dropped || 0) + " 件" }));
       else rc.appendChild(el("p", { "class": "np-note", text: "まだ1回も調べていません。毎月2日の自動実行でも走ります。" }));
       if (d.can_edit && ai.can_run) {
-        var btn = el("button", { type: "button", "class": "np-btn", text: "いま AI に調べさせる（1回 $0.6 まで）" });
+        var btn = el("button", { type: "button", "class": "np-btn", text: "いま AI に調べさせる（1回 $1.2 まで）" });
         if (!ai.enabled) btn.setAttribute("disabled", "disabled");
         var m2 = el("p", { "class": "np-note", role: "status" });
         btn.addEventListener("click", function () {

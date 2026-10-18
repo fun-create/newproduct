@@ -130,6 +130,15 @@ class AiWeb(unittest.TestCase):
         for bad in ("import urllib", "import http", "import socket", "from urllib", "from http"):
             self.assertNotIn(bad, src)
 
+    def test_other_web_research_keeps_the_06_cap(self):
+        """新機種調査だけ上限を上げた（ADR-102 追記）。競合・需要の調べは $0.6 のまま。"""
+        seen = {}
+        def runner(cmd, **kw):
+            seen["cmd"] = cmd
+            return _stream(self.ROWS, opened=["https://item.rakuten.co.jp/a/1/"])
+        self.m.start_run("competitor", self.pid, "u", runner=runner, sync=True, force=True)
+        self.assertEqual(seen["cmd"][seen["cmd"].index("--max-budget-usd") + 1], "0.6")
+
 
 if __name__ == "__main__":
     unittest.main()

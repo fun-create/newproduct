@@ -53,7 +53,12 @@ SERIES = [
     ("mixpenla", "ミックスペンラ", "ペンライト", "MIX PENLa（ターンオン）"),
 ]
 
-SYSTEM = ai_web.SYSTEM.replace("新商品開発の調査補助です。", "新商品開発の調査補助です（スキンシールの本体モデル展開の調査）。")
+# 12シリーズを1回で調べるので、ほかのウェブ調査より量を多く渡す（2026-10-18 十文字さんの選択「1回のままで上限を上げる」）。
+# 初回は検索4回・ページ6件で上限に届き、プレステと Ploom の公式ページを開けなかった（$0.36）
+MAX_SEARCH, MAX_OPEN, MAX_USD = 8, 12, 1.2
+SYSTEM = (ai_web.SYSTEM.replace("新商品開発の調査補助です。", "新商品開発の調査補助です（スキンシールの本体モデル展開の調査）。")
+          .replace("検索は4回まで、開くページは6つまで。", f"検索は{MAX_SEARCH}回まで、開くページは{MAX_OPEN}まで。"
+                   "メーカーの公式（ニュース・プレスリリース）を先に開く。"))
 
 ASK = """以下の対象シリーズについて、「回答時点を基準として直近3か月以内」に
 ① 新たに発売された機器があるかどうか
@@ -291,7 +296,7 @@ def _work(run_id: int, runner=None, record: bool = True) -> None:
     model, cost = None, 0.0
     try:
         inp = inputs()
-        r = ai_cli.ask(build_prompt(inp), SYSTEM, runner=runner, web=True)
+        r = ai_cli.ask(build_prompt(inp), SYSTEM, runner=runner, web=True, max_usd=MAX_USD)
         model, cost = r["model"], float(r.get("cost_usd") or 0.0)
         if not r["ok"]:
             if record and cost > 0:

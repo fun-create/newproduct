@@ -77,6 +77,7 @@ class Device(unittest.TestCase):
         seen = {}
         def runner(cmd, **kw):
             seen["prompt"] = cmd[cmd.index("-p") + 1]
+            seen["cmd"] = cmd
             return _stream(self._answer([
                 {"series": "iqos", "model": "IQOS ILUMA i PRIME NEO", "release_date": "2026-09", "jp_released": "発売済み",
                  "confidence": "公式", "summary": "新色", "url": "https://item.rakuten.co.jp/a/1/"},
@@ -89,6 +90,10 @@ class Device(unittest.TestCase):
         r = self.m.start_run("dev", runner=runner, sync=True, force=True)
         self.assertTrue(r["started"])
         self.assertIn("既知の機種", seen["prompt"])
+        cmd = seen["cmd"]
+        self.assertEqual(cmd[cmd.index("--max-budget-usd") + 1], "1.2", "新機種調査だけ上限 $1.2（ほかのウェブ調査は $0.6 のまま）")
+        sysp = cmd[cmd.index("--system-prompt") + 1]
+        self.assertIn("検索は8回まで、開くページは12まで", sysp)
         self.assertIn("直近3か月以内", seen["prompt"])
         cs = self.store.rows(self.store.q("SELECT * FROM device_candidate ORDER BY id"))
         self.assertEqual([c["model"] for c in cs], ["IQOS ILUMA i PRIME NEO", "Switch 2 Lite"], "既知の表記ゆれと知らないシリーズは落とす")

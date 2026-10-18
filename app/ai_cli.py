@@ -127,7 +127,7 @@ def _trace(lines: list[dict]) -> dict:
 
 
 def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | None = None,
-        runner=None, web: bool = False) -> dict:
+        runner=None, web: bool = False, max_usd: float | None = None) -> dict:
     """`claude -p` を1回。返り値は必ず
     {"ok", "text", "error", "error_kind", "cost_usd", "model", "duration_ms"}（web のときは "trace" も）。
 
@@ -153,7 +153,7 @@ def ask(prompt: str, system: str, *, model: str | None = None, timeout: int | No
            "--no-session-persistence", "--strict-mcp-config"]
     if web:
         cmd += ["--output-format", "stream-json", "--verbose", "--tools", ",".join(WEB_TOOLS),
-                "--max-budget-usd", str(WEB_MAX_USD), "--allowedTools", *WEB_TOOLS]
+                "--max-budget-usd", str(max_usd or WEB_MAX_USD), "--allowedTools", *WEB_TOOLS]
     else:
         cmd += ["--output-format", "json", "--tools", ""]
     env = {"HOME": AI_HOME, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "ja_JP.UTF-8",
