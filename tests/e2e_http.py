@@ -132,8 +132,8 @@ def main() -> int:
 
         st, d = cl.get("/api/meta")
         note(st == 200 and len(d["gates"]) == 7 and len(d["flow_types"]) == 7
-             and len(d["reasons"]["hold"]) == 5,
-             "/api/meta が7ゲート・7フロー・5保留理由", str(st))
+             and len(d["reasons"]["hold"]) == 6,
+             "/api/meta が7ゲート・7フロー・6保留理由（6つ目は sheet_removed・ADR-105）", str(st))
 
         st, d = cl.get("/api/dashboard")
         note(st == 200 and set(d["stuck"]) == {"overdue", "gate_waiting", "today"},

@@ -211,6 +211,19 @@ Calendar 側の3点（鍵の道・origin・完了の伝え先）は依頼書 fun
 「スキンシール本体モデル展開管理」のアイコス・プルームの表に、公式ショップのログイン情報（ID・パスワード）が書かれたセルがある。
 アプリは取り込まない（`app/device.py` の `_SECRET`）。`seed/09_*.tsv` からは消した。**元の Google シートと fun-create-ec-agents `data/raw/product-dev/09_*.tsv` には残っている**（十文字さんに報告済み・消すかは十文字さん）。
 
+## 移行期間の同期（進捗管理シート → アプリ・ADR-105）
+
+十文字さんの依頼（2026-10-18）: アプリへ完全に移るまで、シートを見てアプリを合わせる。**正はシート。**手順（週1回めど・商品開発部の会議の前）:
+
+1. Chrome で「●1.進捗管理（商品開発）」を開き、ファイル → ダウンロード → Microsoft Excel（.xlsx）（または `…/export?format=xlsx`）。**シートは書き換えない**
+2. Mac で TSV に起こす: `python3 tools/xlsx_sheet.py 進捗管理.xlsx 全タスク一覧 ledger.tsv` と `… 年間プラン2026年度 plan.tsv`
+3. 本番へ送り、差分を見る: `scp` で /tmp へ → `sudo -u newproduct python3 tools/sync_sheet.py /tmp/ledger.tsv /tmp/plan.tsv --sheet-date YYYY-MM-DD`
+4. 名前が変わった案件があれば `--rename '旧=新'`、シートから消えた案件は十文字さんに聞いて `--hold ID`。**★衝突**（アプリで直された行）は上書きされないので、どちらが正しいか商品開発部に確かめる
+5. 控えを取ってから `--apply`（`sudo -u newproduct /opt/newproduct/deploy/backup.sh`）。終わったら /tmp と Mac の .xlsx・TSV を消す
+6. HUB の status に1行
+
+2026-10-18 の初回: 案件 17 件を更新・7 件を追加・名前の付け替え 5・タスク 79 直す／152 足す／38 対象外・案件外 38 直す／14 足す・衝突 0・保留 3。2回目の差分は 0。
+
 ## 次にやる3件
 
 1. FR-168 自動化依頼から標準タスクのひな形の下書きへ入れる導線
