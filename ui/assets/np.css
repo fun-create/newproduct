@@ -454,3 +454,8 @@ table.np tbody th { color: var(--fca-ink); font-weight: 700; }
 /* 止まっている知らせ（np-warn と同じ形で赤）。文は「要対応:」で始める */
 .np-alert { border-left: 4px solid var(--np-alert-line); padding: .5rem .75rem; margin: .6rem 0; background: var(--np-alert-bg); color: var(--fca-ink); }
 
+/* ── FR-195 第4段: ゲート盤の升目（記号と語がセルにある）・年間プランの判定は tag() ── */
+table.np td[data-gate="差戻し"] { background: var(--np-alert-bg); color: var(--np-alert-ink); font-weight: 800; }
+table.np td[data-gate="通過"] { background: var(--np-ok-bg); color: var(--np-ok-ink); }
+table.np td[data-gate="中止"], table.np td[data-gate="保留"], table.np td[data-gate="対象外"] { color: var(--np-neutral-ink); }
+

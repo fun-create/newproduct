@@ -569,6 +569,9 @@
   // o = {tone, tag, unit}（FR-195）。色は札の語がある時だけ付ける。6つ目を省いた呼び出しは今までどおり
   function kpi(label, big, sub, href, state, o) {
     o = o || {};
+    // 「12 件」のように単位ごと渡された数も、数字と小さな単位に分ける（全画面の KPI をそろえる・FR-195）
+    var mu = !o.unit && typeof big === "string" && /^([0-9０-９,.\-−／\/ ]*[0-9０-９])\s*(件|行|本|か月|円|h|点|%|シート|枠)$/.exec(big);
+    if (mu) { big = mu[1]; o = Object.assign({}, o, { unit: mu[2] }); }
     var tone = (!state && o.tone && o.tag) ? o.tone : null;
     var k = el(href ? "a" : "div", { "class": "np-kpi", href: href || null, "data-tone": tone, "data-state": state ? "unmeasured" : null });
     k.appendChild(el("div", { "class": "np-kpi-label", text: label }));
@@ -1382,7 +1385,7 @@
     var P = "/api/projects/" + encodeURIComponent(pid);
     api(P + "/target").then(function (t) {
       if (t.state === "目標未設定") {
-        box.appendChild(el("p", { "class": "np-warn", text: "目標未設定（G3・G5 を通すには、方式と根拠つきの年間目標が要ります）" }));
+        box.appendChild(el("p", { "class": "np-alert", text: "要対応: 目標未設定（G3・G5 を通すには、方式と根拠つきの年間目標が要ります）" }));
       } else {
         box.appendChild(table(["項目", "値"], [
           el("tr", null, [el("th", { text: "年間目標（発売から1年・税込の商品代）" }), el("td", { text: yen(t.annual_yen) })]),
@@ -1684,8 +1687,8 @@
       // 発注の締切（FR-101）
       var dl = o.deadline;
       box.appendChild(el("h3", { text: "本番発注の締切" }));
-      box.appendChild(el("p", { "class": dl.state === "間に合う" ? "np-note" : "np-warn",
-        text: dl.state + (dl.due ? "：" + dl.due + " まで（発売日 " + dl.launch_date + " − " + dl.by + " のリードタイム "
+      box.appendChild(el("p", { "class": dl.state === "間に合う" ? "np-note" : dl.state === "間に合わない" ? "np-alert" : "np-warn",
+        text: (dl.state === "間に合わない" ? "要対応: " : "") + dl.state + (dl.due ? "：" + dl.due + " まで（発売日 " + dl.launch_date + " − " + dl.by + " のリードタイム "
           + dl.lead_days + "日。" + (dl.days_left >= 0 ? "あと " + dl.days_left + " 日" : "") + "）" : "") + (dl.why ? "　" + dl.why : "") }));
 
       // 相見積（FR-98・FR-96）
@@ -2613,9 +2616,9 @@
       if (d.rows.length) {
         var mineN = d.rows.filter(function (r) { return r.mine; }).length;
         b.appendChild(kpiRow([
-          kpi("自分が判定するもの", mineN + " 件", null, null),
-          kpi("直近30日の通過", d.passed_30d === null ? null : d.passed_30d + " 件", "0 件のときも 0 と出します", null, d.passed_30d === null ? "未計測" : null),
-          kpi("案件", d.rows.length + " 件", null, "#/projects")]));
+          kpi("自分が判定するもの", String(mineN), null, null, null, { unit: "件", tone: mineN > 0 ? "info" : null, tag: "あなたの番" }),
+          kpi("直近30日の通過", d.passed_30d === null ? null : String(d.passed_30d), "0 件のときも 0 と出します", null, d.passed_30d === null ? "未計測" : null, { unit: "件" }),
+          kpi("案件", String(d.rows.length), null, "#/projects", null, { unit: "件" })]));
         var cntg = {};
         d.rows.forEach(function (r) { cntg[r.next_gate] = (cntg[r.next_gate] || 0) + 1; });
         b.appendChild(chartCard("次の判定がどのゲートか", hbars(Object.keys(cntg).sort().map(function (k) {
@@ -2637,7 +2640,7 @@
             el("td", { text: r.who })
           ];
           r.cells.forEach(function (c) {
-            tds.push(el("td", null, [
+            tds.push(el("td", { "data-gate": c.state }, [
               el("span", { "aria-hidden": "true", text: c.glyph }), " ",
               c.state === "判定待ち" && c.missing_n
                 ? el("a", { href: "#/projects/" + r.id, text: c.word + "（欠 " + c.missing_n + "）" })
@@ -3056,7 +3059,7 @@
     box.appendChild(el("p", { "class": "np-note",
       text: "総合点 =（①共通点 0〜70 ＋ ②テーマ適合点 0〜30）× 生産方法の減点係数。ランクはテーマ内の百分位で決まります。" }));
     if (!d.v2_ready) {
-      box.appendChild(el("p", { "class": "np-warn", text: "まだ採点できません。足りないものがあります:" }));
+      box.appendChild(el("p", { "class": "np-alert", text: "要対応: まだ採点できません。足りないものがあります:" }));
       var ul = el("ul", { "class": "np-miss" });
       d.v2_blockers.forEach(function (x) { ul.appendChild(el("li", { text: x })); });
       box.appendChild(ul);
@@ -4130,7 +4133,7 @@
         el("td", { text: RULE_LABEL[r.rule] || r.rule }),
         el("td", { text: r.scope === "FY" ? "年度" : r.scope }),
         // **語で出す**（N-11）
-        el("td", { text: LEVEL_WORD[r.level] || r.level }),
+        el("td", null, [r.level === "ok" ? tag(LEVEL_WORD.ok, "ok", "✓") : r.level === "warn" ? tag(LEVEL_WORD.warn, "caution") : txt(LEVEL_WORD[r.level] || r.level)]),
         el("td", { text: r.message }),
         last
       ]);
@@ -5365,7 +5368,7 @@
           + "送る対象 " + c.target + " 件／送った " + c.sent + " 件（最後 " + (c.last_sent_at || "—") + "）／送らない: 期限なし " + (sk["期限なし"] || 0) + " 件・担当なし " + (sk["担当なし"] || 0) + " 件";
         if (c.last_sync) {
           var ls = c.last_sync;
-          cc.appendChild(el("p", { "class": ls.error ? "np-warn" : "np-note", text: "最後の同期（" + (c.last_sync_at || "—") + "）: "
+          cc.appendChild(el("p", { "class": ls.error ? "np-alert" : "np-note", text: (ls.error ? "要対応: " : "") + "最後の同期（" + (c.last_sync_at || "—") + "）: "
             + (ls.error ? "止まりました: " + ls.error : "送った " + ls.sent + " 件・消した " + ls.deleted + " 件")
             + (ls.unsendable && Object.keys(ls.unsendable).length ? "／送れない " + Object.keys(ls.unsendable).length + " 件（" + Object.keys(ls.unsendable).map(function (k) { return ls.unsendable[k]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join("・") + "）" : "") }));
         }
@@ -5984,8 +5987,8 @@
       if (ho) {
         var hc = el("div", { "class": "np-card" });
         hc.appendChild(el("h2", { text: "経営管理へ渡す新商品分の計画（" + ho.state + "）" }));
-        hc.appendChild(el("p", { "class": ho.state === "送信済" ? "np-note" : "np-warn",
-          text: (ho.state === "送信済" ? "送りました（" + ho.sent_at + "）。" : (ho.last_error || "まだ送っていません。")) + "目標 " + yen(ho.total) + " を、発売月と過去の売れ方で部門×月に配ったもの（" + ho.rows_n + " 行）です。" }));
+        hc.appendChild(el("p", { "class": ho.state === "送信済" ? "np-note" : ho.state === "失敗" ? "np-alert" : "np-warn",
+          text: (ho.state === "失敗" ? "要対応: " : "") + (ho.state === "送信済" ? "送りました（" + ho.sent_at + "）。" : (ho.last_error || "まだ送っていません。")) + "目標 " + yen(ho.total) + " を、発売月と過去の売れ方で部門×月に配ったもの（" + ho.rows_n + " 行）です。" }));
         hc.appendChild(table(["部門", "年度", "新商品分"], ho.by_dept.map(function (x) {
           return el("tr", null, [el("td", { text: x.dept }), el("td", { "class": "np-num", text: String(x.fy) }), el("td", { "class": "np-num", text: yen(x.value) })]);
         })));
