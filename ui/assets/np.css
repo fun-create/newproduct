@@ -431,10 +431,26 @@ table.np tr[data-tone="alert"] > td:first-child { box-shadow: inset 4px 0 0 var(
 /* 行の主語（タスク名）を太く。np-name と違い最小幅を持たせない（400px で案件の列が潰れるため） */
 table.np td.np-what { font-weight: 600; }
 /* 表の見出し行: 本文より強く（いままでは本文より弱い灰色だった） */
-table.np th { background: var(--np-head-bg); color: var(--fca-ink); font-weight: 700; border-bottom: 2px solid var(--np-line-strong); }
+table.np thead th { background: var(--np-head-bg); color: var(--fca-ink); font-weight: 700; border-bottom: 2px solid var(--np-line-strong); }
+/* 行の見出し（項目・値の表の左列）は地の色を付けず、本文色の太字だけ（見出し行と区別する） */
+table.np tbody th { color: var(--fca-ink); font-weight: 700; }
 /* グラフ: 手を打つ棒だけ色を変え、値と軸の語を太く。ほかは紺1色のまま */
 .np-svg .np-col-alert { fill: var(--np-alert-line); }
 .np-svg .np-val-strong { font-weight: 800; font-size: 13px; }
 .np-svg .np-tick-alert { fill: var(--np-alert-ink); font-weight: 800; }
 @media (forced-colors: active) { .np-tag { border-color: CanvasText; } }
+
+/* ── FR-195 第2・3段: タスクの行は上の tr[data-tone] と np-flag。ゲートと「いま欠けているもの」── */
+/* ゲート: 差戻し＝注意（塗り＋太字）・通過＝良い（地の色）・中止／保留＝中立。記号（● ◐ ✕ など）と語はそのまま */
+.np-gcell[data-state="差戻し"] { background: var(--np-alert-bg); border-color: var(--np-alert-line); color: var(--np-alert-ink); font-weight: 800; }
+.np-gcell[data-state="通過"] { background: var(--np-ok-bg); border-color: var(--np-ok-line); color: var(--np-ok-ink); }
+.np-gcell[data-state="中止"], .np-gcell[data-state="保留"] { background: var(--np-neutral-bg); color: var(--np-neutral-ink); }
+.np-gate[data-state="差戻し"] { background: var(--np-alert-bg); border-color: var(--np-alert-line); color: var(--np-alert-ink); font-weight: 800; }
+.np-gate[data-state="通過"] { background: var(--np-ok-bg); border-color: var(--np-ok-line); color: var(--np-ok-ink); }
+.np-gate[data-state="中止"], .np-gate[data-state="保留"] { background: var(--np-neutral-bg); color: var(--np-neutral-ink); }
+/* いま欠けているもの: ゲートを止めている項目に左の赤い帯（語は各項目の文） */
+.np-miss-stop { list-style: none; padding-left: 0; }
+.np-miss-stop > li { box-shadow: inset 3px 0 0 var(--np-alert-line); padding: .25rem 0 .25rem .75rem; }
+/* 止まっている知らせ（np-warn と同じ形で赤）。文は「要対応:」で始める */
+.np-alert { border-left: 4px solid var(--np-alert-line); padding: .5rem .75rem; margin: .6rem 0; background: var(--np-alert-bg); color: var(--fca-ink); }
 

@@ -586,7 +586,7 @@
     var nx = gates.filter(function (g) { return g.state === "判定待ち" || g.state === "差戻し" || g.state === "保留"; })[0];
     var w = el("ol", { "class": "np-gstrip" + (big ? " np-gstrip-big" : ""), "aria-label": "ゲートの進み" });
     gates.forEach(function (g) {
-      var li = el("li", { "class": "np-gcell" + (g === nx ? " np-gcell-now" : ""), title: g.gate + " " + (g.name || "") + " " + g.word,
+      var li = el("li", { "class": "np-gcell" + (g === nx ? " np-gcell-now" : ""), "data-state": g.state, title: g.gate + " " + (g.name || "") + " " + g.word,
         "aria-label": g.gate + " " + (g.name || "") + " " + g.word });
       li.appendChild(el("span", { "aria-hidden": "true", text: g.glyph }));
       li.appendChild(el("span", { "class": "np-gcode", "aria-hidden": "true", text: g.gate }));
@@ -919,7 +919,8 @@
           row("担当", dash(h.owner)),
           row("ステージ", h.stage),
           row("売上計上", h.revenue),
-          row("工数ポイント", h.effort_point === null ? "未確定" : String(h.effort_point)),
+          h.effort_point === null ? el("tr", null, [el("th", { text: "工数ポイント" }), el("td", null, [tag("未確定", "neutral")])])
+            : row("工数ポイント", String(h.effort_point)),
           row("正本（移行期間）", h.source_of_truth === "app" ? "アプリ" : "Drive（アプリでは編集不可）")
         ]));
         if (h.effort_point === null && h.effort_point_note)
@@ -943,7 +944,8 @@
         } else if (!d.missing.length) {
           miss.appendChild(el("p", { "class": "np-note", text: "欠けているものはありません。" }));
         } else {
-          var ul = el("ul", { "class": "np-miss" });
+          miss.appendChild(el("p", null, [tag("あと " + d.missing.length + " 件で " + ng.gate + " を通せます", "alert", "！")]));
+          var ul = el("ul", { "class": "np-miss np-miss-stop" });
           d.missing.forEach(function (m) {
             var li = el("li", null, [
               m.label + " — " + m.why + " ",
@@ -2374,7 +2376,7 @@
         // **「期限なし」は斜線の別の棒で常に出す**。件数は全員分（自分の分だけのときも全員分の山を出し、そう書く）
         var hk = ["overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6", "none"];
         var hill = hk.map(function (k) {
-          return { x: k === "overdue" ? "期限切れ" : k === "today" ? "今日" : k === "none" ? "期限なし" : k.replace("+", "") + "日後",
+          return { x: k === "overdue" ? "期限切れ" : k === "today" ? "今日" : k === "none" ? "期限なし" : k.replace("+", "") + "日後", tone: k === "overdue" ? "alert" : null,
             y: d.counts[k], alt: k === "none", current: k === when, href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq };
         });
         b.appendChild(chartCard("期限ごとの件数（全員の分）— 棒を押すとその期間に絞れます", columns(hill, { unit: "件", height: 170,
@@ -2409,13 +2411,15 @@
               rows.push(el("tr", { "class": "np-sep" }, [
                 el("td", { colspan: "10", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
             }
-            rows.push(el("tr", null, [
+            // 期限切れ（未完）の行に左の帯と「！期限切れ n日」（FR-195 第2段）
+            var late = !!(t.due_on && t.due_on < d.today && t.status !== "完了" && t.status !== "対象外");
+            rows.push(el("tr", { "data-tone": late ? "alert" : null }, [
               el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t)]),
-              el("td", { text: dash(t.due_on) }),
+              el("td", { "class": "np-nowrap" }, [txt(dash(t.due_on)), late ? overdueFlag(t.due_on, d.today) : null]),
               el("td", null, [t.project_id
                 ? el("a", { href: "#/projects/" + t.project_id, text: t.project })
                 : txt("—")]),
-              el("td", { text: t.title }),
+              el("td", { "class": "np-what", text: t.title }),
               el("td", { text: t.role_label + (t.role_external ? "（他部署）" : "") }),
               assigneeCell(t.project_id ? "task" : "work", t),
               el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
@@ -4650,7 +4654,7 @@
         if (/^\|[-| ]+\|$/.test(ln)) return;                 // 区切り行
         var cells = ln.replace(/^\||\|$/g, "").split("|").map(function (c) { return c.trim(); });
         if (!tbl) { tbl = el("table", { "class": "np" }); box.appendChild(tbl);
-          var tr0 = el("tr"); cells.forEach(function (c) { tr0.appendChild(el("th", { text: c })); }); tbl.appendChild(tr0); return; }
+          var tr0 = el("tr"); cells.forEach(function (c) { tr0.appendChild(el("th", { text: c })); }); tbl.appendChild(el("thead", null, [tr0])); return; }
         // 円・%・件・本・h で終わるセルは右寄せ（数字の列をそろえる・点検 §6 月次レポート）
         var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(rich("td", c, { "class": /^[+−±\-]?[\d,.]+\s*(円|%|件|本|h|か月)?$|^—$/.test(c.trim()) ? "np-num" : null })); }); tbl.appendChild(tr); return;
       }
