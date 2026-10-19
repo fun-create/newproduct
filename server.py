@@ -1023,7 +1023,21 @@ class H(BaseHTTPRequestHandler):
         # 繰り返しの仕事（ADR-108）
         if parts == ["routines"] and method == "GET":
             from app import routine
-            return self.sendj(200, {**routine.listing(), "can_edit": routine.can_edit(uid)})
+            from app import ai_routine
+            return self.sendj(200, {**routine.listing(), "can_edit": routine.can_edit(uid),
+                                    "ai": ai_routine.status(uid), "ai_props": {str(k): v for k, v in ai_routine.latest_by_routine().items()}})
+        # 繰り返しの仕事の自動化の AI 案（FR-201・ADR-116）。**AI は案を出すだけ**。依頼にするのは人
+        if parts == ["routines", "ai"] and method == "POST":
+            from app import ai_routine
+            r = ai_routine.start_run(None, uid)
+            store.audit(uid, "routine.ai_run", None, r, ip)
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[:2] == ["routines", "ai"] and parts[3] in ("request", "reject") and method == "POST":
+            from app import ai_routine
+            pid = int(parts[2])
+            r = ai_routine.to_request(pid, uid) if parts[3] == "request" else ai_routine.reject(pid, uid, self.body().get("note", ""))
+            store.audit(uid, "routine.ai_" + parts[3], str(pid), r, ip)
+            return self.sendj(200, r)
         if parts == ["routines"] and method == "POST":
             from app import routine
             d = self.body()

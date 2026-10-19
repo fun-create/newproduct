@@ -2292,6 +2292,9 @@
       var c = d.counts || {};
       b.appendChild(kpiRow([kpi("毎年", (c.yearly || 0) + " 件"), kpi("毎月", (c.monthly || 0) + " 件"), kpi("毎週", (c.weekly || 0) + " 件"),
         kpi("毎日（見るだけ）", (c.daily || 0) + " 件"), kpi("使う", d.active + " 件", "残りは「使わない」")]));
+      if (d.ai) b.appendChild(aiRunCard(d.ai, { title: "自動化の AI 案", endpoint: "/api/routines/ai", what: "案のまだ無い仕事",
+        desc: "AI が、各仕事を自動化（または AI で軽く）できるか・どうやって・人が残すところ・効果の大きさ（大・中・小）の案を出します。時間（分）は出しません。良さそうなら「自動化依頼にする」で依頼の下書きができます（送りはしません）。"
+          + (d.ai.pending ? " いま決めていない案: " + d.ai.pending + " 件。" : "") }));
       var slot = el("div");
       function form(x) {
         x = x || { cadence: "weekly", active: 1 };
@@ -2340,8 +2343,9 @@
           if (d.can_edit) { var e1 = el("button", { type: "button", text: "直す" }); e1.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(x)); slot.scrollIntoView({ block: "nearest" }); }); a.appendChild(e1); }
           var state = el("td", { text: (x.active ? "使う" : "使わない") + (x.note ? "（" + x.note + "）" : "") });
           var manual = x.manual && /^https?:\/\//i.test(x.manual) ? el("a", { href: x.manual, rel: "noopener noreferrer", target: "_blank", text: "開く" }) : txt(dash(x.manual));
-          if (k === "daily") return el("tr", null, [el("td", { text: dash(x.timing) }), el("td", { text: x.title }), el("td", { text: dash(x.reason) }), el("td", null, [manual]), state, a]);
-          return el("tr", null, [el("td", { "class": "np-nowrap", text: x.rule }), el("td", null, [txt(x.title), x.reason ? el("div", { "class": "np-sub", text: x.reason }) : txt("")]),
+          var ap = routineAiProp((d.ai_props || {})[String(x.id)], d.can_edit);
+          if (k === "daily") return el("tr", null, [el("td", { text: dash(x.timing) }), el("td", null, [txt(x.title), ap]), el("td", { text: dash(x.reason) }), el("td", null, [manual]), state, a]);
+          return el("tr", null, [el("td", { "class": "np-nowrap", text: x.rule }), el("td", null, [txt(x.title), x.reason ? el("div", { "class": "np-sub", text: x.reason }) : txt(""), ap]),
             el("td", { "class": "np-nowrap", text: x.active ? dash(x.next) : "—" }), el("td", { text: dash(x.role_label) + (x.assignee ? "・" + x.assignee : "") }),
             el("td", { "class": "np-nowrap", text: x.last ? x.last.occurs_on + "（" + (x.last.status || "—") + "）" : "—" }), state, a]);
         }))]));
@@ -4790,20 +4794,54 @@
 
   /** トレンドの上の「AI に自社側の点の案を出させる」。走らせたら終わるまで様子を見て、終わったら描き直す */
   function aiSelfRunCard(ai) {
+    return aiRunCard(ai, { title: "自社側70点の AI 案", endpoint: "/api/fctr/ai-self", what: "自社側の点が無いテーマ",
+      desc: "AI が、同社の作れるもの（開発タイプ・商品タイプ）とテーマの情報から、4軸の点の案を根拠つきで出します。点にするかは、各テーマの「この点で採る」（直してもよい）か「見送る」で人が決めます。基準を決めるのは商品開発部です。"
+        + (ai.pending ? " いま採るか決めていない案: " + ai.pending + " 件。" : "") });
+  }
+
+  /** 繰り返しの仕事の自動化の AI 案（FR-201）。**案は依頼ではない。**「自動化依頼にする」で下書きができる（送らない） */
+  function routineAiProp(p, canEdit) {
+    if (!p) return null;
+    var box = el("div", { "class": "np-aiprop" });
+    box.appendChild(el("p", null, [tag("AI の案", "info"), txt(" 自動化: " + p.verdict + "・効果: " + p.impact
+      + (p.state !== "提案" ? "（" + p.state + "）" : ""))]));
+    box.appendChild(el("p", { "class": "np-sub", text: "どうやって: " + p.how }));
+    if (p.keep_human) box.appendChild(el("p", { "class": "np-sub", text: "人が残すところ: " + p.keep_human }));
+    var why = el("details");
+    why.appendChild(el("summary", { text: "効果の理由と未確認（" + dash(p.model) + "・" + dash(p.created_at) + "）" }));
+    if (p.reason) why.appendChild(el("p", { "class": "np-sub", text: p.reason }));
+    if (p.unverified.length) why.appendChild(el("p", { "class": "np-sub", text: "未確認: " + p.unverified.join("／") }));
+    box.appendChild(why);
+    if (p.state === "依頼にした" && p.request_id) box.appendChild(btnRow([navBtn("#/automation/" + encodeURIComponent(p.request_id), "自動化依頼を開く", "sm")]));
+    if (p.state !== "提案" || !canEdit) return box;
+    var st = el("span", { "class": "np-sub", role: "status" });
+    var rq = el("button", { type: "button", text: "自動化依頼にする" }), rj = el("button", { type: "button", text: "見送る" });
+    rq.addEventListener("click", function () {
+      post("/api/routines/ai/" + p.id + "/request", {}).then(function (r) { location.hash = "#/automation/" + encodeURIComponent(r.request_id); })
+        .catch(function (e) { st.textContent = " できませんでした: " + e.message; });
+    });
+    rj.addEventListener("click", function () {
+      post("/api/routines/ai/" + p.id + "/reject", {}).then(function () { go(); }).catch(function (e) { st.textContent = " できませんでした: " + e.message; });
+    });
+    box.appendChild(el("p", null, [rq, txt(" "), rj, st]));
+    return box;
+  }
+
+  /** 「AI に案を出させる」の箱（FR-200・201 で共通）。o = {title, desc, endpoint, what} */
+  function aiRunCard(ai, o) {
     var c = el("div", { "class": "np-how" });
-    c.appendChild(el("h3", { text: "自社側70点の AI 案" }));
-    c.appendChild(el("p", { "class": "np-sub", text: "AI が、同社の作れるもの（開発タイプ・商品タイプ）とテーマの情報から、4軸の点の案を根拠つきで出します。点にするかは、各テーマの「この点で採る」（直してもよい）か「見送る」で人が決めます。基準を決めるのは商品開発部です。"
-      + (ai.pending ? " いま採るか決めていない案: " + ai.pending + " 件。" : "") }));
+    c.appendChild(el("h3", { text: o.title }));
+    c.appendChild(el("p", { "class": "np-sub", text: o.desc }));
     if (ai.last_run) c.appendChild(el("p", { "class": "np-sub", text: "前の回: " + ai.last_run.stage + "（" + dash(ai.last_run.requested_at) + "・案 " + (ai.last_run.n_ok || 0) + " 件"
       + (ai.last_run.error ? "・" + ai.last_run.error : "") + "）" }));
     if (!ai.can_run) return c;
     if (!ai.enabled) { c.appendChild(el("p", { "class": "np-warn", text: ai.reason })); return c; }
-    var bt = el("button", { type: "button", "class": "np-btn", text: "AI に案を出させる（自社側の点が無いテーマ " + ai.candidates + " 件）" });
+    var bt = el("button", { type: "button", "class": "np-btn", text: "AI に案を出させる（" + o.what + " " + ai.candidates + " 件）" });
     var st = el("p", { "class": "np-sub", role: "status" });
     if (!ai.candidates) bt.setAttribute("disabled", "disabled");
     bt.addEventListener("click", function () {
       bt.setAttribute("disabled", "disabled");
-      post("/api/fctr/ai-self", {}).then(function (r) {
+      post(o.endpoint, {}).then(function (r) {
         if (!r.started) { st.textContent = r.reason; bt.removeAttribute("disabled"); return; }
         st.textContent = r.n + " 件の案を出しています（1〜2分かかります）。";
         var tries = 0;
