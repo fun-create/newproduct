@@ -430,9 +430,9 @@ def check_stage2_screens():
          or oct((BASE / "config" / "chatwork.env").stat().st_mode)[-3:] == "600" else NG,
          "chatwork.env があるなら 600", "他のユーザーから読めないこと")
 
-    # **帯は7つまで。**足さずに ALIAS で「タスク」の下へ置いた
-    note(OK if '"#/automation": "#/tasks"' in js else NG,
-         "自動化依頼が帯の下（タスク）に置かれている",
+    # **帯は7つまで。**足さずに ALIAS で帯の下へ置く。2026-10-19 十文字さんの指示で「タスク」から「設定」の下へ移した（ADR-114）
+    note(OK if '"#/automation": "#/settings"' in js and 'id: "np-set-automation"' in js else NG,
+         "自動化依頼が帯の下（設定）に置かれている",
          "帯は7つまで（keiei の layout.py の上限）。8つ目を足さない")
     auto_py = (BASE / "app" / "automation.py").read_text(encoding="utf-8")
     note(OK if "無しと回答" in auto_py else NG,

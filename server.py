@@ -1168,7 +1168,7 @@ class H(BaseHTTPRequestHandler):
         # **警告は保存を止めない**（FR-84）。検査は GET 側で返すだけで、
         # POST 側は一度も検査結果を見ない。ここで弾くと現場は表計算に戻る。
         if parts == ["plan"] and method == "GET":
-            r = plan_m.overview(qs.get("fy") or None)
+            r = plan_m.overview(qs.get("fy") or None, qs.get("v") or None)
             r["can_approve"] = plan_m.can_approve(uid)            # 承認のボタンは社長にだけ出す（ADR-058）
             r["can_delete"] = plan_m.can_delete(uid)              # 策定中の版を消す（ADR-064）
             return self.sendj(200, r)

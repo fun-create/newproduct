@@ -490,5 +490,40 @@ class TestSlotConsumption(Base):
         self.assertNotIn("未実装です", r.get("why") or "")
 
 
+class TestSlotEdit(Base):
+    """枠を画面から直す・消す（2026-10-19 目視チェック「プランを変えたいときに操作方法がわからない」）。"""
+    def test_move_month_without_date_and_delete(self):
+        from app import store
+        sid = self.slot("2026-05")
+        self.m.update_slot(sid, "tester", launch_month="2026-07", area="本店")
+        r = store.one("SELECT launch_month, launch_date, area FROM plan_slot WHERE id=?", (sid,))
+        self.assertEqual((r["launch_month"], r["launch_date"], r["area"]), ("2026-07", None, "本店"), "日が未定のまま月だけ動かせる")
+        self.m.update_slot(sid, "tester", launch_date="2026-08-14", launch_month="2026-07")
+        self.assertEqual(store.val("SELECT launch_month FROM plan_slot WHERE id=?", (sid,)), "2026-08", "日を入れたら月は日に合わせる")
+        with self.assertRaises(ValueError):
+            self.m.update_slot(sid, "tester", launch_month="7月")
+        self.m.delete_slot(sid)
+        self.assertIsNone(store.one("SELECT 1 FROM plan_slot WHERE id=?", (sid,)))
+
+    def test_approved_version_cannot_be_edited(self):
+        sid = self.slot("2026-05")
+        self.m.approve(self.vid, "tester")
+        with self.assertRaises(ValueError):
+            self.m.update_slot(sid, "tester", launch_month="2026-06")
+        with self.assertRaises(ValueError):
+            self.m.delete_slot(sid)
+
+
+    def test_overview_opens_the_version_asked_for(self):
+        """版の一覧のリンク（?v=）で、承認済みでない版も開ける（改訂版の下書きを開けなかった不具合）。"""
+        self.slot("2026-05")
+        self.m.approve(self.vid, "tester")
+        draft = self.m.revise(self.vid, "tester")["id"]
+        self.assertEqual(self.m.overview(2026)["current"]["version"]["id"], self.vid, "指定しなければ今までどおり")
+        self.assertEqual(self.m.overview(2026, draft)["current"]["version"]["id"], draft)
+        self.assertTrue(self.m.overview(2026, draft)["current"]["editable"])
+        with self.assertRaises(LookupError):
+            self.m.overview(2026, "nope")
+
 if __name__ == "__main__":
     unittest.main()

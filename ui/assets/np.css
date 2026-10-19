@@ -459,3 +459,8 @@ table.np td[data-gate="差戻し"] { background: var(--np-alert-bg); color: var(
 table.np td[data-gate="通過"] { background: var(--np-ok-bg); color: var(--np-ok-ink); }
 table.np td[data-gate="中止"], table.np td[data-gate="保留"], table.np td[data-gate="対象外"] { color: var(--np-neutral-ink); }
 
+
+/* 「このプランを変えたいとき」（2026-10-19）。情報＝枠だけ（FR-195 の規則） */
+.np-how { border: 1px solid var(--np-info-line); border-left-width: 4px; border-radius: 6px; padding: .5rem .8rem; margin: .4rem 0 1rem; }
+.np-how > h3 { margin: 0 0 .3rem; font-size: 1rem; color: var(--np-info-ink); }
+tr.np-edit-row > td { background: var(--fca-bg); }

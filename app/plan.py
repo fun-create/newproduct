@@ -368,6 +368,10 @@ def update_slot(slot_id: str, user_id: str, **f) -> dict:
         _dt.date.fromisoformat(str(f["launch_date"]).strip())
         sets.append("launch_month=?")
         p.append(str(f["launch_date"]).strip()[:7])
+    elif f.get("launch_month"):
+        # 日が未定のまま月だけ動かす（2026-10-19 画面から枠を直せるようにした。月は日より後に決まらない）
+        sets.append("launch_month=?")
+        p.append(_month_ok(str(f["launch_month"])))
     if not sets:
         return {"id": slot_id, "changed": 0}
     sets += ["updated_at=?", "updated_by=?"]
@@ -819,9 +823,16 @@ def detail(version_id: str) -> dict | None:
             "editable": v["state"] == "策定中"}
 
 
-def overview(fiscal_year=None) -> dict:
+def overview(fiscal_year=None, version_id=None) -> dict:
+    """version_id を渡すとその版を見せる（2026-10-19: 版の一覧のリンク `#/plan?v=` が無視され、
+    改訂版を作っても下書きを開けなかった。目視チェック「プランを変えたい操作が分からない」の元）。"""
     vs = versions(fiscal_year)
-    cur = current(fiscal_year)
+    cur = None
+    if version_id:
+        cur = next((v for v in versions() if v["id"] == str(version_id)), None)
+        if cur is None:
+            raise LookupError("その版はありません")
+    cur = cur or current(fiscal_year)
     return {
         "versions": vs,
         "current": detail(cur["id"]) if cur else None,

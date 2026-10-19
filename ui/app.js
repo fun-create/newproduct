@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/tasks", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -2439,10 +2439,7 @@
         if (tab === "work" || tab === "request") b.appendChild(workItemForm(tab));
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
 
-        // **帯に出していない画面への入口**（帯は7つまで）。
-        // 自動化依頼は「この作業をやらなくて済ませたい」なので、タスクの下に置く
-        b.appendChild(el("p", { "class": "np-note", text: "手でやっている作業を自動化したいときは、自動化依頼へ。作業名だけで出せます（そのあと8つの質問で要件にします）。" }));
-        b.appendChild(btnRow([navBtn("#/automation", "自動化依頼を開く")]));
+        // 自動化依頼の入口は「設定」へ移した（2026-10-19 目視チェック「設定内に移動してほしい」）
 
         // ロール別の負荷（F-5-5）
         b.appendChild(el("h2", { text: "ロール別の負荷（月 × ロール）" }));
@@ -2692,19 +2689,25 @@
       setTitle("アイデア", d.rubric ? "（" + d.rubric + "）" : "");
       // 起票の入口を2つに（2026-10-06 点検「十文字さんが名指しした起票の流れが分かりにくい」）。
       // 自分で書く → 下の起票フォームへ移る／トレンドから選ぶ → トレンド画面で「アイデアにする」
-      var toForm = el("button", { type: "button", "class": "np-btn", text: "アイデアを起票する ↓" });
+      // 起票フォームはボタンのすぐ下に置き、押すとその場で開く（2026-10-19 目視チェック「一番下まで移動する方法を変えたい」。
+      // 以前は一覧（最大数百行）の下にあり、押すと一番下まで流れていた）
+      var formBox = newIdeaForm(meta);
+      var toForm = el("button", { type: "button", "class": "np-btn", "aria-expanded": "false", text: "アイデアを起票する" });
       toForm.addEventListener("click", function () {
-        var f = document.getElementById("np-newidea");
-        if (!f) return;
-        f.open = true;
-        f.scrollIntoView({ behavior: "smooth", block: "start" });
-        var t = f.querySelector("input[name=title]");
+        formBox.open = !formBox.open;
+      });
+      formBox.addEventListener("toggle", function () {
+        toForm.setAttribute("aria-expanded", String(formBox.open));
+        if (!formBox.open) return;
+        var t = formBox.querySelector("input[name=title]");
         if (t) t.focus({ preventScroll: true });
+        formBox.scrollIntoView({ block: "nearest" });
       });
       var ai = meta.ai_scoring || {};
       b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
         navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : "")),
         navBtn("#/calibration", "採点の校正（発売後の実績と）"), navBtn("#/devices", "新機種調査（スキンシール）")]));
+      b.appendChild(formBox);
 
       // ── 全体の形（絞り込み後の全件で数える。表は上限まで）──
       var sm = d.summary || {};
@@ -2761,7 +2764,7 @@
 
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
-          text: "アイデアがありません。上の「アイデアを起票する」から足せます。" }));
+          text: "アイデアがありません。上の「アイデアを起票する」を押すと、その場で入力欄が開きます。" }));
       } else if (d.rubric) {
         // 版を選んだとき。**その版の点とランクだけ**を出す
         b.appendChild(table(
@@ -2804,13 +2807,12 @@
           })));
       }
       d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
-      b.appendChild(newIdeaForm(meta));
     }).catch(fail);
   }
 
   /** 起票フォーム。**4項目＋起票経路だけ**（F-1-3）。ここを重くしない。 */
   function newIdeaForm(meta) {
-    var box = el("details", { "class": "np-card", open: "open", id: "np-newidea" });
+    var box = el("details", { "class": "np-card", id: "np-newidea" });
     box.appendChild(el("summary", { text: "アイデアを起票する（4項目＋起票経路だけ）" }));
     box.appendChild(el("p", { "class": "np-note",
       text: "起票に要るのは 商品案名・概要・想定ターゲット・起票経路 の4つだけです。デザイン自由度・生産方法・参考URL・エリアは採点のときに足します。" }));
@@ -2902,6 +2904,18 @@
       setTitle("アイデア", d.title);
 
       b.appendChild(el("h2", { text: d.title }));
+      // 情報を足す入口を上に（2026-10-19 目視チェック「情報を追加入力したいときにどうすれば良いかわからない」。
+      // 下のほうの「項目を足す・直す」を開いて、そこへ移る）
+      var toEdit = el("button", { type: "button", "class": "np-btn", text: "この案に情報を足す・直す" });
+      toEdit.addEventListener("click", function () {
+        var fb = document.getElementById("np-ideafields");
+        if (!fb) return;
+        fb.open = true;
+        fb.scrollIntoView({ block: "start" });
+        var first = fb.querySelector("textarea, input, select");
+        if (first) first.focus({ preventScroll: true });
+      });
+      b.appendChild(btnRow([toEdit]));
       b.appendChild(table(["項目", "値"], [
         ["ステージ", d.stage],
         ["テーマ", dash(d.theme_label)],
@@ -2927,7 +2941,7 @@
       }
       if (!d.origin) {
         b.appendChild(el("p", { "class": "np-warn",
-          text: "起票経路が不明です（移行分）。元のシートに起票経路の列がありません。推測では埋めていません。分かる人が下のフォームで入れてください。" }));
+          text: "起票経路が不明です（移行分）。元のシートに起票経路の列がありません。推測では埋めていません。分かる人が上の「この案に情報を足す・直す」で入れてください。" }));
       }
 
       // ── 同型（FR-139）──
@@ -3837,9 +3851,27 @@
   }
 
   function ideaFieldsForm(d, meta) {
-    var box = el("details", { "class": "np-card" });
-    box.appendChild(el("summary", { text: "項目を足す・直す" }));
+    var box = el("details", { "class": "np-card", id: "np-ideafields" });
+    box.appendChild(el("summary", { text: "項目を足す・直す（概要・ターゲット・参考URL・エリア・採点の項目）" }));
     var f = el("form", { "class": "np-form" });
+    // 文の項目も足す・直せるように（サーバーは以前から受けていた。画面に欄が無かった・2026-10-19）
+    function area(name, label, cur, rows) {
+      var t = el("textarea", { name: name, rows: String(rows || 3), "aria-label": label });
+      t.value = cur || "";
+      return el("label", { "class": "np-label" }, [el("span", { text: label }), t]);
+    }
+    function line(name, label, cur, ph) {
+      var i = el("input", { name: name, "aria-label": label, placeholder: ph || "" });
+      i.value = cur || "";
+      return el("label", { "class": "np-label" }, [el("span", { text: label }), i]);
+    }
+    f.appendChild(area("summary", "概要・仕様", d.summary, 4));
+    f.appendChild(area("target_scene", "想定ターゲットと使用シーン", d.target_scene, 3));
+    f.appendChild(line("ref_url1", "参考商品1（URL）", d.ref_url1, "https://"));
+    f.appendChild(line("ref_url2", "参考商品2（URL）", d.ref_url2, "https://"));
+    f.appendChild(line("area1", "エリア候補1", d.area1));
+    f.appendChild(line("area2", "エリア候補2", d.area2));
+    f.appendChild(area("note", "メモ", d.note, 2));
     function sel(name, label, opts, cur, blank) {
       var s = el("select", { name: name, "aria-label": label });
       s.appendChild(el("option", { value: "", text: blank }));
@@ -3955,8 +3987,9 @@
   function viewPlan() {
     loading();
     var q = hashQuery();
-    var fy = q.get("fy") || "";
-    Promise.all([api("/api/plan" + (fy ? "?fy=" + encodeURIComponent(fy) : "")),
+    var fy = q.get("fy") || "", pv = q.get("v") || "";
+    var pq = [fy ? "fy=" + encodeURIComponent(fy) : "", pv ? "v=" + encodeURIComponent(pv) : ""].filter(Boolean).join("&");
+    Promise.all([api("/api/plan" + (pq ? "?" + pq : "")),
                  api("/api/meta")]).then(function (r) {
       var d = r[0], meta = r[1];
       var b = clear();
@@ -3980,6 +4013,7 @@
     var box = el("div", { "class": "np-card" });
     var cur = d.current && d.current.version;
     box.appendChild(el("h2", { text: "年間プランの版" }));
+    box.appendChild(planHowToChange(d));
     if (d.versions.length) {
       var rows = d.versions.map(function (v) {
         return el("tr", null, [
@@ -4175,7 +4209,7 @@
               + " 点" + (m.effort_unknown
                 ? "（未確定 " + m.effort_unknown + " 本を含みません）" : "")
               + " ／ 案件化済 " + m.converted_n + " 件" }));
-      var rows = m.slots.map(function (x) { return planSlotRow(cur, x); });
+      var rows = m.slots.map(function (x) { return planSlotRow(cur, x, meta); });
       s.appendChild(table(["発売日", "商品タイプ", "開発タイプ", "作成エリア",
                            "工数", "担当", "アイデア", "機会", "案件"], rows));
       box.appendChild(s);
@@ -4183,7 +4217,78 @@
     return box;
   }
 
-  function planSlotRow(cur, x) {
+  /** 「このプランを変えたいとき」（2026-10-19 目視チェック「プランを変更したいときに操作方法がわからない」）。
+   *  いま見ている版の状態から、次に押すものを1つだけ出す */
+  function planHowToChange(d) {
+    var w = el("div", { "class": "np-how" });
+    w.appendChild(el("h3", { text: "このプランを変えたいとき" }));
+    var cur = d.current && d.current.version;
+    if (!cur) { w.appendChild(el("p", { "class": "np-note", text: "まだ版がありません。下の「版を作る」で年度の版を作ると、枠を足せます。" })); return w; }
+    if (cur.state === "策定中" && d.current.editable) {
+      w.appendChild(el("p", null, [txt("この版は「策定中」なので、そのまま直せます。月ごとの表の各枠の「直す」「消す」、いちばん下の「枠を足す」で変えます。直し終わったら、社長が「この版を承認する」を押します。")]));
+      var go2 = el("button", { type: "button", "class": "np-btn", text: "枠を足すところへ移る" });
+      go2.addEventListener("click", function () { var t = document.getElementById("np-plan-add"); if (t) t.scrollIntoView({ block: "start" }); });
+      w.appendChild(btnRow([go2]));
+      return w;
+    }
+    var draft = d.versions.filter(function (v) { return v.fiscal_year === cur.fiscal_year && v.state === "策定中"; })[0];
+    if (draft) {
+      w.appendChild(el("p", null, [txt("この版は「" + cur.state + "」なので、そのままは直せません。直すための下書き（策定中の版「" + draft.label + "」）がもうあります。そちらを開いて直してください。")]));
+      w.appendChild(btnRow([navBtn("#/plan?v=" + encodeURIComponent(draft.id), "下書きの版を開く")]));
+      return w;
+    }
+    w.appendChild(el("p", null, [txt("この版は「" + cur.state + "」なので、そのままは直せません。下の「改訂版を作る（枠ごと写す）」を押すと、同じ枠を写した下書き（策定中）ができます。そこで枠を直す・消す・足すをして、社長が承認すると、新しい版が正になります（前の版は記録として残ります）。")]));
+    return w;
+  }
+
+  // 枠を直す・消す（策定中の版・案件にしていない枠だけ。サーバー側の update_slot / delete_slot は前からあった）
+  function slotEditRow(x, meta, ncol) {
+    var f = el("form", { "class": "np-form np-inline" });
+    var msg = el("span", { "class": "np-sub", role: "status" });
+    function inp(name, label, val, type) {
+      // 工数ポイントは 1.5 のような小数がある（step を付けないと整数以外で保存が止まる）
+      var i = el("input", { name: name, "aria-label": label, placeholder: label, type: type || "text", step: type === "number" ? "any" : null, min: type === "number" ? "0" : null });
+      if (val !== null && val !== undefined) i.value = String(val);
+      return el("label", { "class": "np-label" }, [el("span", { text: label }), i]);
+    }
+    function sel(name, label, opts, cur, fmt) {
+      var s2 = el("select", { name: name, "aria-label": label });
+      s2.appendChild(el("option", { value: "", text: "（未設定）" }));
+      opts.forEach(function (o) { var op = el("option", { value: o.code, text: fmt ? fmt(o) : o.label }); if (o.code === cur) op.setAttribute("selected", "selected"); s2.appendChild(op); });
+      return el("label", { "class": "np-label" }, [el("span", { text: label }), s2]);
+    }
+    f.appendChild(inp("launch_month", "発売月（YYYY-MM）", x.launch_month));
+    f.appendChild(inp("launch_date", "発売日（決まっていれば）", x.launch_date, "date"));
+    f.appendChild(sel("product_kind", "商品タイプ", (meta.plan || {}).kinds || [], x.product_kind));
+    f.appendChild(sel("flow_type", "開発タイプ", meta.flow_types || [], x.flow_type));
+    f.appendChild(inp("area", "作成エリア", x.area));
+    f.appendChild(inp("effort_point", "工数ポイント（空なら開発タイプから）", x.effort_point, "number"));
+    f.appendChild(inp("owner", "担当", x.owner));
+    f.appendChild(inp("occasion", "機会（なぜその月か）", x.occasion));
+    var save = el("button", { type: "submit", text: "保存する" });
+    var cancel = el("button", { type: "button", text: "やめる" });
+    var del = el("button", { type: "button", text: "この枠を消す" });
+    f.appendChild(el("p", null, [save, txt(" "), cancel, txt(" "), del, txt(" "), msg]));
+    var tr = el("tr", { "class": "np-edit-row" }, [el("td", { colspan: String(ncol) }, [f])]);
+    cancel.addEventListener("click", function () { tr.remove(); });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      ["launch_month", "launch_date", "product_kind", "flow_type", "area", "effort_point", "owner", "occasion"].forEach(function (k) { o[k] = f.elements[k].value; });
+      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/update", o).then(function () { go(); })
+        .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
+    });
+    var armed = false;
+    del.addEventListener("click", function () {
+      // 確かめてから消す（window.confirm が出ない環境があるので、2回押しにする）
+      if (!armed) { armed = true; del.textContent = "もう一度押すと消えます"; return; }
+      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/delete", {}).then(function () { go(); })
+        .catch(function (e) { msg.textContent = "消せませんでした: " + e.message; });
+    });
+    return tr;
+  }
+
+  function planSlotRow(cur, x, meta) {
     var last = el("td");
     if (x.project_id) {
       last.appendChild(el("a", { href: "#/projects/" + x.project_id,
@@ -4192,6 +4297,14 @@
         text: "（" + dash(x.project_stage) + "）" }));
     } else if (cur.editable) {
       last.appendChild(convertButton(x));
+      var ed = el("button", { type: "button", text: "直す・消す" });
+      ed.addEventListener("click", function () {
+        var tr0 = ed.closest("tr");
+        if (tr0.nextSibling && tr0.nextSibling.classList && tr0.nextSibling.classList.contains("np-edit-row")) return;
+        tr0.parentNode.insertBefore(slotEditRow(x, meta || {}, 9), tr0.nextSibling);
+      });
+      last.appendChild(txt(" "));
+      last.appendChild(ed);
     } else {
       last.appendChild(txt("—"));
     }
@@ -4235,7 +4348,7 @@
   }
 
   function planAddSlot(cur, meta) {
-    var box = el("div", { "class": "np-card" });
+    var box = el("div", { "class": "np-card", id: "np-plan-add" });
     var msg = el("p", { "class": "np-note" });
     box.appendChild(el("h2", { text: "枠を足す" }));
     box.appendChild(el("p", { "class": "np-note",
@@ -5394,6 +5507,13 @@
         navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数"),
         navBtn("#/settings/ideas-import", "アイデアの一括登録")]));
       b.appendChild(dc);
+
+      // 自動化依頼（2026-10-19 十文字さん「設定内に移動してほしい」。それまではタスクの画面の下にあった）
+      var auc = el("div", { "class": "np-card", id: "np-set-automation" });
+      auc.appendChild(el("h2", { text: "自動化依頼" }));
+      auc.appendChild(el("p", { "class": "np-sub", text: "手でやっている作業を自動化したいときに出します。作業名だけで出せます（そのあと8つの質問で要件にします）。出した依頼の状態もここから見られます。" }));
+      auc.appendChild(btnRow([navBtn("#/automation", "自動化依頼を開く")]));
+      b.appendChild(auc);
 
       // アプリ全体の設定（ADR-059）。変えられる人にだけ「変える」を出す。**根拠が必須**、空欄は未設定に戻す
       var ac = el("div", { "class": "np-card", id: "np-set-app" });
