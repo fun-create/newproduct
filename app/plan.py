@@ -192,6 +192,90 @@ def revise(version_id: str, user_id: str, label: str = "") -> dict:
     return new
 
 
+# ── 既にある案件を枠に紐づける（FR-203・ADR-118）─────────────────────
+# 移行した案件は枠を通さずに入ったので、枠26本のうち案件に紐づくものが0本だった（2026-10-20 本番）。
+# 「案件にする」（convert）は新しい案件を起こすので、既にある案件には使えない。**結ぶのは人。**候補は出すだけ
+LINKERS = ("devdept", "admin", "president")
+
+
+def can_link(user_id: str) -> bool:
+    from . import gate
+    return bool(set(gate.roles_of(user_id)) & set(LINKERS))
+
+
+def link_slot(slot_id: str, project_id: str, user_id: str) -> dict:
+    if not can_link(user_id):
+        raise PermissionError("枠と案件を結べるのは、商品開発部・管理者・社長の業務ロールの人です")
+    s = store.one("SELECT s.*, v.state FROM plan_slot s JOIN plan_version v ON v.id=s.version_id WHERE s.id=?", (slot_id,))
+    if s is None:
+        raise LookupError("その枠がありません")
+    if s["state"] == "失効":
+        raise ValueError("失効した版の枠には結べません")
+    if s["project_id"]:
+        raise ValueError(f"この枠はもう案件 {s['project_id']} と結ばれています")
+    p = store.one("SELECT id, stage FROM project WHERE id=?", (project_id,))
+    if p is None:
+        raise LookupError("その案件がありません")
+    if p["stage"] == "中止":
+        raise ValueError("中止した案件は結べません")
+    other = store.one("SELECT id, launch_month FROM plan_slot WHERE project_id=?", (project_id,))
+    if other:
+        raise ValueError(f"この案件はもう別の枠（{other['launch_month']}）と結ばれています")
+    now = store.now_s()
+    with store.tx() as c:
+        c.execute("UPDATE plan_slot SET project_id=?, converted_at=?, converted_by=?, link_kind='link', updated_at=?, updated_by=? WHERE id=?",
+                  (project_id, now, user_id, now, user_id, slot_id))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                  (project_id, now, user_id, f"年間プランの枠（{s['launch_month']}）と結んだ"))
+    return {"ok": True, "slot_id": slot_id, "project_id": project_id}
+
+
+def unlink_slot(slot_id: str, user_id: str) -> dict:
+    """結び間違いを外す。**「案件にする」で起こした跡は外さない**（どの枠から案件ができたかが消えるため）。"""
+    if not can_link(user_id):
+        raise PermissionError("枠と案件の結びを外せるのは、商品開発部・管理者・社長の業務ロールの人です")
+    s = store.one("SELECT * FROM plan_slot WHERE id=?", (slot_id,))
+    if s is None:
+        raise LookupError("その枠がありません")
+    if not s["project_id"]:
+        raise ValueError("この枠は案件と結ばれていません")
+    if s["link_kind"] != "link":
+        raise ValueError("「案件にする」で起こした案件の結びは外せません")
+    now = store.now_s()
+    with store.tx() as c:
+        c.execute("UPDATE plan_slot SET project_id=NULL, converted_at=NULL, converted_by=NULL, link_kind=NULL, updated_at=?, updated_by=? WHERE id=?",
+                  (now, user_id, slot_id))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
+                  (s["project_id"], now, user_id, f"年間プランの枠（{s['launch_month']}）との結びを外した"))
+    return {"ok": True}
+
+
+def unlinked_projects() -> list[dict]:
+    """どの枠とも結ばれていない案件（中止を除く）。発売予定日の順。"""
+    return store.rows(store.q(
+        "SELECT p.id, p.internal_name, p.stage, p.launch_date FROM project p "
+        "WHERE p.stage <> '中止' AND NOT EXISTS (SELECT 1 FROM plan_slot s WHERE s.project_id=p.id) "
+        "ORDER BY (p.launch_date IS NULL), p.launch_date, p.internal_name"))
+
+
+def link_candidates(slot_id: str) -> list[dict]:
+    """枠に結ぶ案件の候補。**発売予定日の月が同じもの → 前後1か月 → その他**の順に並べるだけ（決めるのは人）。"""
+    s = store.one("SELECT launch_month FROM plan_slot WHERE id=?", (slot_id,))
+    if s is None:
+        raise LookupError("その枠がありません")
+    y, m = int(s["launch_month"][:4]), int(s["launch_month"][5:7])
+    def mi(ym):
+        return int(ym[:4]) * 12 + int(ym[5:7])
+    base = y * 12 + m
+    out = []
+    for p in unlinked_projects():
+        gap = abs(mi(p["launch_date"][:7]) - base) if p.get("launch_date") else None
+        p["fit"] = "同じ月" if gap == 0 else ("前後1か月" if gap == 1 else "その他")
+        out.append(p)
+    order = {"同じ月": 0, "前後1か月": 1, "その他": 2}
+    return sorted(out, key=lambda p: (order[p["fit"]], p.get("launch_date") or "9999"))
+
+
 APPROVER_ROLE = "president"
 
 
@@ -735,7 +819,7 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
     r = project_m.create(user_id, **fields)
     due = task_setup_due(s)
     with store.tx() as c:
-        c.execute("UPDATE plan_slot SET project_id=?,converted_at=?,converted_by=?,"
+        c.execute("UPDATE plan_slot SET project_id=?,converted_at=?,converted_by=?,link_kind='convert',"
                   "updated_at=?,updated_by=? WHERE id=?",
                   (r["id"], store.now_s(), user_id, store.now_s(), user_id, slot_id))
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,"

@@ -70,6 +70,18 @@ BLOCK1 = (3, 58)            # 年間イベント＋ライフイベント（0始�
 SOURCE = "01_進捗管理商品開発__イベント.tsv"
 
 
+# 「販売可能性が高い年間行事」（元表6列目）の書き方 → 年間イベントの名前。
+# **2026-10-20 十文字さんが確認した対応だけ**（9/23 から人待ちだった名前の揺れ6件）。推測で増やさない。
+# 「新入生・新入社員歓迎」は年間イベントに当たるものが無いので入れない（印は付かない）
+SELLABLE_ALIASES = {
+    "七五三/犬の日": ("七五三", "犬の日"),
+    "入園入学": ("入学式",),
+    "卒園卒業、部活動引退（冬～春）": ("卒園・卒業・卒部",),
+    "夏フェス・コンサート": ("夏フェス",),
+    "部活動引退（夏～秋）": ("部活動引退",),
+}
+
+
 def _cell(row: list[str], j: int) -> str:
     return row[j].strip() if len(row) > j else ""
 
@@ -134,13 +146,35 @@ def parse(rows: list[list[str]]) -> dict:
             gaps.append({"row": i, "name": _cell(r, 9),
                          "ideas": " / ".join(ideas) or None})
     names = {e["name"] for e in annual}
+    raw = set(sellable)
+    for k, vs in SELLABLE_ALIASES.items():          # 確認済みの書き方だけ年間イベントの名前に直す
+        if k in raw:
+            sellable.discard(k)
+            sellable.update(vs)
     return {"annual": annual, "scored": scored, "gaps": gaps,
             "sellable": sorted(sellable),
             # **名前の揺れで結びつかないものを黙って落とさない**（N-10）。
             # 「入園入学」と「入学式」、「部活動引退（夏～秋）」と「部活動引退」など、
             # 人が見れば同じでも**機械で寄せると間違える**（「七五三/犬の日」は2つ）。
             # 対応表は人に決めてもらう。それまで印は付けない
-            "sellable_unmatched": sorted(x for x in sellable if x not in names)}
+            "sellable_unmatched": sorted(x for x in sellable if x not in names),
+            "sellable_aliased": sorted(k for k in SELLABLE_ALIASES if k in raw)}
+
+
+def apply_aliases(d: dict, user_id: str = "tools/import_events.py") -> list[str]:
+    """確認済みの対応（SELLABLE_ALIASES）で、年間イベントに「販売可能性が高い」の印を付ける**だけ**。
+    ほかの列は触らない（設定の画面で直した値を上書きしない）。付けたイベント名を返す。"""
+    targets = sorted({v for k in d.get("sellable_aliased", []) for v in SELLABLE_ALIASES[k]})
+    done = []
+    for name in targets:
+        r = store.one("SELECT id, sellable FROM theme WHERE kind='年間イベント' AND label=?", (name,))
+        if r is None or r["sellable"] == 1:
+            continue
+        store.ex("UPDATE theme SET sellable=1, edited_by=?, edited_at=? WHERE id=?", (user_id, store.now_s(), r["id"]))
+        store.audit(user_id, "event.sellable", r["id"], {"label": name, "reason": "2026-10-20 十文字さんが名前の揺れの対応を確認"}, "")
+        done.append(name)
+    store.conn().commit()
+    return done
 
 
 def theme_id(kind: str, name: str) -> str:
@@ -270,12 +304,17 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="数えるだけ。DB を触らない")
     ap.add_argument("--review", action="store_true", help="確認用の一覧を出す")
     ap.add_argument("--report", action="store_true", help="いま DB に何件入っているか")
+    ap.add_argument("--apply-aliases", action="store_true", help="確認済みの名前の対応で「販売可能性が高い」の印を付けるだけ")
     a = ap.parse_args()
     if a.report:
         for k, v in report().items():
             print(f"  {k:24} {v}")
         return 0
     d = parse(read_rows())
+    if a.apply_aliases:
+        store.migrate()
+        print("印を付けた:", apply_aliases(d) or "なし（もう付いている）")
+        return 0
     if a.review:
         print(review(d), end="")
         return 0

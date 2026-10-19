@@ -525,5 +525,43 @@ class TestSlotEdit(Base):
         with self.assertRaises(LookupError):
             self.m.overview(2026, "nope")
 
+
+class TestSlotLink(Base):
+    """既にある案件を枠に結ぶ（FR-203）。移行した案件は枠を通さずに入っていた。"""
+
+    def project(self, name, launch):
+        from app import project
+        return project.create("tester", expand=False, internal_name=name, launch_date=launch)["id"]
+
+    def test_link_unlink_and_candidates(self):
+        from app import store
+        a = self.project("五月の案件", "2026-05-20")
+        b = self.project("六月の案件", "2026-06-10")
+        c = self.project("秋の案件", "2026-10-01")
+        sid = self.slot("2026-05")
+        cands = self.m.link_candidates(sid)
+        self.assertEqual([(x["id"], x["fit"]) for x in cands], [(a, "同じ月"), (b, "前後1か月"), (c, "その他")])
+        self.m.approve(self.vid, "tester")                       # 承認済みの版でも結べる（消化の記録）
+        self.m.link_slot(sid, a, "tester")
+        self.assertEqual(store.val("SELECT link_kind FROM plan_slot WHERE id=?", (sid,)), "link")
+        self.assertNotIn(a, [x["id"] for x in self.m.unlinked_projects()])
+        with self.assertRaises(ValueError):
+            self.m.link_slot(sid, b, "tester")                   # 1つの枠は1案件まで
+        self.m.unlink_slot(sid, "tester")
+        self.assertIn(a, [x["id"] for x in self.m.unlinked_projects()])
+        with self.assertRaises(PermissionError):
+            self.m.link_slot(sid, a, "nobody")
+
+    def test_project_on_two_slots_and_converted_cannot_unlink(self):
+        a = self.project("五月の案件", "2026-05-20")
+        s1, s2 = self.slot("2026-05"), self.slot("2026-05")
+        self.m.link_slot(s1, a, "tester")
+        with self.assertRaises(ValueError):
+            self.m.link_slot(s2, a, "tester")                    # 同じ案件を2つの枠に結ばない
+        r = self.m.convert(s2, "tester")
+        with self.assertRaises(ValueError):
+            self.m.unlink_slot(s2, "tester")                     # 「案件にする」の跡は外さない
+        self.assertTrue(r["project_id"])
+
 if __name__ == "__main__":
     unittest.main()

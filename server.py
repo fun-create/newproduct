@@ -1220,6 +1220,8 @@ class H(BaseHTTPRequestHandler):
         # POST 側は一度も検査結果を見ない。ここで弾くと現場は表計算に戻る。
         if parts == ["plan"] and method == "GET":
             r = plan_m.overview(qs.get("fy") or None, qs.get("v") or None)
+            r["unlinked_projects"] = plan_m.unlinked_projects()              # FR-203
+            r["can_link"] = plan_m.can_link(uid)
             r["can_approve"] = plan_m.can_approve(uid)            # 承認のボタンは社長にだけ出す（ADR-058）
             r["can_delete"] = plan_m.can_delete(uid)              # 策定中の版を消す（ADR-064）
             return self.sendj(200, r)
@@ -1274,6 +1276,13 @@ class H(BaseHTTPRequestHandler):
                 r = plan_m.delete_slot(sid)
                 store.audit(uid, "plan.slot.delete", sid, {}, ip)
                 return self.sendj(200, r)
+            if what in ("link", "unlink"):
+                # 既にある案件を枠に結ぶ・外す（FR-203・ADR-118）
+                r = plan_m.link_slot(sid, d.get("project_id", ""), uid) if what == "link" else plan_m.unlink_slot(sid, uid)
+                store.audit(uid, "plan.slot." + what, sid, {"project_id": d.get("project_id")}, ip)
+                return self.sendj(200, r)
+            if what == "link-candidates":
+                return self.sendj(200, {"rows": plan_m.link_candidates(sid)})
             if what == "convert":
                 # **1操作で案件へ**（FR-86）。タスク設定期限を割り戻して返す
                 r = plan_m.convert(sid, uid, **d)

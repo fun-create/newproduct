@@ -4057,6 +4057,8 @@
       setTitle("プラン", d.current.version.label);
       b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く"), navBtn("#/simulate", "販売計画シミュレーション")]));
       b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
+      d.current._can_link = d.can_link;
+      b.appendChild(planUnlinked(d));
       b.appendChild(planCharts(d.current));
       b.appendChild(planRules(d.current));
       b.appendChild(planMonths(d.current, meta));
@@ -4343,15 +4345,69 @@
     return tr;
   }
 
+  /** どの枠とも結ばれていない案件の数（FR-203）。移行した案件は枠を通さずに入っていた */
+  function planUnlinked(d) {
+    var u = d.unlinked_projects || [];
+    var w = el("div", { "class": "np-card" });
+    w.appendChild(el("h2", { text: "枠と結ばれていない案件（" + u.length + " 件）" }));
+    w.appendChild(el("p", { "class": "np-sub", text: u.length
+      ? "移行した案件は年間プランの枠を通さずに入ったため、どの枠とも結ばれていません。結ばないと「今月の枠の消化」に数えられません。月ごとの表の枠の「既にある案件と結ぶ」で、合う案件を選んでください（候補は発売予定日の月が近い順に出ます）。"
+      : "どの案件も枠と結ばれています。" }));
+    if (u.length) {
+      var det = el("details");
+      det.appendChild(el("summary", { text: "一覧を開く" }));
+      det.appendChild(table(["案件", "ステージ", "発売予定日"], u.map(function (p) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(p.id), text: p.internal_name || p.id })]),
+          el("td", { text: p.stage }), el("td", { text: dash(p.launch_date) })]);
+      })));
+      w.appendChild(det);
+    }
+    return w;
+  }
+
+  // 既にある案件と結ぶ（FR-203）。候補はサーバーが「同じ月 → 前後1か月 → その他」の順に返す。結ぶのは人
+  function slotLinkButton(x) {
+    var w = el("span");
+    var bt = el("button", { type: "button", text: "既にある案件と結ぶ" });
+    var msg = el("span", { "class": "np-sub" });
+    bt.addEventListener("click", function () {
+      bt.setAttribute("disabled", "disabled");
+      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/link-candidates", {}).then(function (r) {
+        if (!r.rows.length) { msg.textContent = " 結べる案件がありません（全部どこかの枠と結ばれています）"; return; }
+        var sel = el("select", { "aria-label": "結ぶ案件" });
+        r.rows.forEach(function (p) { sel.appendChild(el("option", { value: p.id, text: "［" + p.fit + "］" + (p.internal_name || p.id) + "（" + dash(p.launch_date) + "・" + p.stage + "）" })); });
+        var ok = el("button", { type: "button", text: "結ぶ" });
+        ok.addEventListener("click", function () {
+          post("/api/plan/slots/" + encodeURIComponent(x.id) + "/link", { project_id: sel.value }).then(function () { go(); })
+            .catch(function (e) { msg.textContent = " できませんでした: " + e.message; });
+        });
+        w.appendChild(txt(" ")); w.appendChild(sel); w.appendChild(txt(" ")); w.appendChild(ok);
+      }).catch(function (e) { msg.textContent = " " + e.message; bt.removeAttribute("disabled"); });
+    });
+    w.appendChild(bt); w.appendChild(msg);
+    return w;
+  }
+
   function planSlotRow(cur, x, meta) {
     var last = el("td");
     if (x.project_id) {
       last.appendChild(el("a", { href: "#/projects/" + x.project_id,
                                  text: "案件 " + x.project_id }));
       last.appendChild(el("span", { "class": "np-sub",
-        text: "（" + dash(x.project_stage) + "）" }));
+        text: "（" + dash(x.project_stage) + (x.link_kind === "link" ? "・あとから結んだ" : "") + "）" }));
+      if (x.link_kind === "link" && cur._can_link) {
+        var ul = el("button", { type: "button", text: "結びを外す" });
+        ul.addEventListener("click", function () {
+          post("/api/plan/slots/" + encodeURIComponent(x.id) + "/unlink", {}).then(function () { go(); })
+            .catch(function (e) { last.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        last.appendChild(txt(" ")); last.appendChild(ul);
+      }
+    } else if (cur._can_link && cur.version && cur.version.state !== "失効" && !cur.editable) {
+      last.appendChild(slotLinkButton(x));
     } else if (cur.editable) {
       last.appendChild(convertButton(x));
+      if (cur._can_link) { last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x)); }
       var ed = el("button", { type: "button", text: "直す・消す" });
       ed.addEventListener("click", function () {
         var tr0 = ed.closest("tr");

@@ -119,5 +119,23 @@ class Events(unittest.TestCase):
         self.assertEqual((t["month"], t["day"]), (7, "画面で直した"))
 
 
+    def test_confirmed_aliases_mark_sellable_only(self):
+        """名前の揺れ（2026-10-20 十文字さん確認）: 確認済みの対応だけ印を付け、ほかの列は触らない。該当なしは残す。"""
+        sys.path.insert(0, str(BASE / "tools"))
+        import import_events as ie
+        d = ie.parse(ie.read_rows())
+        self.assertEqual(d["sellable_unmatched"], ["新入生・新入社員歓迎"])
+        for name in ("七五三", "犬の日", "入学式", "卒園・卒業・卒部", "夏フェス", "部活動引退"):
+            self.assertIn(name, d["sellable"])
+        ie.apply(d)
+        eid = ie.theme_id("年間イベント", "七五三")
+        self.store.ex("UPDATE theme SET sellable=0, day='画面で直した' WHERE id=?", (eid,))
+        self.store.conn().commit()
+        done = ie.apply_aliases(d)
+        self.assertIn("七五三", done)
+        t = self.store.one("SELECT sellable, day FROM theme WHERE id=?", (eid,))
+        self.assertEqual((t["sellable"], t["day"]), (1, "画面で直した"), "印だけ付け、ほかの列は触らない")
+        self.assertEqual(ie.apply_aliases(d), [], "二度目は何もしない")
+
 if __name__ == "__main__":
     unittest.main()
