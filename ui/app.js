@@ -4613,8 +4613,16 @@
 
   /** 月次レポート（FR-116）。**Markdown を安全に描く**（textContent だけ。HTML を混ぜない） */
   function mdRender(md) {
-    var box = el("div", { "class": "np-report" }), tbl = null, ul = null;
-    function flush() { tbl = null; ul = null; }
+    var box = el("div", { "class": "np-report" }), tbl = null, ul = null, sub = null;
+    function flush() { tbl = null; ul = null; sub = null; }
+    // 太字 `**…**` だけを読む（2026-10-18: 操作マニュアルで「**」がそのまま出ていた）。中身は textContent のまま
+    function rich(tag, text, attrs) {
+      var n = el(tag, attrs || null);
+      String(text).split(/\*\*(.+?)\*\*/).forEach(function (part, i) {
+        if (part) n.appendChild(i % 2 ? el("strong", { text: part }) : txt(part));
+      });
+      return n;
+    }
     md.split("\n").forEach(function (ln) {
       if (/^\|/.test(ln)) {
         if (/^\|[-| ]+\|$/.test(ln)) return;                 // 区切り行
@@ -4622,14 +4630,19 @@
         if (!tbl) { tbl = el("table", { "class": "np" }); box.appendChild(tbl);
           var tr0 = el("tr"); cells.forEach(function (c) { tr0.appendChild(el("th", { text: c })); }); tbl.appendChild(tr0); return; }
         // 円・%・件・本・h で終わるセルは右寄せ（数字の列をそろえる・点検 §6 月次レポート）
-        var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(el("td", { text: c, "class": /^[+−±\-]?[\d,.]+\s*(円|%|件|本|h|か月)?$|^—$/.test(c.trim()) ? "np-num" : null })); }); tbl.appendChild(tr); return;
+        var tr = el("tr"); cells.forEach(function (c) { tr.appendChild(rich("td", c, { "class": /^[+−±\-]?[\d,.]+\s*(円|%|件|本|h|か月)?$|^—$/.test(c.trim()) ? "np-num" : null })); }); tbl.appendChild(tr); return;
       }
-      if (/^- /.test(ln)) { if (!ul) { ul = el("ul"); box.appendChild(ul); } ul.appendChild(el("li", { text: ln.slice(2) })); return; }
+      if (/^- /.test(ln)) { if (!ul) { ul = el("ul"); box.appendChild(ul); } sub = null; ul.appendChild(rich("li", ln.slice(2))); return; }
+      // 字下げした「  - 」は、直前の項目の下の箇条書き（2026-10-18: 段落になっていた）
+      if (/^\s+- /.test(ln) && ul && ul.lastChild) {
+        if (!sub) { sub = el("ul"); ul.lastChild.appendChild(sub); }
+        sub.appendChild(rich("li", ln.replace(/^\s+- /, ""))); return;
+      }
       flush();
       if (/^### /.test(ln)) box.appendChild(el("h4", { text: ln.slice(4) }));
       else if (/^## /.test(ln)) box.appendChild(el("h3", { text: ln.slice(3) }));
       else if (/^# /.test(ln)) box.appendChild(el("h2", { text: ln.slice(2) }));
-      else if (ln.trim()) box.appendChild(el("p", { text: ln }));
+      else if (ln.trim()) box.appendChild(rich("p", ln));
     });
     return box;
   }
