@@ -1,8 +1,10 @@
 /* NEW PRODUCT — アプリ固有CSS。**app-shell.css の後に読む。**
  *
  * 色は `--fca-*` を使い、値をここで作らない。作ると明暗のどちらかだけ直る事故になる。
+ * **例外は役割の色 `--np-*` だけ**（FR-195・ADR-113）。app-shell と同じ3ブロック（:root・DARK A・DARK B）に
+ * 同じ値で置く（selfcheck が A と B の一致を見る）。
  * **色に意味を持たせない**（N-11）。状態は必ず列（語）として出し、
- * 色と記号はその列の表現にすぎない。
+ * 色と記号はその列の表現にすぎない。**色は語に添える**（FR-195）: `data-tone` は語のある所にだけ付ける。
  * Gold は #C8952A、白地で 2.70:1 なので**文字に使わない。罫線だけ**（§5-3）。
  * 表示用書体を指定しない（VPS にもブラウザにも入っておらず黙って別の書体に落ちる）。
  */
@@ -369,3 +371,70 @@ a.np-step:hover, a.np-step:focus-visible { border-color: var(--fca-navy); }
 .np-mcell ul { margin: 0; padding-left: 1.1em; font-size: .88em; }
 /* 区切りの無い長い文字列（URL など）を途中で折り返す。375px で画面ごと横に広がるのを防ぐ（2026-10-10 プレビューで見つけた） */
 #view li, #view p, #view summary, #view h2, #view h3, #view h4, #view figcaption, #view dd, #view .np-hbar-val { overflow-wrap: anywhere; }
+
+/* ══ FR-195 メリハリ（2026-10-19 十文字さん承認・ADR-113・見本は app-ui の案）══════════════
+ * 役割の色4系統（注意・良い・情報・中立）。系統ごとに形も変える（注意＝塗り＋枠＋太字＋「！」、良い＝塗り＋枠＋「✓」、
+ * 情報＝枠だけ、中立＝地の色だけ）。白黒でも強さの順と語で読める。ランク・売上の増減には付けない。
+ * 未計測は色の系統に入れない（N-10。斜線・点線のまま）。 */
+:root {
+  --np-alert-ink: #A11D1D; --np-alert-bg: #FCEBEB; --np-alert-line: #C62828;
+  --np-ok-ink: #1F6A3A; --np-ok-bg: #E6F4EA; --np-ok-line: #2E7D4F;
+  --np-info-ink: #1C4F8C; --np-info-bg: #E7EFF9; --np-info-line: #3A6DB5;
+  --np-neutral-ink: #45505D; --np-neutral-bg: #EEF1F4; --np-neutral-line: #7D8896;
+  --np-line-strong: #7A8797; --np-head-bg: #E9EDF3;
+  --np-fs-num: 2rem; --np-fs-h2: 1.15rem; --np-fs-title: 1rem; --np-fs-sub: .8rem;
+}
+/* ---- NP DARK A ---- */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --np-alert-ink: #FFB3B3; --np-alert-bg: #47222A; --np-alert-line: #F07A7A;
+  --np-ok-ink: #A3DDB6; --np-ok-bg: #173A2E; --np-ok-line: #5CBF85;
+  --np-info-ink: #A9C7F2; --np-info-bg: #1B3150; --np-info-line: #6E9CDB;
+  --np-neutral-ink: #C7D0DA; --np-neutral-bg: #2A3542; --np-neutral-line: #8A97A6;
+  --np-line-strong: #76879A; --np-head-bg: #222C38;
+} }
+/* ---- NP DARK B ---- */
+:root[data-theme="dark"] {
+  --np-alert-ink: #FFB3B3; --np-alert-bg: #47222A; --np-alert-line: #F07A7A;
+  --np-ok-ink: #A3DDB6; --np-ok-bg: #173A2E; --np-ok-line: #5CBF85;
+  --np-info-ink: #A9C7F2; --np-info-bg: #1B3150; --np-info-line: #6E9CDB;
+  --np-neutral-ink: #C7D0DA; --np-neutral-bg: #2A3542; --np-neutral-line: #8A97A6;
+  --np-line-strong: #76879A; --np-head-bg: #222C38;
+}
+/* ---- /NP DARK ---- */
+
+/* 文字の段（見出し＞題＞本文＞補足）。h1 1.25rem より大きい見出しは作らない */
+.fca-main h2 { font-size: var(--np-fs-h2); font-weight: 800; color: var(--fca-navy); letter-spacing: .02em; }
+#view > .np-card { border-top-width: 2px; }
+#view > .np-card:first-child { border-top: 0; }
+.np-note, .np-sub, .np-kpi-sub { font-size: var(--np-fs-sub); }
+/* KPI: 見出し語は本文色の太字、数字は大きく、単位は小さく */
+.np-kpi-label { font-size: .85rem; font-weight: 700; color: var(--fca-ink); }
+.np-kpi-big { font-size: var(--np-fs-num); font-weight: 800; line-height: 1.15; }
+.np-kpi-big .np-tag { margin-left: .4rem; vertical-align: .35em; }
+.np-kpi-unit { font-size: .9rem; font-weight: 600; color: var(--fca-muted); margin-left: .15em; }
+.np-kpi[data-tone="alert"] { background: var(--np-alert-bg); border-color: var(--np-alert-line); box-shadow: inset 6px 0 0 var(--np-alert-line); padding-left: 18px; }
+.np-kpi[data-tone="alert"] .np-kpi-big { color: var(--np-alert-ink); }
+.np-kpi[data-tone="info"] { border-color: var(--np-info-line); box-shadow: inset 6px 0 0 var(--np-info-line); padding-left: 18px; }
+.np-kpi[data-state="unmeasured"] { border-style: dotted; }
+/* 札（語が主・色は添えるだけ）。強さの順: alert（塗り＋枠＋太字）＞ ok（塗り＋枠）＞ info（枠）＞ neutral（地のみ） */
+.np-tag { display: inline-flex; align-items: center; gap: .15em; padding: 0 .5em; border: 1px solid transparent; border-radius: 999px;
+  font-size: .78rem; font-weight: 600; line-height: 1.5; white-space: nowrap; vertical-align: .08em; }
+.np-tag[data-tone="alert"] { color: var(--np-alert-ink); background: var(--np-alert-bg); border-color: var(--np-alert-line); font-weight: 800; }
+.np-tag[data-tone="ok"] { color: var(--np-ok-ink); background: var(--np-ok-bg); border-color: var(--np-ok-line); }
+.np-tag[data-tone="info"] { color: var(--np-info-ink); border-color: var(--np-info-line); }
+.np-tag[data-tone="neutral"] { color: var(--np-neutral-ink); background: var(--np-neutral-bg); font-weight: 400; }
+.np-tag[data-tone="caution"] { color: var(--fca-ink); border-color: var(--fca-gold); border-left-width: 4px; border-radius: 4px; }
+/* 行の印: 左の帯＋赤い語（塗りの札は使わない）。padding を触らないので表の詰め具合（FR-188）はそのまま効く */
+.np-flag { display: block; font-size: .78rem; font-weight: 800; line-height: 1.3; }
+.np-flag[data-tone="alert"] { color: var(--np-alert-ink); }
+table.np tr[data-tone="alert"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-alert-line); }
+/* 行の主語（タスク名）を太く。np-name と違い最小幅を持たせない（400px で案件の列が潰れるため） */
+table.np td.np-what { font-weight: 600; }
+/* 表の見出し行: 本文より強く（いままでは本文より弱い灰色だった） */
+table.np th { background: var(--np-head-bg); color: var(--fca-ink); font-weight: 700; border-bottom: 2px solid var(--np-line-strong); }
+/* グラフ: 手を打つ棒だけ色を変え、値と軸の語を太く。ほかは紺1色のまま */
+.np-svg .np-col-alert { fill: var(--np-alert-line); }
+.np-svg .np-val-strong { font-weight: 800; font-size: 13px; }
+.np-svg .np-tick-alert { fill: var(--np-alert-ink); font-weight: 800; }
+@media (forced-colors: active) { .np-tag { border-color: CanvasText; } }
+

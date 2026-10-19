@@ -602,6 +602,17 @@ def check_stage1_screens():
     note(OK if not re.search(r"\.np-rank-(SS|S|A|B|C)", css) else NG,
          "np.css がランクを色で表していない",
          "**色に意味を持たせない**（N-11）。ランクは語として列に出す")
+    # FR-195: 役割の色はダークの2ブロック（端末に合わせる・ダークを選ぶ）で同じ値。片方だけ直すと配色で見え方が変わる
+    def _np_vars(block):
+        return sorted(re.findall(r"(--np-[a-z0-9-]+)\s*:\s*([^;]+);", block))
+    da = re.search(r"NP DARK A ----(.*?)/\* ---- NP DARK B", css, re.S)
+    db_ = re.search(r"NP DARK B ----(.*?)/\* ---- /NP DARK", css, re.S)
+    same = bool(da and db_ and _np_vars(da.group(1)) and _np_vars(da.group(1)) == _np_vars(db_.group(1)))
+    note(OK if same else NG, "np.css の役割の色（--np-*）がダークの2ブロックで同じ値",
+         "FR-195・ADR-113" if same else "NP DARK A と B が食い違っている（または見つからない）")
+    js_ui = (UI / "app.js").read_text(encoding="utf-8")
+    note(OK if "function tag(word, tone, glyph) {\n    if (!word) return null;" in js_ui else NG,
+         "札（np-tag）は語が無ければ作らない", "色だけの札を作れない（FR-19・FR-195）")
 
 
 def check_index_served(cl: Client):

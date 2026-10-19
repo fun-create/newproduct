@@ -267,7 +267,8 @@
       }
       w.appendChild(el("div", { "class": "np-hbar-row", role: "listitem" }, [
         el("div", { "class": "np-hbar-label" }, [lab]), bar,
-        el("div", { "class": "np-hbar-val", text: (x.valueText || fmtNum(x.value, opts.unit)) + (x.note ? "　" + x.note : "") })]));
+        el("div", { "class": "np-hbar-val" }, [txt((x.valueText || fmtNum(x.value, opts.unit)) + (x.note ? "　" + x.note : "")),
+          x.tag ? txt(" ") : null, x.tag ? tag(x.tag.word, x.tag.tone, x.tag.tone === "alert" ? "！" : x.tag.tone === "ok" ? "✓" : null) : null])]));
     });
     return w;
   }
@@ -329,7 +330,7 @@
           var g = p.href ? sv("a", { href: p.href, "aria-label": p.x + " " + fmtNum(p.y, opts.unit) }) : svg;
           g.appendChild(sv("rect", { x: cx - bw / 2, y: py(p.y), width: bw, height: Math.max(0, H - B - py(p.y)),
             fill: p.alt ? "url(#" + svg.hatchId + ")" : null,
-            "class": (p.partial ? "np-col np-col-partial" : (p.alt ? "np-col-alt" : "np-col")) + (p.current ? " np-col-current" : "") },
+            "class": (p.partial ? "np-col np-col-partial" : (p.alt ? "np-col-alt" : "np-col")) + (p.current ? " np-col-current" : "") + (p.tone === "alert" ? " np-col-alert" : "") },
             [sv("title", { text: p.x + " " + fmtNum(p.y, opts.unit) + (p.partial ? "（途中）" : "") })]));
           var topY = py(p.y);
           if (isNum(p.y2) && p.y2 > 0) {        // 2段目（斜線）。例: 実作業の上に予備時間
@@ -338,12 +339,13 @@
               fill: "url(#" + svg.hatchId + ")", "class": "np-col-alt" },
               [sv("title", { text: p.x + " " + (opts.y2label || "2段目") + " " + fmtNum(p.y2, opts.unit) })]));
           }
-          if (cw >= 22 || i === n - 1) g.appendChild(sv("text", { x: cx, y: topY - 4, "text-anchor": "middle", "class": "np-val",
+          if (cw >= 22 || i === n - 1) g.appendChild(sv("text", { x: cx, y: topY - 4, "text-anchor": "middle", "class": "np-val" + (p.tone === "alert" ? " np-val-strong" : ""),
             text: (p.partial ? "途中 " : "") + fmtShort(p.y + (isNum(p.y2) ? p.y2 : 0), opts.unit) }));
           if (g !== svg) svg.appendChild(g);
         }
         if (p.note && cw >= 30) svg.appendChild(sv("text", { x: cx, y: H - B + 26, "text-anchor": "middle", "class": "np-tick", text: p.note }));
-        if (i % every === 0 || i === n - 1 || isJan(p.x)) svg.appendChild(sv("text", { x: cx, y: H - B + 13, "text-anchor": "middle", "class": "np-tick" + (isJan(p.x) ? " np-strong" : ""), text: (opts.xfmt || shortMonth)(p.x, i) }));
+        else if (p.tone === "alert" && isNum(p.y) && p.y > 0) svg.appendChild(sv("text", { x: cx, y: H - B + 26, "text-anchor": "middle", "class": "np-tick np-tick-alert", text: "！要対応" }));
+        if (i % every === 0 || i === n - 1 || isJan(p.x)) svg.appendChild(sv("text", { x: cx, y: H - B + 13, "text-anchor": "middle", "class": "np-tick" + (isJan(p.x) ? " np-strong" : "") + (p.tone === "alert" ? " np-tick-alert" : ""), text: (opts.xfmt || shortMonth)(p.x, i) }));
       });
       if (opts.target && isNum(opts.target.y)) {
         var ty = py(opts.target.y);
@@ -554,10 +556,25 @@
   }
 
   // 数字のタイル。state を渡すと数字の代わりに語（未計測・対象なし・未設定）を出す
-  function kpi(label, big, sub, href, state) {
-    var k = el(href ? "a" : "div", { "class": "np-kpi", href: href || null });
+  /** 札（FR-195）。**語が無ければ何も返さない**（色だけの札を作れないようにする・FR-19） */
+  function tag(word, tone, glyph) {
+    if (!word) return null;
+    return el("span", { "class": "np-tag", "data-tone": tone }, [glyph ? el("span", { "aria-hidden": "true", text: glyph }) : null, txt(word)]);
+  }
+  /** 行の「！期限切れ n日」（FR-195。塗りの札より弱い語の印）。日付は ISO の日付どうし */
+  function overdueFlag(due, today) {
+    var n = Math.round((Date.parse(today) - Date.parse(due)) / 864e5);
+    return el("span", { "class": "np-flag", "data-tone": "alert" }, [el("span", { "aria-hidden": "true", text: "！" }), txt("期限切れ" + (n > 0 ? " " + n + "日" : ""))]);
+  }
+  // o = {tone, tag, unit}（FR-195）。色は札の語がある時だけ付ける。6つ目を省いた呼び出しは今までどおり
+  function kpi(label, big, sub, href, state, o) {
+    o = o || {};
+    var tone = (!state && o.tone && o.tag) ? o.tone : null;
+    var k = el(href ? "a" : "div", { "class": "np-kpi", href: href || null, "data-tone": tone, "data-state": state ? "unmeasured" : null });
     k.appendChild(el("div", { "class": "np-kpi-label", text: label }));
-    k.appendChild(el("div", { "class": "np-kpi-big" + (state ? " np-kpi-unmeasured" : ""), text: state || big }));
+    k.appendChild(el("div", { "class": "np-kpi-big" + (state ? " np-kpi-unmeasured" : "") }, [txt(state || big),
+      !state && o.unit && big !== "—" ? el("span", { "class": "np-kpi-unit", text: o.unit }) : null,
+      tone ? tag(o.tag, tone, tone === "alert" ? "！" : null) : null]));
     if (sub) k.appendChild(el("div", { "class": "np-kpi-sub", text: sub }));
     return k;
   }
@@ -612,14 +629,16 @@
         : "あなたに業務ロールが割り当てられていないため、担当者があなたのタスクだけを数えています（いまのタスクは業務ロールに付いています）。" }));
       var mcnt = my.counts || {};
       mc.appendChild(kpiRow([
-        kpi("期限切れ", fmtNum(mcnt.overdue), "完了・対象外を除く", "#/tasks?when=overdue&mine=1", mcnt.overdue === null ? "未計測" : null),
-        kpi("今日が期限", fmtNum(mcnt.today), null, "#/tasks?when=today&mine=1", mcnt.today === null ? "未計測" : null),
-        kpi("7日以内", fmtNum(mcnt.next7), "明日から7日先まで", "#/tasks?when=next7&mine=1", mcnt.next7 === null ? "未計測" : null)]));
+        kpi("期限切れ", fmtNum(mcnt.overdue), "完了・対象外を除く", "#/tasks?when=overdue&mine=1", mcnt.overdue === null ? "未計測" : null,
+          { unit: "件", tone: mcnt.overdue > 0 ? "alert" : null, tag: "要対応" }),
+        kpi("今日が期限", fmtNum(mcnt.today), null, "#/tasks?when=today&mine=1", mcnt.today === null ? "未計測" : null,
+          { unit: "件", tone: mcnt.today > 0 ? "info" : null, tag: "今日" }),
+        kpi("7日以内", fmtNum(mcnt.next7), "明日から7日先まで", "#/tasks?when=next7&mine=1", mcnt.next7 === null ? "未計測" : null, { unit: "件" })]));
       if (!my.tasks.length) mc.appendChild(el("p", { "class": "np-note", text: "7日先までにやるタスクはありません。" }));
       else {
         mc.appendChild(table(["期限", "タスク", "案件", "なぜ自分か"], my.tasks.slice(0, 5).map(function (t) {
-          return el("tr", null, [el("td", { "class": "np-nowrap", text: t.due_on + (t.overdue ? "（期限切れ）" : "") }),
-            el("td", { text: t.title }),
+          return el("tr", { "data-tone": t.overdue ? "alert" : null }, [el("td", { "class": "np-nowrap" }, [txt(t.due_on), t.overdue ? overdueFlag(t.due_on, d.today) : null]),
+            el("td", { "class": "np-what", text: t.title }),
             el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product })
               : t.kind === "work" ? el("a", { href: "#/tasks?when=next7&tab=work&mine=1", text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
@@ -641,11 +660,12 @@
       st.appendChild(el("h2", { text: "いま詰まっているもの" }));
       var waitN = (pr.by_next_gate || []).reduce(function (a, x) { return a + x.n; }, 0);
       st.appendChild(kpiRow([
-        kpi("期限切れタスク（全員）", fmtNum(c.overdue), "案件タスク＋案件外の仕事", "#/tasks?when=overdue"),
-        kpi("今日が期限（全員）", fmtNum(c.today), null, "#/tasks?when=today"),
-        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "ほか発売済 " + pr.launched_no_gate + " 件はゲートの記録なし（移行分）" : null, "#/gates"),
-        kpi("期限なしのタスク", fmtNum(c.none), "入れないままだと詰まりが見えません", "#/tasks?when=none")]));
-      var hill = [{ x: "期限切れ", y: c.overdue }, { x: "今日", y: c.today }];
+        kpi("期限切れタスク（全員）", fmtNum(c.overdue), "案件タスク＋案件外の仕事", "#/tasks?when=overdue", null,
+          { unit: "件", tone: c.overdue > 0 ? "alert" : null, tag: "要対応" }),
+        kpi("今日が期限（全員）", fmtNum(c.today), null, "#/tasks?when=today", null, { unit: "件", tone: c.today > 0 ? "info" : null, tag: "今日" }),
+        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "ほか発売済 " + pr.launched_no_gate + " 件はゲートの記録なし（移行分）" : null, "#/gates", null, { unit: "件" }),
+        kpi("期限なしのタスク", fmtNum(c.none), "入れないままだと詰まりが見えません", "#/tasks?when=none", null, { unit: "件" })]));
+      var hill = [{ x: "期限切れ", y: c.overdue, tone: "alert" }, { x: "今日", y: c.today }];
       ["+1", "+2", "+3", "+4", "+5", "+6"].forEach(function (k) { hill.push({ x: k.replace("+", "") + "日後", y: c[k] }); });
       hill.push({ x: "期限なし", y: c.none, alt: true });
       st.appendChild(chartCard("期限の山（タスクの件数・全員）", columns(hill, { unit: "件", title: "期限ごとのタスクの件数",
@@ -728,7 +748,9 @@
       var a = d.attention, ac = el("div", { "class": "np-card" });
       ac.appendChild(el("h2", { text: "要注意（入力済みの割合）" }));
       var allT = c.all || 0;
-      function filled(label, x, n, href, why) { return { label: label, value: n ? x / n * 100 : null, valueText: x + " / " + n, href: href, note: why }; }
+      // 札は両端だけ（すべて空欄＝注意・そろった＝良い）。間の値には付けない（線を発明しない・FR-195）
+      function filled(label, x, n, href, why) { return { label: label, value: n ? x / n * 100 : null, valueText: x + " / " + n, href: href, note: why,
+        tag: n > 0 && x === 0 ? { word: "すべて空欄", tone: "alert" } : n > 0 && x === n ? { word: "そろった", tone: "ok" } : null }; }
       ac.appendChild(hbars([
         filled("タスクの期限", allT - a.no_due, allT, "#/tasks?when=none"),
         filled("タスクの所要時間", a.tasks_total - a.no_hours, a.tasks_total),
