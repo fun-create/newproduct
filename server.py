@@ -873,6 +873,23 @@ class H(BaseHTTPRequestHandler):
             if what == "cost-check" and method == "GET":
                 from app import costcheck
                 return self.sendj(200, costcheck.check(pid, uid))
+            # 原価・調達の AI 案（FR-202・ADR-117）。CIP の原材料の一覧から選ぶだけ。数字は CIP の値・使用量は人
+            if what == "cost-ai" and method == "GET":
+                from app import ai_cost
+                return self.sendj(200, {"proposal": ai_cost.latest(pid), "can_run": ai_m.can_run(uid)})
+            if what in ("cost-ai", "cost-ai-add", "cost-ai-skip") and method == "POST":
+                from app import ai_cost
+                d = self.body()
+                if what == "cost-ai":
+                    r = ai_cost.start_run(pid, uid)
+                elif what == "cost-ai-add":
+                    if not ai_m.can_run(uid):
+                        raise PermissionError("候補に足せるのは、商品開発部・管理者・社長の業務ロールの人です")
+                    r = ai_cost.add_item(int(d.get("proposal_id")), d.get("code", ""), uid)
+                else:
+                    r = ai_cost.skip_item(int(d.get("proposal_id")), d.get("code", ""), uid)
+                store.audit(uid, "project." + what, pid, {"proposal_id": d.get("proposal_id"), "code": d.get("code"), **({"run": r} if what == "cost-ai" else {})}, ip)
+                return self.sendj(200, r)
             if method != "POST":
                 return self.sendj(404, {"error": "not found"})
             d = self.body()

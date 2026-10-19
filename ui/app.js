@@ -1676,6 +1676,56 @@
   function cyen(v) { return (v === null || v === undefined) ? "未確定" : Math.round(v).toLocaleString("ja-JP") + "円"; }
   function cnum(v, u) { return (v === null || v === undefined) ? "未確定" : String(v) + (u || ""); }
 
+  /** 原価・調達の AI 案（FR-202）。CIP の原材料マスタから AI が選ぶだけ。**単価などは CIP の値・使用量は人** */
+  function aiCostBox(pid, reload) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    var w = el("div", { "class": "np-how" });
+    w.appendChild(el("h3", { text: "CIP の原材料から AI に候補を出させる" }));
+    w.appendChild(el("p", { "class": "np-sub", text: "AI が、カルテの「資材の検討・決定」「生産方法」「サンプル」の文を読んで、CIP の原材料マスタの中から使いそうなものを選びます。単価・仕入先・リードタイム・ロットは CIP の値をそのまま使い、AI には作らせません。使用量は出しません（足したあと、試算原価の行で人が入れます）。" }));
+    var st = el("p", { "class": "np-sub", role: "status" });
+    api(P + "/cost-ai").then(function (o) {
+      var p = o.proposal;
+      if (p) {
+        w.appendChild(el("p", null, [tag("AI の案", "info"), txt(" " + p.items.length + " 件（" + dash(p.model) + "・CIP のマスタは " + dash(p.as_of) + " 時点）")]));
+        w.appendChild(table(["原材料（CIP）", "区分", "単価（CIP・税抜）", "仕入先（CIP）", "リードタイム", "選んだ理由（AI）", ""], p.items.map(function (it) {
+          var act = el("td", { "class": "np-nowrap" });
+          if (it.state !== "提案") act.appendChild(txt(it.state));
+          else if (o.can_run) {
+            var add = el("button", { type: "button", text: "候補に足す" }), sk = el("button", { type: "button", text: "見送る" });
+            add.addEventListener("click", function () { post(P + "/cost-ai-add", { proposal_id: p.id, code: it.code }).then(reload).catch(function (e) { st.textContent = "できませんでした: " + e.message; }); });
+            sk.addEventListener("click", function () { post(P + "/cost-ai-skip", { proposal_id: p.id, code: it.code }).then(reload).catch(function (e) { st.textContent = "できませんでした: " + e.message; }); });
+            act.appendChild(add); act.appendChild(txt(" ")); act.appendChild(sk);
+          }
+          return el("tr", null, [el("td", { text: it.code + " " + dash(it.name) + (it.unit ? "（" + it.unit + "）" : "") }), el("td", { text: it.part }),
+            el("td", { "class": "np-num", text: it.unit_price === null || it.unit_price === undefined ? "未登録" : yen(it.unit_price) }),
+            el("td", { text: dash(it.supplier) }), el("td", { "class": "np-num", text: it.lead_days === null || it.lead_days === undefined ? "—" : it.lead_days + "日" }),
+            el("td", { text: dash(it.why) }), act]);
+        })));
+        if (p.unverified.length) w.appendChild(el("p", { "class": "np-sub", text: "未確認: " + p.unverified.join("／") }));
+      }
+      if (!o.can_run) return;
+      var bt = el("button", { type: "button", "class": "np-btn", text: p ? "出し直させる" : "AI に候補を出させる" });
+      bt.addEventListener("click", function () {
+        bt.setAttribute("disabled", "disabled");
+        post(P + "/cost-ai", {}).then(function (r) {
+          if (!r.started) { st.textContent = r.reason; bt.removeAttribute("disabled"); return; }
+          st.textContent = "CIP の原材料の一覧を読んで、選んでいます（1分ほど）。";
+          var tries = 0;
+          (function poll() {
+            api("/api/ai/score-runs/" + r.run_id).then(function (x) {
+              if (x.stage === "待ち" || x.stage === "実行中") { if (++tries < 40) return setTimeout(poll, 3000); st.textContent = "まだ終わりません。少したってから開き直してください。"; return; }
+              if (x.stage === "失敗") { st.textContent = "出せませんでした: " + (x.error || ""); bt.removeAttribute("disabled"); return; }
+              reload();
+            }).catch(function (e) { st.textContent = e.message; });
+          })();
+        }).catch(function (e) { st.textContent = "できませんでした: " + e.message; bt.removeAttribute("disabled"); });
+      });
+      w.appendChild(btnRow([bt]));
+    }).catch(function (e) { st.textContent = e.message; });
+    w.appendChild(st);
+    return w;
+  }
+
   function costPanel(pid, box) {
     var P = "/api/projects/" + encodeURIComponent(pid);
     function err(node, e) { node.appendChild(el("p", { "class": "np-err", text: e.message })); }
@@ -1693,6 +1743,7 @@
 
       // 相見積（FR-98・FR-96）
       box.appendChild(el("h3", { text: "相見積の候補（" + o.candidates.length + "件）" }));
+      box.appendChild(aiCostBox(pid, function () { costPanel(pid, box); }));
       if (o.candidates.length) {
         box.appendChild(table(["種類", "仕入先・外注先", "形状・サイズ", "単価", "最低ロット", "リードタイム", "安定供給", "判断", "seisan"],
           o.candidates.map(function (c) {
