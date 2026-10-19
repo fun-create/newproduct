@@ -4728,9 +4728,10 @@
   }
 
   /** 自社側70点（FR-138）。**基準は商品開発部が決める。**4軸がそろうまで合計は出さない */
-  function selfCell(t, axes, canScore) {
+  function selfCell(t, axes, canScore, prop) {
     var td = el("td"), ss = t.self || {};
     td.appendChild(txt(axes.map(function (a) { return a.label + " " + (ss[a.key] === null || ss[a.key] === undefined ? "未" : ss[a.key]); }).join("・")));
+    if (prop) td.appendChild(aiSelfProposal(prop, canScore));
     if (!canScore) return td;
     var bt = el("button", { type: "button", text: "点を付ける" });
     bt.addEventListener("click", function () {
@@ -4751,6 +4752,71 @@
     });
     td.appendChild(txt(" ")); td.appendChild(bt);
     return td;
+  }
+
+  /** 自社側70点の AI 案（FR-200）。**案は点ではない。**「採る」（直してもよい）を押したときだけ点になる */
+  function aiSelfProposal(p, canScore) {
+    var box = el("div", { "class": "np-aiprop" });
+    box.appendChild(el("p", null, [tag("AI の案", "info"), txt(" " + p.axes_view.map(function (a) {
+      return a.label + " " + (a.value === null || a.value === undefined ? "—" : a.value) + "／" + a.max; }).join("・"))]));
+    var why = el("details");
+    why.appendChild(el("summary", { text: "根拠と未確認（" + dash(p.model) + "・" + dash(p.created_at) + "）" }));
+    why.appendChild(el("ul", null, p.axes_view.filter(function (a) { return a.reason; }).map(function (a) {
+      return el("li", { text: a.label + ": " + a.reason }); })));
+    if (p.unverified.length) why.appendChild(el("p", { "class": "np-sub", text: "未確認: " + p.unverified.join("／") }));
+    box.appendChild(why);
+    if (!canScore) return box;
+    var f = el("form", { "class": "np-inline" });
+    p.axes_view.forEach(function (a) {
+      var i = el("input", { name: a.key, size: "3", inputmode: "decimal", "aria-label": a.label + "（0〜" + a.max + "）" });
+      if (a.value !== null && a.value !== undefined) i.value = a.value;
+      f.appendChild(txt(" " + a.label + " ")); f.appendChild(i);
+    });
+    var st = el("span", { "class": "np-sub", role: "status" });
+    var rj = el("button", { type: "button", text: "見送る" });
+    f.appendChild(txt(" ")); f.appendChild(el("button", { type: "submit", text: "この点で採る" })); f.appendChild(txt(" ")); f.appendChild(rj); f.appendChild(st);
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {};
+      p.axes_view.forEach(function (a) { o[a.key] = f.elements[a.key].value; });
+      post("/api/fctr/ai-self/" + p.id + "/adopt", o).then(function () { go(); }).catch(function (e) { st.textContent = " できませんでした: " + e.message; });
+    });
+    rj.addEventListener("click", function () {
+      post("/api/fctr/ai-self/" + p.id + "/reject", {}).then(function () { go(); }).catch(function (e) { st.textContent = " できませんでした: " + e.message; });
+    });
+    box.appendChild(f);
+    return box;
+  }
+
+  /** トレンドの上の「AI に自社側の点の案を出させる」。走らせたら終わるまで様子を見て、終わったら描き直す */
+  function aiSelfRunCard(ai) {
+    var c = el("div", { "class": "np-how" });
+    c.appendChild(el("h3", { text: "自社側70点の AI 案" }));
+    c.appendChild(el("p", { "class": "np-sub", text: "AI が、同社の作れるもの（開発タイプ・商品タイプ）とテーマの情報から、4軸の点の案を根拠つきで出します。点にするかは、各テーマの「この点で採る」（直してもよい）か「見送る」で人が決めます。基準を決めるのは商品開発部です。"
+      + (ai.pending ? " いま採るか決めていない案: " + ai.pending + " 件。" : "") }));
+    if (ai.last_run) c.appendChild(el("p", { "class": "np-sub", text: "前の回: " + ai.last_run.stage + "（" + dash(ai.last_run.requested_at) + "・案 " + (ai.last_run.n_ok || 0) + " 件"
+      + (ai.last_run.error ? "・" + ai.last_run.error : "") + "）" }));
+    if (!ai.can_run) return c;
+    if (!ai.enabled) { c.appendChild(el("p", { "class": "np-warn", text: ai.reason })); return c; }
+    var bt = el("button", { type: "button", "class": "np-btn", text: "AI に案を出させる（自社側の点が無いテーマ " + ai.candidates + " 件）" });
+    var st = el("p", { "class": "np-sub", role: "status" });
+    if (!ai.candidates) bt.setAttribute("disabled", "disabled");
+    bt.addEventListener("click", function () {
+      bt.setAttribute("disabled", "disabled");
+      post("/api/fctr/ai-self", {}).then(function (r) {
+        if (!r.started) { st.textContent = r.reason; bt.removeAttribute("disabled"); return; }
+        st.textContent = r.n + " 件の案を出しています（1〜2分かかります）。";
+        var tries = 0;
+        (function poll() {
+          api("/api/ai/score-runs/" + r.run_id).then(function (x) {
+            if (x.stage === "待ち" || x.stage === "実行中") { if (++tries < 60) return setTimeout(poll, 3000); st.textContent = "まだ終わりません。少したってから開き直してください。"; return; }
+            go();
+          }).catch(function (e) { st.textContent = e.message; });
+        })();
+      }).catch(function (e) { st.textContent = "できませんでした: " + e.message; bt.removeAttribute("disabled"); });
+    });
+    c.appendChild(btnRow([bt])); c.appendChild(st);
+    return c;
   }
 
   /** 月次レポート（FR-116）。**Markdown を安全に描く**（textContent だけ。HTML を混ぜない） */
@@ -4932,6 +4998,7 @@
       if (m.sources_ok) more.appendChild(el("p", { "class": "np-sub", text: "今週使えた出どころ: " + (m.sources_ok.join("、") || "なし")
         + (m.sources_disabled && m.sources_disabled.length ? "／止めている出どころ: " + m.sources_disabled.length + " 種" : "") }));
       b.appendChild(more);
+      if (d.ai) b.appendChild(aiSelfRunCard(d.ai));
       if (!d.segments.length) { b.appendChild(el("p", { "class": "np-note", text: "表示できるテーマがありません。" })); return; }
       d.segments.forEach(function (sg) {
         var c = el("div", { "class": "np-card" });
@@ -4958,7 +5025,7 @@
           return el("tr", null, [el("td", { text: t.top ? "上位" + d.top_n : "" }), el("td", { text: t.label }), act,
             el("td", { "class": "np-num", text: t.decayed + "／" + dash(t.score_max) + (t.age_weeks ? "（最後の観測 " + t.age_weeks + "週前）" : "") }),
             el("td", { "class": "np-num", text: dash(t.consecutive) + "週" }),
-            el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) })]);
+            el("td", { text: dash(t.evidence) }), selfCell(t, d.self_axes, d.can_score, (d.ai_pending || {})[t.theme_id]), el("td", { "class": "np-num", text: t.total100 === null ? "—" : String(t.total100) })]);
         })));
         b.appendChild(c);
       });

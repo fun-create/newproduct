@@ -464,3 +464,7 @@ table.np td[data-gate="中止"], table.np td[data-gate="保留"], table.np td[da
 .np-how { border: 1px solid var(--np-info-line); border-left-width: 4px; border-radius: 6px; padding: .5rem .8rem; margin: .4rem 0 1rem; }
 .np-how > h3 { margin: 0 0 .3rem; font-size: 1rem; color: var(--np-info-ink); }
 tr.np-edit-row > td { background: var(--fca-bg); }
+
+/* AI の案（FR-200）: 情報＝枠だけ */
+.np-aiprop { margin-top: .4rem; padding: .3rem .5rem; border: 1px dashed var(--np-info-line); border-radius: 6px; }
+.np-aiprop > p { margin: 0 0 .2rem; }

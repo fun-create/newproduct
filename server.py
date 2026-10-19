@@ -76,6 +76,7 @@ from app import handoff as handoff_m  # noqa: E402
 from app import target as target_m  # noqa: E402
 from app import abc as abc_m       # noqa: E402
 from app import fctr as fctr_m     # noqa: E402
+from app import ai_fctr as ai_fctr_m  # noqa: E402
 from app import opportunity as opp_m  # noqa: E402
 from app import lpreq as lpreq_m  # noqa: E402
 from app import report as report_m  # noqa: E402
@@ -611,11 +612,30 @@ class H(BaseHTTPRequestHandler):
             r = fctr_m.board(top_n=int(pf["trend_top"]), order=pf["trend_order"],
                              faded=pf["trend_faded"] == "show")
             r["can_score"] = fctr_m.can_score(uid)
+            r["ai"] = ai_fctr_m.status(uid)                     # 自社側70点の AI 案（FR-200）
+            r["ai_pending"] = ai_fctr_m.pending_by_theme()
             return self.sendj(200, r)
         if parts == ["fctr", "self"] and method == "POST":
             d = self.body()
             r = fctr_m.save_self(d.get("theme_id", ""), d, uid)
             store.audit(uid, "fctr.self_score", d.get("theme_id"), {k: d.get(k) for k in ("fit", "ops", "speed", "profit")}, ip)
+            return self.sendj(200, r)
+        # 自社側70点の AI 案（FR-200・ADR-115）。**AI は案を出すだけ**。人が採ったときだけ点になる
+        if parts == ["fctr", "ai-self"] and method == "POST":
+            d = self.body()
+            r = ai_fctr_m.start_run(d.get("theme_ids") or None, uid)
+            store.audit(uid, "fctr.ai_self", None, r, ip)
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[:2] == ["fctr", "ai-self"] and parts[3] in ("adopt", "reject") and method == "POST":
+            d = self.body()
+            pid = int(parts[2])
+            if parts[3] == "adopt":
+                if not fctr_m.can_score(uid):
+                    raise PermissionError("自社側の点を付けられるのは、商品開発部・管理者・社長の業務ロールの人です")
+                r = ai_fctr_m.adopt(pid, uid, {k: d.get(k) for k, _l, _m in fctr_m.SELF_AXES}, d.get("note", ""))
+            else:
+                r = ai_fctr_m.reject(pid, uid, d.get("note", ""))
+            store.audit(uid, "fctr.ai_self_" + parts[3], str(pid), {k: d.get(k) for k, _l, _m in fctr_m.SELF_AXES}, ip)
             return self.sendj(200, r)
         if parts == ["fctr", "idea"] and method == "POST":
             d = self.body()
