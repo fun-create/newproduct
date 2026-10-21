@@ -314,14 +314,17 @@ def main() -> int:
              "期間フィルタの件数が出る", str(d["counts"]))
         note("6フロー合算" in d["template_totals"]["caption"],
              "標準工数に「6フロー合算」の注記", d["template_totals"]["caption"])
-        st, d = cl.get("/api/tasks?when=none")
+        # 業務ロールのある人の既定は「自分の分」（ADR-119）。全員の分は mine=0
+        st0, d0 = cl.get("/api/tasks")
+        note(st0 == 200 and d0["mine"] is True, "業務ロールのある人のタスクの既定は「自分の分」", str(d0.get("mine")))
+        st, d = cl.get("/api/tasks?when=none&mine=0")
         note(st == 200 and len(d["rows"]) == 34,
              "「期限なし」で34件（展開直後は期限を入れない）", str(len(d["rows"])))
         st, d = cl.get("/api/projects/" + pid)
         note(st == 200 and "schedule" in d and all("plan_due" in t for t in d["tasks"]),
              "カルテに目安の数と、タスクごとの目安の列がある（ADR-084）", str(d.get("schedule")))
         st, d = cl.post(f"/api/projects/{pid}/schedule-adopt", {})
-        st2, d2 = cl.get("/api/tasks?when=none")
+        st2, d2 = cl.get("/api/tasks?when=none&mine=0")
         note(st == 200 and len(d2["rows"]) == 34 - d["adopted"],
              "目安を期限にすると、その件数だけ「期限なし」が減る（目安が無ければ0件）", f"{d} / {len(d2['rows'])}")
         st, d = cl.get("/api/tasks?when=%2B9")

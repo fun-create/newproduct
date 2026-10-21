@@ -180,11 +180,11 @@ def revise(version_id: str, user_id: str, label: str = "") -> dict:
             c.execute(
                 "INSERT INTO plan_slot (id,version_id,launch_month,launch_date,"
                 "product_kind,flow_type,area,effort_point,effort_src,owner,"
-                "idea_id,occasion,note,created_at,created_by,updated_at,updated_by) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "idea_id,occasion,note,product,created_at,created_by,updated_at,updated_by) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid, new["id"], s["launch_month"], s["launch_date"],
                  s["product_kind"], s["flow_type"], s["area"], s["effort_point"],
-                 s["effort_src"], s["owner"], s["idea_id"], s["occasion"], s["note"],
+                 s["effort_src"], s["owner"], s["idea_id"], s["occasion"], s["note"], s["product"],
                  store.now_s(), user_id, store.now_s(), user_id))
             n += 1
     # **変換済み（project_id）は写さない。**案件は既に在るので、二重に作らせない
@@ -411,20 +411,21 @@ def create_slot(user_id: str, **f) -> dict:
         c.execute(
             "INSERT INTO plan_slot (id,version_id,launch_month,launch_date,"
             "product_kind,flow_type,area,effort_point,effort_src,owner,idea_id,"
-            "occasion,note,created_at,created_by,updated_at,updated_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "occasion,note,product,created_at,created_by,updated_at,updated_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (sid, vid, month, date, kind, ft, (f.get("area") or "").strip() or None,
              float(ep) if ep not in (None, "") else None, src,
              (f.get("owner") or "").strip() or None,
              (f.get("idea_id") or "").strip() or None,
              (f.get("occasion") or "").strip() or None,
              (f.get("note") or "").strip() or None,
+             (f.get("product") or "").strip()[:120] or None,
              store.now_s(), user_id, store.now_s(), user_id))
     return {"id": sid, "launch_month": month}
 
 
 _EDITABLE = ("launch_date", "product_kind", "flow_type", "area", "effort_point",
-             "owner", "idea_id", "occasion", "note")
+             "owner", "idea_id", "occasion", "note", "product")
 
 
 def update_slot(slot_id: str, user_id: str, **f) -> dict:
@@ -796,6 +797,10 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
         raise ValueError("その枠がありません")
     if s["project_id"]:
         raise ValueError(f"この枠は既に案件 {s['project_id']} になっています")
+    # 承認済みの版の枠からも案件にできる（点検 H-4: 11/9 から新しい案件は枠から起こすのに、承認済みでは出せなかった）。
+    # 案件にしても枠の中身は変わらない。失効した版からは起こさない
+    if s["state"] == "失効":
+        raise ValueError("失効した版の枠からは案件にできません。いまの版の枠から起こしてください")
     s = dict(s)
     kind = store.one("SELECT * FROM product_kind WHERE code=?",
                      (s["product_kind"],)) if s["product_kind"] else None
@@ -809,7 +814,8 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
         "owner": s["owner"],
         "effort_point": s["effort_point"],
         "stage": "年間プラン採択",
-        "internal_name": (over.get("internal_name") or "").strip() or None,
+        # 社内呼称は、聞いた名前 → 枠の「発売する商品」の順（点検 H-3: 空の名前の案件ができていた）
+        "internal_name": (over.get("internal_name") or "").strip() or (s.get("product") or "").strip() or None,
         "summary": (over.get("summary") or "").strip() or None,
     }
     # ページリニューアルは既定で売上に含めない（F-4-9・F-10-11）。**黙って混ぜない**
@@ -827,9 +833,11 @@ def convert(slot_id: str, user_id: str, **over) -> dict:
                   (r["id"], store.now_s(), user_id, "年間プランの枠から変換",
                    f"{s['version_label']} / {s['launch_month']} / 枠 {slot_id}"
                    f" ／ タスク設定期限 {due.get('due') or '未算出'}"))
+    left = due.get("days_left")
+    left_s = (f"残り {left} 日" if left is None or left >= 0 else f"もう {-left} 日過ぎています")
     msg = ("案件を作りました。"
            + (f"タスクを組み終える期限は {due['due']}"
-              f"（発売の{due.get('lead_months')}か月前・残り {due['days_left']} 日）。"
+              f"（発売の{due.get('lead_months')}か月前・{left_s}）。"
               if due.get("due") else f"タスク設定期限は出せません（{due.get('reason')}）。"))
     if kind is not None and not kind["counts_as_launch"]:
         msg += f"　この枠（{kind['label']}）は発売本数に数えません。"

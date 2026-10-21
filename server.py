@@ -1029,10 +1029,15 @@ class H(BaseHTTPRequestHandler):
 
         # /api/tasks
         if parts == ["tasks"] and method == "GET":
+            # 既定は、業務ロールのある人は「自分の分」（点検 M-2: 帯から入ると毎回「自分の分だけ」を押していた）。mine=0 で全員の分
+            mq = qs.get("mine")
+            if mq not in ("0", "1"):
+                from app import gate
+                mq = "1" if gate.roles_of(uid) else "0"
             return self.sendj(200, task_m.listing(
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
                 qs.get("role", ""), qs.get("assignee", ""),
-                mine=uid if qs.get("mine") == "1" else ""))
+                mine=uid if mq == "1" else ""))
         if len(parts) == 4 and parts[0] == "tasks" and parts[3] == "edit" and method == "POST":
             d = self.body()
             r = task_m.update_task(parts[1], int(parts[2]), d, uid)
@@ -1427,9 +1432,8 @@ def gates_board(user_id: str) -> dict:
         p = dict(r)
         b = gate_m.board(p)
         nx = next((g for g in b if g["state"] in ("判定待ち", "差戻し", "保留")), None)
-        # 発売済でゲートの記録が1件も無い案件（移行分）は、起票の判定待ちに見せない（2026-10-09 点検 1-4）
-        no_gate = p["stage"] in ("発売済", "追跡中") and not store.val(
-            "SELECT COUNT(*) FROM gate_review WHERE project_id=?", (p["id"],), 0)
+        # 発売済・追跡中・保留は判定待ちに見せない（2026-10-09 点検 1-4・2026-10-20 点検 M-1）
+        no_gate = gate_m.out_of_turn(p)
         if no_gate:
             nx = None
         who = ("／".join(role_label.get(x, x) for x in nx["approver_role"])
@@ -1437,7 +1441,7 @@ def gates_board(user_id: str) -> dict:
         rows.append({
             "id": p["id"], "product": project_m.display_name(p),
             "flow_label": flow_label.get(p["flow_type"] or "", "—"),
-            "next_gate": ("発売済・ゲートの記録なし" if no_gate else f"{nx['gate']} {nx['name']}" if nx else "—"),
+            "next_gate": (no_gate if no_gate else f"{nx['gate']} {nx['name']}" if nx else "—"),
             "who": who,
             "mine": bool(nx and (mine & set(nx["approver_role"]))),
             "cells": [{"gate": g["gate"], "state": g["state"],

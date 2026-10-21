@@ -659,14 +659,17 @@
       else {
         mc.appendChild(table(["期限", "タスク", "案件", "なぜ自分か"], my.tasks.slice(0, 5).map(function (t) {
           return el("tr", { "data-tone": t.overdue ? "alert" : null }, [el("td", { "class": "np-nowrap" }, [txt(t.due_on), t.overdue ? overdueFlag(t.due_on, d.today) : null]),
-            el("td", { "class": "np-what", text: t.title }),
+            el("td", { "class": "np-what" }, [el("a", { href: myTaskHref(t, d.today), text: t.title,
+              title: "タスクの画面のこの行へ（進捗・期限はそこで変えます）" })]),
             el("td", null, [t.project_id ? el("a", { href: "#/projects/" + t.project_id, text: t.product })
               : t.kind === "work" ? el("a", { href: "#/tasks?when=next7&tab=work&mine=1", text: t.product }) : txt("—")]),
             el("td", { text: t.by === "担当" ? "担当者" : t.role_label })]);
         })));
-        if (my.tasks_n > 5) mc.appendChild(btnRow([navBtn("#/tasks?when=next7&mine=1", "ほか " + (my.tasks_n - 5) + " 件も含めて、自分のタスクをすべて見る"),
-          navBtn("#/tasks?when=next7&tab=work&mine=1", "自分の案件外の仕事を見る", "sm")]));
+        mc.appendChild(btnRow([navBtn("#/tasks?when=all&mine=1", my.tasks_n > 5 ? "ほか " + (my.tasks_n - 5) + " 件も含めて、自分のタスクをすべて見る" : "自分のタスクをすべて見る"),
+          navBtn("#/tasks?when=all&tab=work&mine=1", "自分の案件外の仕事を見る", "sm")]));
       }
+      if (mcnt.none) mc.appendChild(el("p", { "class": "np-warn" }, [txt("期限の入っていない自分のタスクが " + mcnt.none + " 件あります。期限が無いと、ここにもカレンダーにも出ません。 "),
+        navBtn("#/tasks?when=none&mine=1", "期限を入れる", "sm")]));
       if (my.gates_n) {
         var gg = {};
         my.gates.forEach(function (g) { var k = g.gate + " " + g.name; gg[k] = (gg[k] || 0) + 1; });
@@ -684,7 +687,7 @@
         kpi("期限切れタスク（全員）", fmtNum(c.overdue), "案件タスク＋案件外の仕事", "#/tasks?when=overdue", null,
           { unit: "件", tone: c.overdue > 0 ? "alert" : null, tag: "要対応" }),
         kpi("今日が期限（全員）", fmtNum(c.today), null, "#/tasks?when=today", null, { unit: "件", tone: c.today > 0 ? "info" : null, tag: "今日" }),
-        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "ほか発売済 " + pr.launched_no_gate + " 件はゲートの記録なし（移行分）" : null, "#/gates", null, { unit: "件" }),
+        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "発売済で記録が途中・なしの " + pr.launched_no_gate + " 件（移行分）と保留中は数えていません" : "保留中は数えていません", "#/gates", null, { unit: "件" }),
         kpi("期限なしのタスク", fmtNum(c.none), "入れないままだと詰まりが見えません", "#/tasks?when=none", null, { unit: "件" })]));
       var hill = [{ x: "期限切れ", y: c.overdue, tone: "alert" }, { x: "今日", y: c.today }];
       ["+1", "+2", "+3", "+4", "+5", "+6"].forEach(function (k) { hill.push({ x: k.replace("+", "") + "日後", y: c[k] }); });
@@ -704,7 +707,7 @@
         { label: "アイデア", n: (pl.ideas || {}).total, sub: "採点済 " + (ib["採点済"] || 0) + "・起票 " + (ib["起票"] || 0) + "・候補 " + (ib["候補"] || 0), href: "#/ideas" },
         { label: "年間プランの枠（" + sl.fy + "年度）", n: sl.n === null ? "版なし" : sl.n, sub: sl.state ? sl.state + "・案件化 " + sl.converted : "版がまだありません", href: "#/plan" },
         { label: "開発中の案件", n: pr.active, sub: "全 " + pr.total + " 件（発売済・中止を含む）", href: "#/projects" },
-        { label: "発売済", n: pr.launched, sub: pr.launched_no_gate ? "うちゲートの記録なし " + pr.launched_no_gate + "（移行分）" : null }]));
+        { label: "発売済", n: pr.launched, sub: pr.launched_no_gate ? "うちゲートの記録が途中・なし " + pr.launched_no_gate + "（移行分）" : null }]));
       pc.appendChild(el("p", { "class": "np-sub", text: "つながりの記録: アイデアから起こした案件 " + ln.from_idea + " / " + ln.projects
         + "・枠から起こした案件 " + (ln.slot_converted === null ? "—" : ln.slot_converted) + " / " + (ln.slots === null ? "—" : ln.slots)
         + "。記録が無いあいだは、段から段へ進んだ割合は出しません（0% と誤って読めるため）。" }));
@@ -1023,6 +1026,8 @@
             text: last.result + " " + (last.approved_at || "") + " " +
                   (last.approved_by || "") + "「" + (last.comment || "") + "」" }));
         }
+        // 判定の欄は G 節（点検 M-5: 「履歴」という名前のたたんだ節の中にあり、判定する人が見つけにくかった）
+        if (ng) miss.appendChild(btnRow([secBtn("np-sec-G", ng.gate + " " + ng.name + " を判定する（G節へ）")]));
         b.appendChild(miss);
 
         [["lp", "LP依頼書の下書き", "np-sec-F", "F節へ"], ["competitor", "競合調査の下書き", "np-sec-C", "C節へ"],
@@ -1259,7 +1264,7 @@
             d.tasks.map(function (t) {
               return el("tr", null, [
                 el("td", { "class": "np-num", text: String(t.seq) }),
-                el("td", { "class": "np-nowrap", text: t.status }),
+                el("td", null, [h.editable ? statusForm(Object.assign({ kind: "task" }, t)) : txt(t.status)]),
                 el("td", { "class": "np-nowrap", text: t.due_on ? t.due_on : "期限なし" }),
                 el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
@@ -1278,7 +1283,7 @@
 
         // G. 履歴 ＋ ゲートの判定
         var g = el("div", { "class": "np-card", id: "np-sec-G" });
-        g.appendChild(el("h2", { text: "G. 履歴 — 誰がいつ何を決めたか" }));
+        g.appendChild(el("h2", { text: ng ? "G. ゲートの判定（" + ng.gate + " " + ng.name + "）と履歴" : "G. 履歴 — 誰がいつ何を決めたか" }));
         if (ng) g.appendChild(gateForm(d, ng, meta));
         g.appendChild(table(["日時", "誰が", "何を"], d.revisions.map(function (x) {
           return el("tr", null, [el("td", { text: x.changed_at }),
@@ -1349,16 +1354,30 @@
     var f = el("form");
     var ta = el("textarea", { id: id, name: "body" });
     ta.value = fd.body || "";
+    var saved = ta.value;
     f.appendChild(ta);
     var bar = el("p", { "class": "np-sub" });
-    bar.appendChild(el("button", { type: "submit", text: "保存" }));
-    bar.appendChild(txt(fd.updated_at ? "　最終更新 " + fd.updated_at + " " + (fd.updated_by || "") : "　まだ入力がありません"));
+    var st = el("span", { "class": "np-status", role: "status" });
+    bar.appendChild(el("button", { type: "submit", text: "保存する" }));
+    bar.appendChild(txt(fd.updated_at ? "　最終更新 " + fd.updated_at + " " + (fd.updated_by || "") + " " : "　まだ入力がありません "));
+    bar.appendChild(st);
     f.appendChild(bar);
+    // 書きかけの印（点検 H-5: 保存のたびに画面全体を描き直し、ほかの欄の書きかけが黙って消えていた）
+    ta.addEventListener("input", function () {
+      if (ta.value !== saved) { ta.setAttribute("data-np-dirty", "1"); st.className = "np-warn"; st.textContent = "まだ保存していません"; }
+      else { ta.removeAttribute("data-np-dirty"); st.className = "np-status"; st.textContent = ""; }
+    });
     f.addEventListener("submit", function (ev) {
       ev.preventDefault();
+      st.className = "np-status"; st.textContent = "保存中…";
       post("/api/projects/" + pid + "/section", { key: fd.key, body: ta.value })
-        .then(function () { go(); })
-        .catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        .then(function () {
+          saved = ta.value; ta.removeAttribute("data-np-dirty");
+          // ほかの欄に書きかけが無ければ描き直す（「いま欠けているもの」とゲートの欠けを新しくする）。あれば描き直さない
+          if (!dirtyFields().length) return go();
+          st.textContent = "保存しました（" + new Date().toTimeString().slice(0, 5) + "）。ほかに書きかけの欄があるので、画面はそのままにしています";
+        })
+        .catch(function (e) { st.className = "np-err"; st.textContent = "できませんでした: " + e.message; });
     });
     w.appendChild(f);
     return w;
@@ -2521,15 +2540,23 @@
     }).catch(fail);
   }
 
+  /** ダッシュボードの「自分のやること」の行 → タスクの画面のその行（点検 H-2）。ダッシュボードは見るだけ、変えるのはタスクの画面 */
+  function myTaskHref(t, today) {
+    var when = t.due_on < today ? "overdue" : t.due_on === today ? "today" : "next7";
+    var tab = t.kind === "work" ? "work" : "project";
+    var key = t.kind === "work" ? "work_item-" + t.work_id : "task-" + t.id;
+    return "#/tasks?when=" + when + "&tab=" + tab + "&mine=1&focus=" + key;
+  }
   function viewTasks() {
     loading();
     var q = hashQuery();
     var when = q.get("when") || "overdue+today";
     var tab = q.get("tab") || "project";
-    var mine = q.get("mine") === "1";
-    var mq = mine ? "&mine=1" : "";
-    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab) + mq)
+    var focus = q.get("focus");
+    var mine, mq;
+    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab) + (q.get("mine") ? "&mine=" + q.get("mine") : ""))
       .then(function (d) {
+        mine = !!d.mine; mq = mine ? "&mine=1" : "&mine=0";      // 既定はサーバが決める（業務ロールのある人は自分の分）
         var b = clear();
         setTitle("タスク", "／ " + (WHEN_LABEL[when] || when));
 
@@ -2562,7 +2589,7 @@
         b.appendChild(fl);
         // 自分の分だけ（担当者が自分＋自分の業務ロール）。ダッシュボードの「自分のやること」の続き
         var mf = el("div", { "class": "np-filters" });
-        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab, text: "全員の分", "aria-current": mine ? null : "true" }));
+        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=0", text: "全員の分", "aria-current": mine ? null : "true" }));
         mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1", text: "自分の分だけ", "aria-current": mine ? "true" : null }));
         b.appendChild(btnRow([navBtn("#/tasks/assign", "担当をまとめて割り振る"), navBtn("#/routines", "繰り返しの仕事（ルーティン）")]));
         b.appendChild(mf);
@@ -2584,7 +2611,8 @@
             }
             // 期限切れ（未完）の行に左の帯と「！期限切れ n日」（FR-195 第2段）
             var late = !!(t.due_on && t.due_on < d.today && t.status !== "完了" && t.status !== "対象外");
-            rows.push(el("tr", { "data-tone": late ? "alert" : null }, [
+            var fk = t.kind + "-" + t.id;
+            rows.push(el("tr", { "data-tone": late ? "alert" : null, id: "np-row-" + fk, "data-focus": fk === focus ? "1" : null }, [
               el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t),
                 t.sheet_diff ? el("div", null, [tag("シートと違う", "alert")]) : null]),
               el("td", { "class": "np-nowrap" }, [txt(dash(t.due_on)), late ? overdueFlag(t.due_on, d.today) : null]),
@@ -2602,8 +2630,12 @@
               taskEditCell(t.project_id ? "task" : "work", t, null, t.project_id)
             ]));
           });
-          b.appendChild(table(["進捗", "期限", "案件（分類）", "タスク名", "ロール",
+          b.appendChild(table(["進捗", "期限", "案件", "タスク名", "ロール",
             "担当", "標準h", "AI適用", "削減見込", ""], rows));
+          // ダッシュボードから来たときは、その行へ移って印を付ける（点検 H-2）
+          var fr = focus && b.querySelector('tr[data-focus="1"]');
+          if (fr) setTimeout(function () { fr.scrollIntoView({ block: "center" }); }, 0);
+          else if (focus) b.insertBefore(el("p", { "class": "np-note", text: "選んだタスクはこの期間の一覧にありません（期限や進捗が変わったかもしれません）。" }), b.firstChild);
         }
         if (tab === "work" || tab === "request") b.appendChild(workItemForm(tab));
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
@@ -2754,18 +2786,45 @@
     return f;
   }
 
+  /** 進捗を変える。**描き直さない**（点検 H-5・M-3: 描き直すとカルテの書きかけが消え、一覧では行が消えて行き先が分からなかった）。
+   *  保存したらその場に「保存しました（元に戻す）」。並行運用の間は、変える前に1回確かめる（シートが正・点検 H-1） */
   function statusForm(t) {
+    var w = el("span", { "class": "np-statusform" });
     var s = el("select", { "aria-label": "進捗" });
     ["未着手", "着手", "完了", "保留", "対象外"].forEach(function (x) {
       var o = el("option", { value: x, text: x });
       if (x === t.status) o.setAttribute("selected", "selected");
       s.appendChild(o);
     });
+    var cur = t.status;
+    var msg = el("span", { "class": "np-status", role: "status" });
+    function clearMsg() { while (msg.firstChild) msg.removeChild(msg.firstChild); msg.className = "np-status"; }
+    function save(v, back) {
+      clearMsg(); msg.textContent = "保存中…";
+      post("/api/tasks/" + t.kind + "/" + t.id + "/status", { status: v }).then(function () {
+        var prev = cur; cur = v; s.value = v; t.status = v;
+        clearMsg();
+        msg.appendChild(txt(back ? "元に戻しました" : "保存しました（" + v + "）"));
+        if (!back) {
+          var u = el("button", { type: "button", "class": "np-linkbtn", text: "元に戻す" });
+          u.addEventListener("click", function () { save(prev, true); });
+          msg.appendChild(txt(" ")); msg.appendChild(u);
+        }
+      }).catch(function (e) { s.value = cur; clearMsg(); msg.className = "np-err"; msg.textContent = "できませんでした: " + e.message; });
+    }
     s.addEventListener("change", function () {
-      post("/api/tasks/" + t.kind + "/" + t.id + "/status", { status: s.value })
-        .then(function () { go(); }).catch(function (e) { alert(e.message); });
+      var v = s.value;
+      if (PHASE !== "parallel") return save(v);
+      s.value = cur; clearMsg();                     // 確かめるまで変えない
+      msg.appendChild(txt("並行運用中は進捗管理シートが正です。シートにも同じことを書きましたか？ "));
+      var ok = el("button", { type: "button", "class": "np-linkbtn", text: "アプリでも「" + v + "」にする" });
+      var no = el("button", { type: "button", "class": "np-linkbtn", text: "やめる" });
+      ok.addEventListener("click", function () { save(v); });
+      no.addEventListener("click", clearMsg);
+      msg.appendChild(ok); msg.appendChild(txt(" ")); msg.appendChild(no);
     });
-    return s;
+    w.appendChild(s); w.appendChild(txt(" ")); w.appendChild(msg);
+    return w;
   }
 
   // ══════════════════════════════════════════════════════
@@ -4388,7 +4447,7 @@
                 ? "（未確定 " + m.effort_unknown + " 本を含みません）" : "")
               + " ／ 案件化済 " + m.converted_n + " 件" }));
       var rows = m.slots.map(function (x) { return planSlotRow(cur, x, meta); });
-      s.appendChild(table(["発売日", "商品タイプ", "開発タイプ", "作成エリア",
+      s.appendChild(table(["発売日", "発売する商品", "商品タイプ", "開発タイプ", "作成エリア",
                            "工数", "担当", "アイデア", "機会", "案件"], rows));
       box.appendChild(s);
     });
@@ -4435,6 +4494,7 @@
       opts.forEach(function (o) { var op = el("option", { value: o.code, text: fmt ? fmt(o) : o.label }); if (o.code === cur) op.setAttribute("selected", "selected"); s2.appendChild(op); });
       return el("label", { "class": "np-label" }, [el("span", { text: label }), s2]);
     }
+    f.appendChild(inp("product", "発売する商品", x.product));
     f.appendChild(inp("launch_month", "発売月（YYYY-MM）", x.launch_month));
     f.appendChild(inp("launch_date", "発売日（決まっていれば）", x.launch_date, "date"));
     f.appendChild(sel("product_kind", "商品タイプ", (meta.plan || {}).kinds || [], x.product_kind));
@@ -4452,7 +4512,7 @@
     f.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var o = {};
-      ["launch_month", "launch_date", "product_kind", "flow_type", "area", "effort_point", "owner", "occasion"].forEach(function (k) { o[k] = f.elements[k].value; });
+      ["product", "launch_month", "launch_date", "product_kind", "flow_type", "area", "effort_point", "owner", "occasion"].forEach(function (k) { o[k] = f.elements[k].value; });
       post("/api/plan/slots/" + encodeURIComponent(x.id) + "/update", o).then(function () { go(); })
         .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
     });
@@ -4524,8 +4584,10 @@
         });
         last.appendChild(txt(" ")); last.appendChild(ul);
       }
-    } else if (cur._can_link && cur.version && cur.version.state !== "失効" && !cur.editable) {
-      last.appendChild(slotLinkButton(x));
+    } else if (cur.version && cur.version.state !== "失効" && !cur.editable) {
+      // 承認済みの版でも新しい案件を起こせる（点検 H-4。枠の中身は変わらない）
+      last.appendChild(convertButton(x));
+      if (cur._can_link) { last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x)); }
     } else if (cur.editable) {
       last.appendChild(convertButton(x));
       if (cur._can_link) { last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x)); }
@@ -4533,7 +4595,7 @@
       ed.addEventListener("click", function () {
         var tr0 = ed.closest("tr");
         if (tr0.nextSibling && tr0.nextSibling.classList && tr0.nextSibling.classList.contains("np-edit-row")) return;
-        tr0.parentNode.insertBefore(slotEditRow(x, meta || {}, 9), tr0.nextSibling);
+        tr0.parentNode.insertBefore(slotEditRow(x, meta || {}, 10), tr0.nextSibling);
       });
       last.appendChild(txt(" "));
       last.appendChild(ed);
@@ -4543,6 +4605,7 @@
     return el("tr", null, [
       // 日が未定なら「月まで」と書く。**仮の日付を置かない**
       el("td", { text: x.launch_date || (x.launch_month + "（日は未定）") }),
+      el("td", { "class": "np-what", text: dash(x.product) }),
       el("td", { text: dash(x.kind_label) }),
       el("td", { text: dash(x.flow_label) }),
       el("td", { text: dash(x.area) }),
@@ -4558,24 +4621,32 @@
     ]);
   }
 
+  /** 枠を案件にする。押すと社内呼称を聞く（初期値＝枠の「発売する商品」。点検 H-3/H-4: 空の名前の案件ができていた） */
   function convertButton(x) {
     var w = el("span");
-    var msg = el("span", { "class": "np-sub" });
+    var msg = el("span", { "class": "np-sub", role: "status" });
     var btn = el("button", { type: "button", text: "案件にする" });
-    btn.addEventListener("click", function () {
-      btn.disabled = true;
-      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/convert", {})
+    var form = el("span", { hidden: "hidden" });
+    var nm = el("input", { size: "24", value: x.product || "", "aria-label": "案件の社内呼称", placeholder: "社内呼称（必須）" });
+    var ok = el("button", { type: "button", text: "この名前で案件にする" });
+    var no = el("button", { type: "button", text: "やめる" });
+    form.appendChild(txt(" 社内呼称 ")); form.appendChild(nm); form.appendChild(txt(" ")); form.appendChild(ok); form.appendChild(txt(" ")); form.appendChild(no);
+    btn.addEventListener("click", function () { btn.hidden = true; form.hidden = false; nm.focus(); });
+    no.addEventListener("click", function () { btn.hidden = false; form.hidden = true; msg.textContent = ""; });
+    ok.addEventListener("click", function () {
+      if (!nm.value.trim()) { msg.textContent = " 社内呼称を入れてください（一覧で案件を見分ける名前です）"; return; }
+      ok.disabled = true;
+      post("/api/plan/slots/" + encodeURIComponent(x.id) + "/convert", { internal_name: nm.value.trim() })
         .then(function (r) {
-          // **期限をその場で出す**（FR-86）。一覧を描き直すと見落とす
-          msg.textContent = r.message;
-          setTimeout(go, 4000);
+          // **期限をその場で出し、消さない**（FR-86・点検 M-7: 4秒で消えていた）。開くかどうかは人が選ぶ
+          form.hidden = true;
+          while (msg.firstChild) msg.removeChild(msg.firstChild);
+          msg.appendChild(txt(" " + r.message + " "));
+          msg.appendChild(el("a", { href: "#/projects/" + encodeURIComponent(r.project_id), text: "案件を開く →" }));
         })
-        .catch(function (e) {
-          btn.disabled = false;
-          msg.textContent = "できませんでした: " + e.message;
-        });
+        .catch(function (e) { ok.disabled = false; msg.textContent = " できませんでした: " + e.message; });
     });
-    w.appendChild(btn); w.appendChild(msg);
+    w.appendChild(btn); w.appendChild(form); w.appendChild(msg);
     return w;
   }
 
@@ -4587,6 +4658,8 @@
       text: "発売月だけで作れます。日は決まってから入れます。"
             + "仮の日付を置くと、そこから逆算した期限が動き出します。" }));
     var f = el("form", { "class": "np-form" });
+    f.appendChild(el("label", { text: "発売する商品（社内の呼び名）" }));
+    f.appendChild(el("input", { name: "product", placeholder: "例 推し色アクスタ" }));
     f.appendChild(el("label", { text: "発売月（YYYY-MM）" }));
     f.appendChild(el("input", { name: "launch_month", required: "required",
                                 placeholder: "2026-05" }));
@@ -6519,7 +6592,18 @@
   }
 
   // ── 振り分け ────────────────────────────────────────
+  // 書きかけの欄（カルテの文の欄など）。移る前に確かめる（点検 H-5）
+  function dirtyFields() { return BOX.querySelectorAll('[data-np-dirty="1"]'); }
+  var LAST_HASH = location.hash, SKIP_GO = false;
+  window.addEventListener("beforeunload", function (ev) { if (dirtyFields().length) { ev.preventDefault(); ev.returnValue = ""; } });
   function go() {
+    if (SKIP_GO) { SKIP_GO = false; return; }
+    var nd = dirtyFields().length;
+    if (nd && !window.confirm("保存していない欄が " + nd + " つあります。このまま移ると、書いた内容は消えます。移りますか？")) {
+      if (location.hash !== LAST_HASH) { SKIP_GO = true; location.replace(LAST_HASH || "#/"); }
+      return;
+    }
+    LAST_HASH = location.hash;
     var path = hashPath();
     var entry = match(path);
     markCurrent(entry.view);

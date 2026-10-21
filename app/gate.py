@@ -143,6 +143,20 @@ def state_of(project_id: str, gate: str) -> tuple[str, dict | None]:
     return r["result"], dict(r)
 
 
+def out_of_turn(proj: dict) -> str | None:
+    """判定待ちに数えない理由（点検 M-1・ADR-119）。数えるなら None。
+
+    - 発売済・追跡中: もう出ている。移行した案件は G0〜G3 を「通過」にしたので次が G4 の判定待ちに見えるが、手の打ちようがない
+    - 保留: 止めている間は誰の番でもない
+    """
+    if proj.get("stage") in ("発売済", "追跡中"):
+        n = store.val("SELECT COUNT(*) FROM gate_review WHERE project_id=?", (proj["id"],), 0)
+        return "発売済・ゲートの記録なし（移行分）" if not n else "発売済・ゲートが途中（移行分）"
+    if proj.get("stage") == "保留":
+        return "保留中"
+    return None
+
+
 def board(proj: dict) -> list[dict]:
     """1案件のゲート列。**`対象外` と `判定待ち` をここで決める。**
 

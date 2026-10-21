@@ -434,7 +434,7 @@ def _pipeline(waiting_all=None, launched_no_gate: int = 0) -> dict:
     gates: dict[str, dict] = {}
     for g in gate.defs():
         gates[g["gate"]] = {"gate": g["gate"], "name": g["name"], "n": 0}
-    for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了','発売済','追跡中')"):
+    for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了','発売済','追跡中','保留')"):
         g = gate.next_gate(dict(r))
         if g and g["gate"] in gates:
             gates[g["gate"]]["n"] += 1
@@ -524,10 +524,10 @@ def dashboard(user_id: str) -> dict:
     launched_no_gate = []
     for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了')"):
         p = dict(r)
-        # 発売済なのにアプリでゲートを1つも通していない（移行した案件）は、起票の判定待ちに数えない（2026-10-09 点検 1-4）
-        if p["stage"] in ("発売済", "追跡中") and not store.val(
-                "SELECT COUNT(*) FROM gate_review WHERE project_id=?", (p["id"],), 0):
-            launched_no_gate.append(p["id"])
+        # 発売済・追跡中・保留は判定待ちに数えない（2026-10-09 点検 1-4・2026-10-20 点検 M-1: 記録が途中の発売済6件・保留1件が生産部の番に見えていた）
+        if gate.out_of_turn(p):
+            if p["stage"] != "保留":
+                launched_no_gate.append(p["id"])
             continue
         g = gate.next_gate(p)
         if not g or g["state"] not in ("判定待ち", "差戻し"):
@@ -560,7 +560,7 @@ def dashboard(user_id: str) -> dict:
                          f"LEFT JOIN project p ON p.id=t.project_id WHERE t.status NOT IN ('完了','対象外') "
                          f"AND t.due_on IS NOT NULL AND t.due_on <= ? AND {tmc} "
                          f"ORDER BY t.due_on, t.project_id, t.seq LIMIT 12", [until] + cp):
-            rows.append(({"project_id": r["project_id"], "product": _p.display_name(dict(r)), "kind": "task",
+            rows.append(({"project_id": r["project_id"], "product": _p.display_name(dict(r)), "kind": "task", "id": r["id"],
                           "seq": r["seq"], "title": r["title"], "due_on": r["due_on"]}, r))
         for r in store.q(f"SELECT * FROM work_item WHERE {where} ORDER BY due_on, id LIMIT 12", [until] + cp):
             rows.append(({"project_id": None, "product": "案件外の仕事", "kind": "work", "work_id": r["id"],
@@ -578,7 +578,9 @@ def dashboard(user_id: str) -> dict:
                        for tb in ("task", "work_item"))
         my_counts = {"overdue": _n("due_on < ?", [t.isoformat()]),
                      "today": _n("due_on = ?", [t.isoformat()]),
-                     "next7": _n("due_on > ? AND due_on <= ?", [t.isoformat(), until])}
+                     "next7": _n("due_on > ? AND due_on <= ?", [t.isoformat(), until]),
+                     # 期限の無い自分の分（点検 M-2: 「自分のやること」は期限のあるものだけなので、ここに出さないと誰にも見えない）
+                     "none": _n("due_on IS NULL", [])}
     return {
         "today": t.isoformat(),
         "counts": c,

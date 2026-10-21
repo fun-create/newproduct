@@ -473,3 +473,10 @@ tr.np-edit-row > td { background: var(--fca-bg); }
 .np-phase { border: 1px solid var(--np-info-line); border-left-width: 6px; background: var(--np-info-bg); color: var(--fca-ink);
   padding: .5rem .75rem; margin: 0 0 .75rem; border-radius: 4px; }
 .np-phase strong { color: var(--np-info-ink); }
+
+/* 進捗の選択の後に出す「保存しました（元に戻す）」・並行運用の確かめ（点検 H-2・M-3） */
+.np-statusform .np-status, .np-statusform .np-err { display: block; font-size: .85em; margin-top: .2rem; max-width: 18rem; }
+.np-linkbtn { background: none; border: 0; padding: 0 .1rem; color: var(--fca-navy); text-decoration: underline; cursor: pointer; font: inherit; min-height: 32px; }
+/* ダッシュボードから選んだ行（点検 H-2）。枠で示す（色だけにしない: 太い枠＋背景） */
+tr[data-focus="1"] > td { background: var(--np-info-bg); }
+tr[data-focus="1"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-info-line); }

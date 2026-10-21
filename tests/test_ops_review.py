@@ -127,5 +127,38 @@ class OpsReview(unittest.TestCase):
             self.project.update_header(pid, {"owner": "no_such_user"}, "x", "u")
 
 
+    def test_convert_from_approved_version_uses_product_name(self):
+        from app import plan
+        with self.store.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('president','tester')")
+        vid = plan.create_version("tester", 2026)["id"]
+        sid = plan.create_slot("tester", version_id=vid, launch_month="2027-01", product="推し色アクスタ", flow_type="freecut")["id"]
+        other = plan.create_slot("tester", version_id=vid, launch_month="2027-02")["id"]
+        self.assertEqual(self.store.val("SELECT product FROM plan_slot WHERE id=?", (sid,)), "推し色アクスタ")
+        plan.approve(vid, "tester")
+        r = plan.convert(sid, "tester")                                     # 承認済みの版からも起こせる
+        self.assertEqual(self.store.val("SELECT internal_name FROM project WHERE id=?", (r["project_id"],)), "推し色アクスタ",
+                         "名前を聞かなければ枠の「発売する商品」")
+        r2 = plan.convert(other, "tester", internal_name="新しい名前")
+        self.assertEqual(self.store.val("SELECT internal_name FROM project WHERE id=?", (r2["project_id"],)), "新しい名前")
+        v2 = plan.revise(vid, "tester")["id"]
+        s3 = plan.create_slot("tester", version_id=v2, launch_month="2027-03")["id"]
+        plan.approve(v2, "tester")                                          # 前の版は失効
+        with self.store.tx() as c:
+            c.execute("UPDATE plan_slot SET version_id=? WHERE id=?", (vid, s3))
+        with self.assertRaises(ValueError):
+            plan.convert(s3, "tester")
+
+    def test_migration_copies_product_from_note(self):
+        from app import plan
+        vid = plan.create_version("tester", 2026)["id"]
+        sid = plan.create_slot("tester", version_id=vid, launch_month="2027-01",
+                               note="商品: ビールジョッキ再販／タスク設定期限（元表）: 2026-01-01")["id"]
+        sql = (BASE / "migrations" / "048_slot_product.sql").read_text(encoding="utf-8").split("ALTER TABLE plan_slot ADD COLUMN product TEXT;")[1]
+        with self.store.tx() as c:
+            c.executescript(sql)
+        self.assertEqual(self.store.val("SELECT product FROM plan_slot WHERE id=?", (sid,)), "ビールジョッキ再販")
+
+
 if __name__ == "__main__":
     unittest.main()
