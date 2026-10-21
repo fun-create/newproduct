@@ -220,6 +220,32 @@ def save(f: dict, user_id: str) -> dict:
     return {"ok": True, "id": int(rid)}
 
 
+def set_quick(rid: int, user_id: str, active=None, assignee=None) -> dict:
+    """一覧の行から「使う／使わない」と担当だけを変える（点検 M-6: 19行を1行ずつ「直す」で開いていた）。
+    時期が決まっていない行は「使う」にできない（起こす日が無い）。担当は利用者台帳で確かめる。"""
+    if not can_edit(user_id):
+        raise PermissionError("繰り返しの仕事を登録・修正できるのは、商品開発部・管理者・社長の業務ロールの人です")
+    r = store.one("SELECT * FROM routine WHERE id=?", (int(rid),))
+    if r is None:
+        raise LookupError("その繰り返しの仕事がありません")
+    sets: dict = {}
+    if active is not None:
+        on = str(active) in ("1", "true", "on")
+        if on and undetermined(dict(r)):
+            raise ValueError(f"時期が決まっていません（{undetermined(dict(r))}）。「直す」で時期を入れてから「使う」にしてください")
+        sets["active"] = 1 if on else 0
+    if assignee is not None:
+        from app.task import check_user
+        sets["assignee"] = check_user(assignee) or None
+    if not sets:
+        return {"ok": True, "id": int(rid)}
+    with store.tx() as c:
+        c.execute(f"UPDATE routine SET {','.join(k + '=?' for k in sets)},edited_by=?,edited_at=? WHERE id=?",
+                  (*sets.values(), user_id, store.now_s(), int(rid)))
+    ensure()
+    return {"ok": True, "id": int(rid), **sets}
+
+
 # ── シートからの取り込み ──────────────────────────────────────
 _WD = {c: i for i, c in enumerate(WEEK)}
 

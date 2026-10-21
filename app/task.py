@@ -173,6 +173,12 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "ai_used": False, "ai_reduction_rate": None,
         } for r in rs]
 
+    # 並行運用の間は、前回の同期の後にアプリで変わった行に印（点検 H-1・ADR-119）。11/9 からはアプリが正なので出さない
+    from app import cutover, sheetsync
+    if cutover.phase() == "parallel":
+        diff = {"task": sheetsync.diff_ids("task"), "work_item": sheetsync.diff_ids("work_item")}
+        for r in rows:
+            r["sheet_diff"] = r["id"] in diff[r["kind"]]
     c = counts()
     return {
         "when": when or DEFAULT_WHEN, "tab": tab, "today": t.isoformat(), "mine": bool(mine),

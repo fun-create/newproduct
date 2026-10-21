@@ -984,6 +984,10 @@ class H(BaseHTTPRequestHandler):
                 r = project_m.move_stage(pid, d.get("action", ""), uid, d.get("reason_code", ""), d.get("note", ""))
                 store.audit(uid, "project.stage", pid, {k: d.get(k) for k in ("action", "reason_code")}, ip)
                 return self.sendj(200, r)
+            if what == "header":
+                r = project_m.update_header(pid, d, d.get("reason", ""), uid)
+                store.audit(uid, "project.header", pid, {k: d.get(k) for k in project_m.HEADER_FIELDS if k in d}, ip)
+                return self.sendj(200, r)
             if what == "launch-date":
                 r = project_m.set_launch_date(pid, d.get("launch_date", ""), d.get("reason", ""), uid)
                 store.audit(uid, "project.launch_date", pid, {k: d.get(k) for k in ("launch_date", "reason")}, ip)
@@ -1057,6 +1061,14 @@ class H(BaseHTTPRequestHandler):
             r = ai_routine.to_request(pid, uid) if parts[3] == "request" else ai_routine.reject(pid, uid, self.body().get("note", ""))
             store.audit(uid, "routine.ai_" + parts[3], str(pid), r, ip)
             return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "routines" and parts[2] == "quick" and parts[1].isdigit() and method == "POST":
+            from app import routine
+            d = self.body()
+            # 担当を外す（空）はフォーム形式では届かないので、field=assignee のときは「届かなければ空」
+            r = routine.set_quick(int(parts[1]), uid, d.get("active"),
+                                  d.get("assignee", "") if d.get("field") == "assignee" else d.get("assignee"))
+            store.audit(uid, "routine.quick", parts[1], {k: d.get(k) for k in ("active", "assignee") if k in d}, ip)
+            return self.sendj(200, r)
         if parts == ["routines"] and method == "POST":
             from app import routine
             d = self.body()
@@ -1072,6 +1084,9 @@ class H(BaseHTTPRequestHandler):
             store.audit(uid, "task.assign_bulk", d.get("project_id") or "work",
                         {"role": d.get("role"), "assignee": d.get("assignee"), "n": r["assigned"]}, ip)
             return self.sendj(200, r)
+        if parts == ["sheet-sync"] and method == "GET":
+            from app import sheetsync
+            return self.sendj(200, sheetsync.summary())
         if parts == ["users"] and method == "GET":
             # 担当を選ぶための一覧（共通ログインIDと名前だけ。秘密は返さない）
             return self.sendj(200, {"rows": sorted(({"user_id": x.get("user_id"), "name": x.get("name") or x.get("user_id")}

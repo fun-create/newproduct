@@ -315,6 +315,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
             "launch_date": p["launch_date"], "occasion": p["occasion"],
             "owner": p["owner"], "stage": p["stage"], "area": p["area"],
             "summary": p["summary"], "from_sheet": bool(p["source_sheet"]),
+            "cat1": p["cat1"], "cat2": p["cat2"], "cat3": p["cat3"], "size": p["size"],
             "revenue": ("含めない" if not p["revenue_counted"]
                         else f"含める（{p['revenue_basis'] or '方式未選択'}）"),
             "source_of_truth": p["source_of_truth"],
@@ -568,6 +569,70 @@ def set_revenue(pid: str, counted: bool, basis: str, user_id: str) -> dict:
 
 
 # ── 発売予定日（2026-10-09 十文字さんの選択・ADR-085）。**理由を必ず残す**（前→後を履歴に）──
+HEADER_FIELDS = {"internal_name": "社内呼称", "flow_type": "開発タイプ", "cat1": "分類1", "cat2": "分類2", "cat3": "分類3",
+                 "size": "サイズ", "area": "作成エリア", "owner": "担当", "occasion": "機会", "effort_point": "工数ポイント"}
+
+
+def update_header(pid: str, fields: dict, reason: str, user_id: str) -> dict:
+    """カルテの頭の欄を直す（点検 H-3: 起こした後に直す口が無く、移行20件の開発タイプが空のままだった）。
+
+    - **空の欄を埋めるだけなら理由は要らない。**入っている値を変えるときは理由が要る（履歴に前後の値と残す）
+    - 開発タイプを変えても**タスクは足さない・消さない**（いまのタスクは人が直したもの）
+    - 工数ポイントを空にすると、開発タイプの係数を入れる（係数が無ければ未確定）
+    - 発売予定日は別の口（set_launch_date。タスクの目安を計算し直すため）
+    """
+    p = store.one("SELECT * FROM project WHERE id=?", (pid,))
+    if p is None:
+        raise LookupError("案件がありません")
+    if p["source_of_truth"] != "app":
+        raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+    # 画面はフォーム形式で送るので、空の欄は届かない（parse_qs が落とす）。`_fields` に並べた欄は「届かなければ空」
+    listed = {x for x in str(fields.get("_fields") or "").split(",") if x in HEADER_FIELDS}
+    new: dict = {}
+    for k in HEADER_FIELDS:
+        if k not in fields and k not in listed:
+            continue
+        v = (str(fields.get(k) or "")).strip() or None
+        if k == "internal_name" and v:
+            v = v[:120]
+        if k == "flow_type" and v and flow(v) is None:
+            raise ValueError(f"知らない開発タイプ {v!r}")
+        if k == "owner" and v:
+            from app.task import check_user
+            check_user(v)
+        if k == "effort_point":
+            if v is None:
+                ft = new.get("flow_type", p["flow_type"]) if "flow_type" in new else p["flow_type"]
+                fl = flow(ft) if ft else None
+                v = fl["effort_point"] if fl else None
+            else:
+                try:
+                    v = float(v)
+                except ValueError:
+                    raise ValueError("工数ポイントは数字で入れてください（例 1.5）") from None
+                if v < 0:
+                    raise ValueError("工数ポイントは0以上で入れてください")
+        new[k] = v
+    changed = {k: v for k, v in new.items() if v != p[k]}
+    if not changed:
+        return {"ok": True, "changed": False}
+    overwrite = [k for k in changed if p[k] not in (None, "")]
+    reason = (reason or "").strip()
+    if overwrite and not reason:
+        raise ValueError("入っている値（" + "・".join(HEADER_FIELDS[k] for k in overwrite) + "）を変えるときは、理由を書いてください（履歴に残ります）")
+    now = store.now_s()
+    detail = "／".join(f"{HEADER_FIELDS[k]}: {p[k] if p[k] not in (None, '') else '空'} → {v if v not in (None, '') else '空'}"
+                       for k, v in changed.items())
+    if reason:
+        detail += "。理由: " + reason
+    with store.tx() as c:
+        c.execute(f"UPDATE project SET {','.join(k + '=?' for k in changed)}, updated_at=?, updated_by=? WHERE id=?",
+                  (*changed.values(), now, user_id, pid))
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                  (pid, now, user_id, "頭の欄", detail))
+    return {"ok": True, "changed": True, "fields": sorted(changed)}
+
+
 def set_launch_date(pid: str, date: str, reason: str, user_id: str) -> dict:
     """カルテで発売予定日を入れる・変える。変えたらタスクの目安を計算し直す（**期限は触らない**）。
 

@@ -918,6 +918,44 @@
   // **17枚をタブにしない。**タブにすると、開いていないタブの不備が見えなくなる。
   // **B「いま欠けているもの」を最上段に置くのがこの画面の設計そのもの。**
   // ══════════════════════════════════════════════════════
+  /** カルテの頭の欄を直す（点検 H-3）。空の欄を埋めるだけなら理由は要らない。発売予定日は下の別の欄 */
+  function headerEdit(pid, h, meta) {
+    var w = el("div");
+    var open = el("button", { type: "button", "class": "np-btn", text: "頭の欄を直す（社内呼称・開発タイプ・分類・担当など）" });
+    var f = el("form", { "class": "np-field", hidden: "hidden" });
+    function inp(name, label, size, val, extra) {
+      var i = el("input", Object.assign({ name: name, size: size, value: val === null || val === undefined ? "" : String(val) }, extra || {}));
+      return el("label", null, [txt(label + " "), i]);
+    }
+    var ft = el("select", { name: "flow_type", "aria-label": "開発タイプ" });
+    ft.appendChild(el("option", { value: "", text: "（未設定）" }));
+    (meta.flow_types || []).forEach(function (o) { var op = el("option", { value: o.code, text: o.label }); if (o.code === h.flow_type) op.setAttribute("selected", "selected"); ft.appendChild(op); });
+    f.appendChild(el("p", null, [inp("internal_name", "社内呼称", 28, h.internal_name), txt(" "), el("label", null, [txt("開発タイプ "), ft])]));
+    f.appendChild(el("p", null, [inp("cat1", "分類1", 10, h.cat1), txt(" "), inp("cat2", "分類2", 10, h.cat2), txt(" "), inp("cat3", "分類3", 10, h.cat3), txt(" "), inp("size", "サイズ", 8, h.size)]));
+    f.appendChild(el("p", null, [inp("area", "作成エリア", 12, h.area), txt(" "), el("label", null, [txt("担当 "), userSelect("owner", h.owner || "")]), txt(" "),
+      inp("effort_point", "工数ポイント", 5, h.effort_point, { inputmode: "decimal", placeholder: "空なら開発タイプから" })]));
+    f.appendChild(el("p", null, [inp("occasion", "機会（なぜその日か）", 40, h.occasion)]));
+    f.appendChild(el("p", null, [inp("reason", "入っている値を変える理由", 40, "", { placeholder: "空の欄を埋めるだけなら不要" })]));
+    f.appendChild(el("p", { "class": "np-sub", text: "開発タイプを変えても、いまのタスクは足しも消しもしません。発売予定日は下の「発売予定日」の欄で変えます（タスクの目安を計算し直すため）。" }));
+    var st = el("span", { "class": "np-status", role: "status" });
+    var cancel = el("button", { type: "button", text: "やめる" });
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "保存する" }), txt(" "), cancel, txt(" "), st]));
+    open.addEventListener("click", function () { f.hidden = false; open.hidden = true; });
+    cancel.addEventListener("click", function () { f.hidden = true; open.hidden = false; });
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = {}, names = [];
+      Array.prototype.forEach.call(f.elements, function (x) { if (x.name) { o[x.name] = x.value; if (x.name !== "reason") names.push(x.name); } });
+      o._fields = names.join(",");                 // 空にした欄も「空にした」と伝える（フォーム形式では空の値が落ちる）
+      st.className = "np-status"; st.textContent = "保存中…";
+      post("/api/projects/" + encodeURIComponent(pid) + "/header", o).then(function (r) {
+        if (!r.changed) { st.textContent = "変わったところはありません"; return; }
+        go();
+      }).catch(function (e) { st.className = "np-err"; st.textContent = "できませんでした: " + e.message; });
+    });
+    w.appendChild(btnRow([open])); w.appendChild(f);
+    return w;
+  }
   function viewProject(id) {
     loading();
     Promise.all([api("/api/projects/" + encodeURIComponent(id)), api("/api/meta")])
@@ -947,6 +985,7 @@
         if (h.effort_point === null && h.effort_point_note)
           head.appendChild(el("p", { "class": "np-warn", text: "工数ポイント: " + h.effort_point_note }));
         if (h.flow_note) head.appendChild(el("p", { "class": "np-warn", text: h.flow_note }));
+        if (h.editable) head.appendChild(headerEdit(d.id, h, meta));
         head.insertBefore(gateStrip(d.gates, true), head.children[1] || null);
         if (h.editable) head.appendChild(stageControl(d, meta));
         if (h.editable) head.appendChild(revenueControl(d));
@@ -2370,6 +2409,42 @@
 
   /** 繰り返しの仕事（ADR-108）。毎年・毎月・毎週は、時期が近づいたら「案件外の仕事」に起きる。毎日は一覧で見るだけ */
   var WEEKDAY = "月火水木金土日";
+  /** 一覧の行で「使う／使わない」を切り替える（点検 M-6）。時期が未定の行は押せない */
+  function routineQuick(x, canEdit) {
+    var w = el("div");
+    var st = el("span", { "class": "np-status", role: "status" });
+    if (!canEdit) { w.appendChild(txt(x.active ? "使う" : "使わない")); }
+    else {
+      w.className = "np-choice";
+      var und = /（(月|日)が未定）/.test(x.rule || "");
+      [["1", "使う"], ["0", "使わない"]].forEach(function (o) {
+        var on = String(x.active ? 1 : 0) === o[0];
+        var bt = el("button", { type: "button", "aria-pressed": String(on), text: o[1] });
+        if (o[0] === "1" && und && !on) { bt.setAttribute("disabled", "disabled"); bt.setAttribute("title", "時期が未定です。「直す」で時期を入れてください"); }
+        bt.addEventListener("click", function () {
+          if (on) return;
+          st.textContent = "保存中…";
+          post("/api/routines/" + x.id + "/quick", { active: o[0] }).then(function () { viewRoutines(); })
+            .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+        });
+        w.appendChild(bt); w.appendChild(txt(" "));
+      });
+      if (und) w.appendChild(el("div", { "class": "np-sub", text: "時期が未定のため「使う」にできません" }));
+    }
+    if (x.note) w.appendChild(el("div", { "class": "np-sub", text: x.note }));
+    w.appendChild(st);
+    return w;
+  }
+  function routineAssignee(x) {
+    var sel = userSelect("assignee", x.assignee || "");
+    var st = el("span", { "class": "np-status", role: "status" });
+    sel.addEventListener("change", function () {
+      st.textContent = "保存中…";
+      post("/api/routines/" + x.id + "/quick", { field: "assignee", assignee: sel.value }).then(function () { st.textContent = "保存しました"; })
+        .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+    });
+    return el("span", null, [sel, txt(" "), st]);
+  }
   function viewRoutines(after) {
     loading();
     Promise.all([api("/api/routines"), api("/api/meta")]).then(function (r) {
@@ -2399,11 +2474,12 @@
         });
         var act = el("input", { type: "checkbox", name: "active" }); if (x.active) act.setAttribute("checked", "checked");
         f.appendChild(el("p", null, [inp("title", "何をするか（必須）", 30, x.title), txt(" "), cad]));
-        var pY = el("p", null, [inp("months", "月（毎年・例 4,8,12）", 10, x.months), txt(" "), inp("day", "日（1〜31 か 月末）", 5, x.day === "last" ? "月末" : x.day)]);
+        var mY = inp("months", "月（毎年・例 4,8,12）", 10, x.months);
+        var pY = el("p", null, [mY, txt(" "), inp("day", "日（1〜31 か 月末）", 5, x.day === "last" ? "月末" : x.day)]);
         var pW = el("p", null, [txt("曜日（毎週） "), wd]);
         var pD = el("p", null, [inp("timing", "いつ（毎日・例 出勤時）", 14, x.timing)]);
         f.appendChild(pY); f.appendChild(pW); f.appendChild(pD);
-        function show() { var v = cad.value; pY.hidden = !(v === "yearly" || v === "monthly"); pW.hidden = v !== "weekly"; pD.hidden = v !== "daily"; }
+        function show() { var v = cad.value; pY.hidden = !(v === "yearly" || v === "monthly"); mY.hidden = v !== "yearly"; pW.hidden = v !== "weekly"; pD.hidden = v !== "daily"; }
         cad.addEventListener("change", show); show();
         f.appendChild(el("p", null, [txt("ロール "), roleSelect(meta, x.role), txt(" "), userSelect("assignee", x.assignee || ""), txt(" "), inp("hours", "時間", 4, x.hours), txt(" "), inp("lead_days", "何日前に起こすか", 4, x.lead_days, "既定")]));
         f.appendChild(el("p", null, [inp("reason", "なぜ（実行理由）", 30, x.reason), txt(" "), inp("manual", "マニュアル・記入シート", 30, x.manual)]));
@@ -2429,12 +2505,12 @@
         card.appendChild(el("div", { "class": "np-tablewrap" }, [table(head, rows.map(function (x) {
           var a = el("td");
           if (d.can_edit) { var e1 = el("button", { type: "button", text: "直す" }); e1.addEventListener("click", function () { while (slot.firstChild) slot.removeChild(slot.firstChild); slot.appendChild(form(x)); slot.scrollIntoView({ block: "nearest" }); }); a.appendChild(e1); }
-          var state = el("td", { text: (x.active ? "使う" : "使わない") + (x.note ? "（" + x.note + "）" : "") });
+          var state = el("td", null, [routineQuick(x, d.can_edit)]);
           var manual = x.manual && /^https?:\/\//i.test(x.manual) ? el("a", { href: x.manual, rel: "noopener noreferrer", target: "_blank", text: "開く" }) : txt(dash(x.manual));
           var ap = routineAiProp((d.ai_props || {})[String(x.id)], d.can_edit);
           if (k === "daily") return el("tr", null, [el("td", { text: dash(x.timing) }), el("td", null, [txt(x.title), ap]), el("td", { text: dash(x.reason) }), el("td", null, [manual]), state, a]);
           return el("tr", null, [el("td", { "class": "np-nowrap", text: x.rule }), el("td", null, [txt(x.title), x.reason ? el("div", { "class": "np-sub", text: x.reason }) : txt(""), ap]),
-            el("td", { "class": "np-nowrap", text: x.active ? dash(x.next) : "—" }), el("td", { text: dash(x.role_label) + (x.assignee ? "・" + x.assignee : "") }),
+            el("td", { "class": "np-nowrap", text: x.active ? dash(x.next) : "—" }), el("td", null, [txt(dash(x.role_label)), d.can_edit ? el("div", null, [routineAssignee(x)]) : txt(x.assignee ? "・" + x.assignee : "")]),
             el("td", { "class": "np-nowrap", text: x.last ? x.last.occurs_on + "（" + (x.last.status || "—") + "）" : "—" }), state, a]);
         }))]));
         b.appendChild(card);
@@ -2509,7 +2585,8 @@
             // 期限切れ（未完）の行に左の帯と「！期限切れ n日」（FR-195 第2段）
             var late = !!(t.due_on && t.due_on < d.today && t.status !== "完了" && t.status !== "対象外");
             rows.push(el("tr", { "data-tone": late ? "alert" : null }, [
-              el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t)]),
+              el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t),
+                t.sheet_diff ? el("div", null, [tag("シートと違う", "alert")]) : null]),
               el("td", { "class": "np-nowrap" }, [txt(dash(t.due_on)), late ? overdueFlag(t.due_on, d.today) : null]),
               el("td", null, [t.project_id
                 ? el("a", { href: "#/projects/" + t.project_id, text: t.project })
@@ -5763,6 +5840,27 @@
         navBtn("#/settings/templates", "標準タスクのひな形・工数ポイント係数"),
         navBtn("#/settings/ideas-import", "アイデアの一括登録")]));
       b.appendChild(dc);
+
+      // シートとの同期（点検 H-1・ADR-119）。並行運用の間、前回の同期の後にアプリで変わった行を管理者が確かめる
+      var syc = el("div", { "class": "np-card", id: "np-set-sheetsync" });
+      syc.appendChild(el("h2", { text: "進捗管理シートとの同期" }));
+      b.appendChild(syc);
+      api("/api/sheet-sync").then(function (d) {
+        syc.appendChild(el("p", { "class": "np-sub", text: (d.phase === "parallel"
+          ? mdLabel(d.sheet_until) + " までは進捗管理シートが正です。毎週月曜の朝にシートの内容をアプリへ写します。"
+            + "下の行は、前回写した後にアプリで進捗・期限などが変わった行で、次の同期ではシートの値が入りません。シートとアプリのどちらかに揃えてください。"
+          : "アプリが正になりました。シートからは写しません。") }));
+        syc.appendChild(el("p", null, [txt("前回の同期: "), el("strong", { text: d.last_sheet_date ? "シートの " + d.last_sheet_date + " の内容" : "まだありません" }),
+          txt(d.last_applied_at ? "（" + d.last_applied_at.slice(0, 16).replace("T", " ") + " に写しました）" : "")]));
+        if (d.phase !== "parallel") return;
+        if (!d.rows.length) { syc.appendChild(el("p", { "class": "np-note", text: "シートと違う行はありません。" })); return; }
+        syc.appendChild(el("p", null, [tag("シートと違う " + d.rows.length + " 件", "alert")]));
+        syc.appendChild(table(["案件", "タスク", "いまの進捗", "期限"], d.rows.map(function (x) {
+          return el("tr", null, [
+            el("td", null, [x.project_id ? el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: x.project }) : txt(x.project)]),
+            el("td", { text: x.title }), el("td", { text: x.status }), el("td", { "class": "np-nowrap", text: dash(x.due_on) })]);
+        })));
+      }).catch(function (e) { syc.appendChild(el("p", { "class": "np-err", text: e.message })); });
 
       // 自動化依頼（2026-10-19 十文字さん「設定内に移動してほしい」。それまではタスクの画面の下にあった）
       var auc = el("div", { "class": "np-card", id: "np-set-automation" });

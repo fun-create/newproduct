@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
-import hashlib
 import json
 import re
 import sys
@@ -162,12 +161,8 @@ def plan_for(name: str, plan: list[dict]) -> dict | None:
 
 
 # ── アプリと比べる ─────────────────────────────────────────
-def _digest(*vals) -> str:
-    return hashlib.sha256(json.dumps(vals, ensure_ascii=False, default=str).encode()).hexdigest()[:16]
-
-
-def _task_vals(t) -> tuple:
-    return (t["status"], t["start_on"], t["due_on"], t["role"], t["hours"])
+# 指紋の作り方は画面（設定の「シートとの同期」・タスクの「シートと違う」）と共用する（ADR-119）
+from app.sheetsync import digest as _digest, vals as _task_vals   # noqa: E402
 
 
 def stage_for(launch: str | None, month: int | None, today: dt.date) -> str:
