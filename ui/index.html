@@ -31,10 +31,10 @@
   </a>
   <nav class="fca-nav" aria-label="主要メニュー">
     <a href="#/"          data-view="home">ダッシュボード</a>
-    <a href="#/ideas"     data-view="ideas">アイデア</a>
-    <a href="#/plan"      data-view="plan">プラン</a>
-    <a href="#/projects"  data-view="projects">案件</a>
     <a href="#/tasks"     data-view="tasks">タスク</a>
+    <a href="#/projects"  data-view="projects">案件</a>
+    <a href="#/plan"      data-view="plan">年間プラン</a>
+    <a href="#/ideas"     data-view="ideas">アイデア</a>
     <a href="#/sales"     data-view="sales">売上・原価</a>
     <a href="#/settings"  data-view="settings">設定</a>
   </nav>
@@ -52,16 +52,18 @@
 <script type="application/json" id="fca-nav-data">
 [
  {"view":"home",     "hash":"#/",         "label":"ダッシュボード"},
- {"view":"ideas",    "hash":"#/ideas",    "label":"アイデア"},
- {"view":"plan",     "hash":"#/plan",     "label":"プラン"},
- {"view":"projects", "hash":"#/projects", "label":"案件"},
  {"view":"tasks",    "hash":"#/tasks",    "label":"タスク"},
+ {"view":"projects", "hash":"#/projects", "label":"案件"},
+ {"view":"plan",     "hash":"#/plan",     "label":"年間プラン"},
+ {"view":"ideas",    "hash":"#/ideas",    "label":"アイデア"},
  {"view":"sales",    "hash":"#/sales",    "label":"売上・原価"},
  {"view":"settings", "hash":"#/settings", "label":"設定"}
 ]
 </script>
 
 <main id="main" class="fca-main" tabindex="-1">
+  <!-- 切り替えの段階（app/cutover.py）。並行運用の間だけ app.js が埋めて出す（点検 H-1） -->
+  <p id="np-phase" class="np-phase" role="note" hidden></p>
   <h1 class="fca-h1" id="view-title">ダッシュボード</h1>
   <div id="view" class="fca-card">
     <p class="fca-note">読み込んでいます。</p>

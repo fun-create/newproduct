@@ -64,7 +64,7 @@ class Requests(unittest.TestCase):
         self.m.accept_work_item(wid, "w")
         r, _ = self.row(wid)
         self.assertEqual(r["received_at"], r["accepted_at"])
-        own = self.m.create_work_item({"kind": "案件外", "title": "FBA納品"}, "u")["id"]
+        own = self.m.create_work_item({"kind": "案件外", "title": "FBA納品", "role": "admin"}, "u")["id"]
         with self.assertRaises(ValueError):
             self.m.receive_work_item(own, "u")
 

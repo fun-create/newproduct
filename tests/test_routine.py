@@ -37,8 +37,13 @@ class Routine(unittest.TestCase):
         self.store, self.m = store, routine
         with store.tx() as c:
             c.execute("INSERT INTO role_member (role_code,user_id,granted_at) VALUES ('devdept','chieko',?)", (store.now_s(),))
+        import auth
+        self._users = auth.users
+        auth.users = lambda: [{"user_id": "chieko"}]
 
     def tearDown(self):
+        import auth
+        auth.users = self._users
         self.store.close()
         for s in ("", "-wal", "-shm"):
             try:
@@ -60,6 +65,11 @@ class Routine(unittest.TestCase):
                          [self.d("2026-11-30")], "31日の無い月は月末")
         self.assertEqual(occ({"cadence": "yearly", "months": "4,8,12", "day": "1"}, self.d("2026-10-19"), self.d("2027-05-01")),
                          [self.d("2026-12-01"), self.d("2027-04-01")])
+
+    def test_unknown_assignee_is_refused(self):
+        # 点検 H-5: 綴り違いの担当で保存でき、そこから起きる仕事が誰の「自分のやること」にも出なかった
+        with self.assertRaises(ValueError):
+            self.m.save({"title": "x", "cadence": "weekly", "weekdays": "4", "assignee": "no_such_user"}, "chieko")
 
     def test_ensure_creates_once_and_respects_active(self):
         r = self.m.save({"title": "翌週のプラン作成", "cadence": "weekly", "weekdays": "4", "role": "devdept", "assignee": "chieko", "hours": "0.5"}, "chieko")

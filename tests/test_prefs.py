@@ -90,12 +90,13 @@ class Prefs(unittest.TestCase):
         import server
         self.m.save("a", {"font": "xlarge", "density": "compact", "start": "#/sales"})
         got = server._root_attrs({"user_id": "a", "theme": "dark"})
-        self.assertEqual(got, ' data-theme="dark" data-np-font="xlarge" data-np-density="compact" data-np-start="#/sales"')
+        self.assertTrue(got.startswith(' data-theme="dark" data-np-font="xlarge" data-np-density="compact" data-np-start="#/sales"'), got)
+        self.assertRegex(got, r' data-np-phase="(parallel|app)" data-np-sheet-until="\d{4}-\d{2}-\d{2}"$', "切り替えの段階（ADR-119）")
         self.assertNotIn("data-theme", server._root_attrs({"user_id": "a", "theme": "auto"}), "auto は端末に従う")
         self.assertNotIn("data-theme", server._root_attrs({"user_id": "a", "theme": "\"><x"}))
         page = server._page("index.html", USER="u", ROOTATTR=server._root_attrs({"user_id": "a"})).decode()
         self.assertNotIn("{ROOTATTR}", page)
-        self.assertIn('data-np-start="#/sales">', page)
+        self.assertIn('data-np-start="#/sales" data-np-phase=', page)
 
 
 if __name__ == "__main__":

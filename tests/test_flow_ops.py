@@ -105,7 +105,9 @@ class Ops(unittest.TestCase):
         r = self.store.one("SELECT status, accepted_at FROM work_item WHERE id=?", (w["id"],))
         self.assertEqual(r["status"], "完了")
         self.assertIsNotNone(r["accepted_at"])
-        o = self.t.create_work_item({"kind": "案件外", "title": "FBA納品", "hours": "2"}, "u")
+        with self.assertRaises(ValueError):                              # 担当もロールも空は断る（点検 H-5）
+            self.t.create_work_item({"kind": "案件外", "title": "FBA納品", "hours": "2"}, "u")
+        o = self.t.create_work_item({"kind": "案件外", "title": "FBA納品", "hours": "2", "role": "admin"}, "u")
         self.t.set_status("work_item", o["id"], "完了", "u")          # 案件外は普通に閉じる
         with self.assertRaises(ValueError):
             self.t.accept_work_item(o["id"], "u")

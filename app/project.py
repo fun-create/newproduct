@@ -116,6 +116,13 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
     ep = f.get("effort_point")
     if ep in (None, ""):
         ep = fl["effort_point"] if fl else None     # NULL なら NULL のまま
+    # 発売予定日はカルテの set_launch_date と同じ検査（点検 H-5: `2026/12/1` がそのまま入り、並べ替え・目安・按分を狂わせていた）
+    ld = (f.get("launch_date") or "").strip() or None
+    if ld:
+        try:
+            ld = _dt.date.fromisoformat(ld).isoformat()
+        except ValueError:
+            raise ValueError("発売予定日は 2026-12-01 の形で入れてください") from None
     with store.tx() as c:
         c.execute(
             "INSERT INTO project (id,code,internal_name,flow_type,area,launch_date,"
@@ -126,7 +133,7 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
             (pid, (f.get("code") or "").strip() or None,
              (f.get("internal_name") or "").strip() or None, ft,
              (f.get("area") or "").strip() or None,
-             (f.get("launch_date") or "").strip() or None,
+             ld,
              (f.get("occasion") or "").strip() or None,
              (f.get("idea_id") or "").strip() or None,
              (f.get("summary") or "").strip() or None,
@@ -233,6 +240,7 @@ def listing(args: dict | None = None) -> dict:
             "effort_point_note": (None if p["effort_point"] is not None
                                   else "未確定"),
             "owner": p["owner"],
+            "from_sheet": bool(p["source_sheet"]),
             "missing_n": sum(len(g["missing"]) for g in b
                              if g["state"] in ("判定待ち", "差戻し", "保留")),
             # R-2。**移行期間の正本を列で出す**（§4-4）
@@ -306,7 +314,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
             if p["effort_point"] is None else None,
             "launch_date": p["launch_date"], "occasion": p["occasion"],
             "owner": p["owner"], "stage": p["stage"], "area": p["area"],
-            "summary": p["summary"],
+            "summary": p["summary"], "from_sheet": bool(p["source_sheet"]),
             "revenue": ("含めない" if not p["revenue_counted"]
                         else f"含める（{p['revenue_basis'] or '方式未選択'}）"),
             "source_of_truth": p["source_of_truth"],

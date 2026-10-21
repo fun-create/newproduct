@@ -197,8 +197,9 @@ def save(f: dict, user_id: str) -> dict:
     lead = (f.get("lead_days") or "").strip()
     if lead and not (lead.isdigit() and int(lead) <= 120):
         raise ValueError("何日前に起こすかは 0〜120 で入れてください")
+    from app.task import check_user as _check_user
     vals.update({"reason": (f.get("reason") or "").strip()[:300] or None, "manual": (f.get("manual") or "").strip()[:500] or None,
-                 "role": role, "assignee": (f.get("assignee") or "").strip() or None, "hours": hours,
+                 "role": role, "assignee": _check_user(f.get("assignee")) or None, "hours": hours,
                  "lead_days": int(lead) if lead else None,
                  # 取り込みで付けた「時期を決めてください」は、時期を決めて保存したら外す
                  "note": re.sub(r"^時期「[^」]*」が1つの(月|日)に決まらないので、使う前に(月|日)を決めてください$", "",

@@ -127,6 +127,24 @@
   var BOX = document.getElementById("view");
   var TITLE = document.getElementById("view-title");
 
+  // 切り替えの段階（app/cutover.py・点検 H-1）。11/8 までは進捗管理シートが正
+  var PHASE = document.documentElement.getAttribute("data-np-phase") || "app";
+  var SHEET_UNTIL = document.documentElement.getAttribute("data-np-sheet-until") || "";
+  function mdLabel(iso) { var m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso || ""); return m ? (+m[1]) + "/" + (+m[2]) : iso; }
+  (function () {
+    var pb = document.getElementById("np-phase");
+    if (PHASE !== "parallel" || !pb) return;
+    pb.appendChild(el("strong", { text: "並行運用中（" + mdLabel(SHEET_UNTIL) + " まで）: " }));
+    pb.appendChild(txt("進捗・期限・新しい案件とタスクは進捗管理シートに書きます。アプリで変えた行は、月曜の同期でシートの値が入らなくなります。"
+      + "アプリで行うのは担当の割り振りと、見る練習です。"));
+    pb.hidden = false;
+  })();
+  // 「正本」の語。シートから移した案件は、並行運用の間はシートが正
+  function sotLabel(r) {
+    if (r.source_of_truth !== "app") return "Drive（アプリでは編集不可）";
+    return PHASE === "parallel" && r.from_sheet ? "進捗管理シート（" + mdLabel(SHEET_UNTIL) + " まで）" : "アプリ";
+  }
+
   function setTitle(label, sub) {
     TITLE.textContent = label;
     // **タブを5枚開いて見比べるのが日常。**タイトルが全部同じだと選べない（§5-1）
@@ -848,7 +866,7 @@
             .concat([el("td", { text: r.revenue }),
               el("td", { "class": "np-num" }, [el("a", { href: "#/projects/" + r.id, text: String(r.missing_n) + " 件" })]),
               // R-2。**移行期間の正本を列で出す**
-              el("td", { text: r.source_of_truth === "app" ? "アプリ" : "Drive（編集不可）" })]));
+              el("td", { text: sotLabel(r) })]));
         })));
         b.appendChild(el("p", { "class": "np-sub", text: "ゲートの記号: ● 通過 ／ ◐ 待ち ／ ◼ 差戻・保留・中止 ／ ○ 未 ／ / 対象外。語は次のゲートだけを書いています。" }));
       }
@@ -870,11 +888,11 @@
         text: o.label + (o.effort_point === null ? "（工数ポイント未確定）" : "") }));
     });
     f.appendChild(s);
-    f.appendChild(inp("launch_date", "発売予定日 YYYY-MM-DD"));
+    f.appendChild(el("label", null, [txt("発売予定日 "), el("input", { name: "launch_date", type: "date", "aria-label": "発売予定日" })]));
     f.appendChild(inp("occasion", "機会（なぜその日か）"));
     f.appendChild(inp("cat1", "分類1")); f.appendChild(inp("cat2", "分類2"));
     f.appendChild(inp("size", "サイズ"));
-    f.appendChild(inp("owner", "担当"));
+    f.appendChild(el("label", null, [txt("担当 "), userSelect("owner", "")]));
     f.appendChild(el("button", { type: "submit", text: "起こす" }));
     var msg = el("p", { "class": "np-note" });
     f.addEventListener("submit", function (ev) {
@@ -924,7 +942,7 @@
           row("売上計上", h.revenue),
           h.effort_point === null ? el("tr", null, [el("th", { text: "工数ポイント" }), el("td", null, [tag("未確定", "neutral")])])
             : row("工数ポイント", String(h.effort_point)),
-          row("正本（移行期間）", h.source_of_truth === "app" ? "アプリ" : "Drive（アプリでは編集不可）")
+          row("正本（移行期間）", sotLabel(h))
         ]));
         if (h.effort_point === null && h.effort_point_note)
           head.appendChild(el("p", { "class": "np-warn", text: "工数ポイント: " + h.effort_point_note }));
@@ -1642,6 +1660,26 @@
 
   /** 担当を入れる（FR-121 の前提）。一覧は /api/users（共通ログインID）。空は「担当なし」 */
   var USERS = null;                                // /api/users の約束（画面を開いている間は1回）
+  function usersP() {
+    if (!USERS) USERS = api("/api/users").then(function (r) { return r.rows; }, function (e) { USERS = null; throw e; });
+    return USERS;
+  }
+  /** 担当を選ぶ欄（利用者台帳から）。**手で打たせない**（点検 H-5: 綴り違いで誰の「自分のやること」にも出ない仕事ができた） */
+  function userSelect(name, cur, emptyLabel) {
+    var sel = el("select", { name: name, "aria-label": "担当" });
+    sel.appendChild(el("option", { value: "", text: emptyLabel || "（担当なし）" }));
+    usersP().then(function (rows) {
+      rows.forEach(function (u) {
+        var o = el("option", { value: u.user_id, text: u.user_id + (u.name && u.name !== u.user_id ? " " + u.name : "") });
+        if (u.user_id === cur) o.setAttribute("selected", "selected");
+        sel.appendChild(o);
+      });
+      if (cur && !rows.some(function (u) { return u.user_id === cur; })) {
+        var o2 = el("option", { value: cur, text: cur + "（台帳に無い）" }); o2.setAttribute("selected", "selected"); sel.appendChild(o2);
+      }
+    }).catch(function () { /* 読めなければ空のまま。保存はサーバが確かめる */ });
+    return sel;
+  }
   function assigneeCell(kind, t) {
     var c = el("td", { "class": "np-nowrap" });
     var sel = el("select", { "aria-label": "担当" });
@@ -1657,8 +1695,7 @@
       }
     }
     // 約束ごと持つ（2026-10-18: 値だけ持つと、最初の返事より前に描いた行の数だけ取りに行っていた。カルテ 20 行で 20 回）
-    if (!USERS) USERS = api("/api/users").then(function (r) { return r.rows; }, function (e) { USERS = null; throw e; });
-    USERS.then(fill)
+    usersP().then(fill)
       .catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); });
     var st = el("span", { "class": "np-status", role: "status" });
     sel.addEventListener("change", function () {
@@ -2368,7 +2405,7 @@
         f.appendChild(pY); f.appendChild(pW); f.appendChild(pD);
         function show() { var v = cad.value; pY.hidden = !(v === "yearly" || v === "monthly"); pW.hidden = v !== "weekly"; pD.hidden = v !== "daily"; }
         cad.addEventListener("change", show); show();
-        f.appendChild(el("p", null, [txt("ロール "), roleSelect(meta, x.role), txt(" "), inp("assignee", "担当（ログインID）", 10, x.assignee), txt(" "), inp("hours", "時間", 4, x.hours), txt(" "), inp("lead_days", "何日前に起こすか", 4, x.lead_days, "既定")]));
+        f.appendChild(el("p", null, [txt("ロール "), roleSelect(meta, x.role), txt(" "), userSelect("assignee", x.assignee || ""), txt(" "), inp("hours", "時間", 4, x.hours), txt(" "), inp("lead_days", "何日前に起こすか", 4, x.lead_days, "既定")]));
         f.appendChild(el("p", null, [inp("reason", "なぜ（実行理由）", 30, x.reason), txt(" "), inp("manual", "マニュアル・記入シート", 30, x.manual)]));
         f.appendChild(el("p", null, [el("label", null, [act, txt(" 使う（時期が来たら仕事を起こす）")]), txt(" "), inp("note", "メモ", 24, x.note)]));
         var st = el("span", { "class": "np-status", role: "status" });
@@ -2619,16 +2656,23 @@
     var dept = el("input", { name: "dept", size: "10", "aria-label": "依頼先の部署" });
     var due = el("input", { name: "due_on", type: "date", "aria-label": "期限" });
     var hours = el("input", { name: "hours", size: "4", "aria-label": "時間" });
-    var who = el("input", { name: "assignee", size: "8", "aria-label": "担当" });
+    var who = userSelect("assignee", "");
+    var role = roleSelect({}, "");
+    api("/api/meta").then(function (m) { (m.roles || []).forEach(function (r) { role.appendChild(el("option", { value: r.code, text: r.label })); }); })
+      .catch(function () { /* ロールが読めなければ担当で */ });
     var p1 = el("p", null, [txt("何をするか "), title, txt(" 区分 "), cat]);
     if (kind === "他部署依頼") { p1.appendChild(txt(" 依頼先（必須） ")); p1.appendChild(dept); }
-    var bar = el("p", null, [txt("期限 "), due, txt(" 時間 "), hours, txt(" 担当 "), who, txt(" "), el("button", { type: "submit", text: "起票" })]);
-    f.appendChild(p1); f.appendChild(bar);
+    var p2 = el("p", null, [txt("担当 "), who, txt(" ロール "), role,
+      el("span", { "class": "np-sub", text: kind === "案件外" ? "　どちらか1つは必須（両方空だと、誰の「自分のやること」にも出ません）" : "　受け側で決めるなら空のままで構いません" })]);
+    var msg = el("span", { "class": "np-status", role: "status" });
+    var bar = el("p", null, [txt("期限 "), due, txt(" 時間（h） "), hours, txt(" "), el("button", { type: "submit", text: "起票" }), txt(" "), msg]);
+    f.appendChild(p1); f.appendChild(p2); f.appendChild(bar);
     f.addEventListener("submit", function (ev) {
       ev.preventDefault();
+      msg.className = "np-status"; msg.textContent = "保存中…";
       post("/api/work-items", { kind: kind, title: title.value, category: cat.value, dept: dept.value,
-        due_on: due.value, hours: hours.value, assignee: who.value })
-        .then(function () { go(); }).catch(function (e) { bar.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        due_on: due.value, hours: hours.value, assignee: who.value, role: role.value })
+        .then(function () { go(); }).catch(function (e) { msg.className = "np-err"; msg.textContent = "できませんでした: " + e.message; });
     });
     return f;
   }
@@ -4054,7 +4098,7 @@
           "この年度の版がまだありません。" }));
         return;
       }
-      setTitle("プラン", d.current.version.label);
+      setTitle("年間プラン", d.current.version.label);
       b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く"), navBtn("#/simulate", "販売計画シミュレーション")]));
       b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
       d.current._can_link = d.can_link;

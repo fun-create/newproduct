@@ -192,6 +192,8 @@ def _root_attrs(user: dict) -> str:
     out.append(f' data-np-font="{html.escape(pf["font"])}"')
     out.append(f' data-np-density="{html.escape(pf["density"])}"')
     out.append(f' data-np-start="{html.escape(pf["start"])}"')
+    from app import cutover
+    out.append(f' data-np-phase="{cutover.phase()}" data-np-sheet-until="{cutover.last_sheet_day()}"')
     return "".join(out)
 
 

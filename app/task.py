@@ -210,14 +210,21 @@ def set_status(kind: str, task_id: int, status: str, user_id: str,
                       (status, done, task_id))
 
 
-def set_assignee(kind: str, task_id: int, assignee: str, user_id: str) -> dict:
-    """担当を入れる・外す（FR-121 の前提。担当が無いタスクはカレンダーへ送れない）。
-    **知らない利用者は入れない**（綴り違いで誰の一覧にも出ないタスクになる）。空は「担当なし」。"""
+def check_user(assignee) -> str:
+    """担当に入れる人を確かめる。**知らない利用者は入れない**（綴り違いで誰の一覧にも出ない仕事になる。
+    2026-10-20 の点検 H-5: 案件外の仕事・繰り返しの仕事の担当は自由入力で、`no_such_user` が通っていた）。空は空のまま。"""
     import auth
-    table = "task" if kind == "task" else "work_item"
     a = (assignee or "").strip()
     if a and a not in {u.get("user_id") for u in auth.users()}:
         raise ValueError(f"利用者 {a!r} はこのアプリの利用者台帳にいません")
+    return a
+
+
+def set_assignee(kind: str, task_id: int, assignee: str, user_id: str) -> dict:
+    """担当を入れる・外す（FR-121 の前提。担当が無いタスクはカレンダーへ送れない）。
+    **知らない利用者は入れない**（綴り違いで誰の一覧にも出ないタスクになる）。空は「担当なし」。"""
+    table = "task" if kind == "task" else "work_item"
+    a = check_user(assignee)
     if store.one(f"SELECT 1 FROM {table} WHERE id=?", (task_id,)) is None:
         raise LookupError("そのタスクがありません")
     with store.tx() as c:
@@ -234,8 +241,9 @@ ASSIGNERS = ("devdept", "admin", "president")
 
 
 def can_assign(user_id: str) -> bool:
-    from app import gate
-    return bool(set(gate.roles_of(user_id)) & set(ASSIGNERS))
+    """まとめての割り振りは**ログインできる人なら誰でも**（2026-10-21 十文字さん判断・点検 L-10）。
+    1行ずつの担当は誰でも変えられ、シートも誰でも書けた。変えた記録は監査に残る。"""
+    return bool(user_id)
 
 
 def unassigned_summary() -> dict:
@@ -261,7 +269,7 @@ def assign_bulk(kind: str, project_id: str | None, role: str | None, assignee: s
     """担当が空の未完了タスクに、まとめて担当を入れる。**入っている担当は変えない。**"""
     import auth
     if not can_assign(user_id):
-        raise PermissionError("担当をまとめて割り振れるのは、商品開発部・管理者・社長の業務ロールの人です")
+        raise PermissionError("ログインしてから割り振ってください")
     a = (assignee or "").strip()
     if not a or a not in {u.get("user_id") for u in auth.users()}:
         raise ValueError("割り振る人を選んでください（このアプリの利用者だけ）")
@@ -732,6 +740,9 @@ def create_work_item(f: dict, user_id: str) -> dict:
     role = (f.get("role") or "").strip() or None
     if role and store.one("SELECT 1 FROM role WHERE code=?", (role,)) is None:
         raise ValueError("知らないロールです")
+    assignee = check_user(f.get("assignee"))
+    if kind == "案件外" and not role and not assignee:      # 他部署依頼は受け側の部署が持つ
+        raise ValueError("担当かロールのどちらかを選んでください（どちらも空だと、誰の「自分のやること」にも出ません）")
     due = (f.get("due_on") or "").strip() or None
     if due:
         try:
@@ -749,7 +760,7 @@ def create_work_item(f: dict, user_id: str) -> dict:
         wid = c.execute("INSERT INTO work_item (kind,title,category,dept,role,assignee,due_on,hours,"
                         "status,created_at) VALUES (?,?,?,?,?,?,?,?,'未着手',?)",
                         (kind, title, (f.get("category") or "").strip()[:60] or None, dept, role,
-                         (f.get("assignee") or "").strip()[:60] or None, due, hours,
+                         assignee or None, due, hours,
                          store.now_s())).lastrowid
     return {"ok": True, "id": wid}
 

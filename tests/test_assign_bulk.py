@@ -78,8 +78,10 @@ class AssignBulk(unittest.TestCase):
         self.assertEqual(self.m.unassigned_summary()["total"], 1)
 
     def test_permission_and_unknown_user(self):
+        # 業務ロールの無い人でも割り振れる（2026-10-21 十文字さん判断・1行ずつの担当と揃える）
+        self.assertEqual(self.m.assign_bulk("task", self.pid, "admin", "chieko", "mayumi")["assigned"], 2)
         with self.assertRaises(PermissionError):
-            self.m.assign_bulk("task", self.pid, "admin", "chieko", "mayumi")
+            self.m.assign_bulk("task", self.pid, "admin", "chieko", "")
         with self.assertRaises(ValueError):
             self.m.assign_bulk("task", self.pid, "admin", "nobody", "chieko")
         with self.assertRaises(LookupError):

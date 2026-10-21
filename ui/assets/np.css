@@ -468,3 +468,8 @@ tr.np-edit-row > td { background: var(--fca-bg); }
 /* AI の案（FR-200）: 情報＝枠だけ */
 .np-aiprop { margin-top: .4rem; padding: .3rem .5rem; border: 1px dashed var(--np-info-line); border-radius: 6px; }
 .np-aiprop > p { margin: 0 0 .2rem; }
+
+/* 並行運用の帯（点検 H-1・ADR-119）。情報の系統（枠だけ）。全画面の見出しの上に1本 */
+.np-phase { border: 1px solid var(--np-info-line); border-left-width: 6px; background: var(--np-info-bg); color: var(--fca-ink);
+  padding: .5rem .75rem; margin: 0 0 .75rem; border-radius: 4px; }
+.np-phase strong { color: var(--np-info-ink); }
