@@ -300,7 +300,9 @@ class H(BaseHTTPRequestHandler):
             except ValueError:
                 raise ValueError("JSON が読めません") from None
             return {k: ("" if v is None else v) for k, v in d.items()} if isinstance(d, dict) else {}
-        return {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
+        # **空の欄も届ける**（keep_blank_values。2026-10-23 十文字さん承認・FR-222）。落とすと、入っている値を
+        # 空に戻す操作（枠の作成エリア・担当を消す 等）が黙って何もしなかった。「送られてきた欄だけ直す」口は、空を「空にする」と読む
+        return {k: v[0] for k, v in urllib.parse.parse_qs(raw, keep_blank_values=True).items()}
 
     # ── 入口 ────────────────────────────────────────────
     def do_GET(self):

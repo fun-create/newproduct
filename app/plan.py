@@ -509,9 +509,14 @@ def update_slot(slot_id: str, user_id: str, **f) -> dict:
         v = f[k]
         v = None if (v is None or str(v).strip() == "") else str(v).strip()
         if k == "effort_point":
-            sets.append("effort_src=?")
-            p.append("manual" if v is not None else None)
-            v = _num_ok(v, "工数ポイント") if v is not None else None
+            if v is None:
+                # 空にしたら開発タイプの係数に戻す（欄の名前「空なら開発タイプから」のとおり・点検 M-7）
+                ft = (str(f.get("flow_type") or "").strip() or None) if "flow_type" in f else s["flow_type"]
+                v = store.val("SELECT effort_point FROM flow_type WHERE code=?", (ft,)) if ft else None
+                sets.append("effort_src=?"); p.append("flow_type" if v is not None else None)
+            else:
+                sets.append("effort_src=?"); p.append("manual")
+                v = _num_ok(v, "工数ポイント")
         sets.append(f"{k}=?")
         p.append(v)
     if "launch_date" in f and f["launch_date"]:

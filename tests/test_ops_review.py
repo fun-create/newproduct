@@ -221,5 +221,28 @@ class OpsReview(unittest.TestCase):
             plan.detach_idea(sid, "u")                                   # 案件になった枠からは外せない
 
 
+    def test_blank_form_values_arrive_and_clear(self):
+        """空の欄も届く（FR-222）。届かないと、入っている値を空に戻す操作が黙って何もしなかった"""
+        import io
+        import types
+        import server
+        raw = "area=&owner=&product=%E6%8E%A8%E3%81%97".encode()
+        fake = types.SimpleNamespace(headers={"Content-Length": str(len(raw)), "Content-Type": "application/x-www-form-urlencoded"},
+                                     rfile=io.BytesIO(raw))
+        d = server.H.body(fake)
+        self.assertEqual(d, {"area": "", "owner": "", "product": "推し"})
+        from app import plan
+        vid = plan.create_version("tester", 2026)["id"]
+        sid = plan.create_slot("tester", version_id=vid, launch_month="2027-01", area="グッズ", owner="chieko",
+                               flow_type="freecut", effort_point="9")["id"]
+        plan.update_slot(sid, "tester", **d)
+        r = self.store.one("SELECT area, owner, product FROM plan_slot WHERE id=?", (sid,))
+        self.assertEqual(tuple(r), (None, None, "推し"), "空にした欄は空になる")
+        plan.update_slot(sid, "tester", effort_point="")
+        r = self.store.one("SELECT effort_point, effort_src FROM plan_slot WHERE id=?", (sid,))
+        self.assertEqual((r["effort_point"], r["effort_src"]), (self.project.flow("freecut")["effort_point"], "flow_type"),
+                         "工数ポイントを空にすると開発タイプの係数")
+
+
 if __name__ == "__main__":
     unittest.main()
