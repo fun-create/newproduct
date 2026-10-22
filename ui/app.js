@@ -5872,7 +5872,8 @@
       var mc = el("div", { "class": "np-card" });
       mc.appendChild(el("h2", { text: "操作マニュアル" }));
       mc.appendChild(el("p", { "class": "np-sub", text: "画面ごとに、何をするところか・よく使う操作を書いています。" }));
-      mc.appendChild(btnRow([navBtn("#/manual", "操作マニュアルを開く")]));
+      mc.appendChild(btnRow([manualTabBtn("操作マニュアルを別のタブで開く"), navBtn("#/manual", "このタブで開く", "sm")]));
+      mc.appendChild(el("p", { "class": "np-sub", text: "どの画面からでも、上の帯の右の「使い方 ↗」（狭い画面では「？」）で、その画面の説明を別のタブに開けます。" }));
       b.appendChild(mc);
 
       // カレンダーへのタスク（FR-121・ADR-100）
@@ -6564,13 +6565,56 @@
     }).catch(fail);
   }
 
+  // ── 操作マニュアルを別のタブで（FR-215）──────────────────────
+  // 帯の「使い方 ↗」は、いつも同じ名前のタブ（np-manual）に開く。何度押してもタブが増えない。
+  // 行き先は、いまの画面の説明の節（マニュアルの「### 見出し」）。見出しは tests/test_manual.py が確かめる
+  var MANUAL_TAB = "np-manual";
+  var HELP_SEC = {
+    "#/routines": "タスク", "#/tasks/assign": "タスク", "#/trends": "トレンド（FCTR）", "#/ai-score": "アイデア",
+    "#/calibration": "採点の校正", "#/devices": "新機種調査", "#/opportunities": "年間プラン", "#/simulate": "年間プラン",
+    "#/gates": "案件", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
+    "#/settings/templates": "標準タスクのひな形を直すとき", "#/settings/ideas-import": "アイデアをまとめて登録するとき"
+  };
+  function setHelpLink(path, entry) {
+    var a = document.getElementById("np-help");
+    if (!a) return;
+    var sec = HELP_SEC[path] || (/^#\/projects\//.test(path) ? "案件" : /^#\/ideas\//.test(path) ? "アイデア" : entry.label);
+    a.setAttribute("href", "/#/manual" + (sec && path !== "#/manual" ? "?sec=" + encodeURIComponent(sec) : ""));
+  }
+  function manualTabBtn(label, sec) {
+    return el("a", { href: "/#/manual" + (sec ? "?sec=" + encodeURIComponent(sec) : ""), target: MANUAL_TAB, rel: "noopener",
+      "class": "np-btn", text: label + " ↗" });
+  }
+
   function viewManual() {
     loading();
+    var sec = hashQuery().get("sec");
     api("/api/manual").then(function (d) {
       var b = clear();
       setTitle("操作マニュアル");
-      b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back")]));
-      b.appendChild(mdRender(d.body_md));
+      var own = window.name === MANUAL_TAB;           // マニュアル用のタブで開いている
+      if (own) b.appendChild(el("p", { "class": "np-note", text: "このタブは操作マニュアル用です。アプリの操作は元のタブで続けられます。画面の上の帯の「使い方 ↗」（狭い画面では「？」）を押すと、このタブがその画面の説明に変わります。" }));
+      else b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back"), manualTabBtn("別のタブで開く（操作しながら見る）", sec)]));
+      var doc = mdRender(d.body_md);
+      // 目次。見出しに印を付け、押すとそこへ移る（hash は変えない）
+      var heads = doc.querySelectorAll("h3, h4"), toc = el("nav", { "class": "np-toc", "aria-label": "目次" }), cur = null, target = null;
+      Array.prototype.forEach.call(heads, function (h, i) {
+        h.id = "np-man-" + i;
+        h.setAttribute("tabindex", "-1");
+        var bt = el("button", { type: "button", "class": "np-linkbtn", text: h.textContent });
+        bt.addEventListener("click", function () { h.scrollIntoView({ block: "start" }); h.focus({ preventScroll: true }); });
+        if (h.tagName === "H3") { cur = el("ul"); toc.appendChild(el("p", { "class": "np-toc-h" }, [bt])); toc.appendChild(cur); }
+        else if (cur) cur.appendChild(el("li", null, [bt]));
+        if (sec && !target && h.textContent.indexOf(sec) === 0) target = h;
+      });
+      var det = el("details", { "class": "np-card" }, [el("summary", { text: "目次" }), toc]);
+      if (!sec) det.open = true;
+      b.appendChild(det);
+      b.appendChild(doc);
+      if (target) {
+        target.setAttribute("data-focus", "1");
+        setTimeout(function () { target.scrollIntoView({ block: "start" }); target.focus({ preventScroll: true }); }, 0);
+      }
     }).catch(fail);
   }
 
@@ -6607,6 +6651,7 @@
     var path = hashPath();
     var entry = match(path);
     markCurrent(entry.view);
+    setHelpLink(path, entry);
     setTitle(entry.label);
 
     var m = /^#\/projects\/([A-Za-z0-9_-]+)$/.exec(path);

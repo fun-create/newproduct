@@ -480,3 +480,19 @@ tr.np-edit-row > td { background: var(--fca-bg); }
 /* ダッシュボードから選んだ行（点検 H-2）。枠で示す（色だけにしない: 太い枠＋背景） */
 tr[data-focus="1"] > td { background: var(--np-info-bg); }
 tr[data-focus="1"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-info-line); }
+
+/* 操作マニュアルの目次と、開いた節の印（FR-215） */
+.np-toc { columns: 2 16rem; column-gap: 2rem; }
+.np-toc .np-toc-h { margin: .5rem 0 .1rem; font-weight: 700; break-after: avoid; }
+.np-toc ul { margin: 0 0 .4rem 1rem; padding: 0; }
+.np-toc li { list-style: none; }
+.np-report h4[data-focus="1"], .np-report h3[data-focus="1"] { background: var(--np-info-bg); box-shadow: inset 4px 0 0 var(--np-info-line); padding-left: .5rem; }
+.np-report h3, .np-report h4 { scroll-margin-top: 1rem; }
+
+/* 帯の「使い方 ↗」（FR-215）。幅の狭い画面（1200px 未満）では「？」だけにして帯を1段に保つ。語は読み上げに残す */
+#np-help .np-help-q { display: none; }
+@media (max-width: 1199px) {
+  #np-help .np-help-q { display: inline-block; width: 1.5em; height: 1.5em; line-height: 1.5em; text-align: center;
+    border: 1px solid currentColor; border-radius: 50%; font-weight: 700; }
+  #np-help .np-help-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}

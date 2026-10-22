@@ -4,11 +4,13 @@
 
 見ているのは:
   - 移行の手順の節がある（FR-194・ADR-110。移行プランのページは非公開で、商品開発部の人が開けないため）
+  - 帯の「使い方 ↗」が別のタブ（いつも同じ np-manual）に開き、各画面の説明の節がマニュアルにある（FR-215）
   - 画面の描き方（ui/app.js の mdRender）が読めない書き方を使っていない
     （番号付きの箇条書き・[文字](URL) のリンク・3段以上の字下げ。読めないと記号がそのまま出る）
 """
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -28,6 +30,20 @@ class Manual(unittest.TestCase):
         for want in ("10/19", "10/26", "11/6", "11/9", "担当をまとめて割り振る", "進捗はシートだけに書く",
                      "カレンダーのタスクで「完了」を押さない", "繰り返しの仕事", "シートでやっていたこと"):
             self.assertIn(want, s)
+
+    def test_help_opens_in_its_own_tab_and_every_screen_has_a_section(self):
+        idx = (BASE / "ui" / "index.html").read_text(encoding="utf-8")
+        app = (BASE / "ui" / "app.js").read_text(encoding="utf-8")
+        m = re.search(r'<a id="np-help"[^>]*>', idx)
+        self.assertIsNotNone(m, "帯に「使い方」が無い")
+        self.assertIn('target="np-manual"', m.group(0), "別のタブ（いつも同じタブ）に開く")
+        self.assertIn('var MANUAL_TAB = "np-manual"', app, "index.html と app.js でタブの名前が同じ")
+        heads = re.findall(r"^### (.+)$", MD, re.M)
+        nav = json.loads(re.search(r'id="fca-nav-data">(.*?)</script>', idx, re.S).group(1))
+        hs = re.search(r"var HELP_SEC = \{(.*?)\};", app, re.S).group(1)
+        wants = [n["label"] for n in nav] + re.findall(r'"#/[^"]*": "([^"]+)"', hs) + ["案件", "アイデア"]
+        for w in wants:
+            self.assertTrue(any(h.startswith(w) for h in heads), f"マニュアルに「### {w}」の節が無い（使い方の行き先）")
 
     def test_only_markup_the_screen_can_draw(self):
         for i, ln in enumerate(MD.split("\n"), 1):
