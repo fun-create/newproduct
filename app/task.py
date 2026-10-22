@@ -62,7 +62,8 @@ def _bounds(when: str, t: _dt.date, pfx: str = ""):
         return (f"{due} IS NOT NULL AND {due} <= ? AND {st} NOT IN ('完了','対象外')",
                 [(t + _dt.timedelta(days=7)).isoformat()])
     if when == "none":
-        return (f"{due} IS NULL", [])
+        # 期限なしは**まだ済んでいないもの**だけ（点検 L-6: 完了・対象外まで数え、「入れるべき期限」が多く見えていた）
+        return (f"{due} IS NULL AND {st} IN ('未着手','着手','保留')", [])
     if when == "all":
         return ("1=1", [])
     raise ValueError(f"知らない期間フィルタ {when!r}")
@@ -167,7 +168,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "role_label": r["role_label"] or "—",
             "role_external": bool(r["role_external"]),
             "assignee": r["assignee"], "hours": r["hours"],
-            "dept": r["dept"], "accepted_at": r["accepted_at"],
+            "dept": r["dept"], "accepted_at": r["accepted_at"], "category": r["category"],
             "created_at": r["created_at"], "received_at": r["received_at"],
             "days": handoff_days(dict(r)) if r["kind"] == "他部署依頼" else None,
             "ai_used": False, "ai_reduction_rate": None,
@@ -206,7 +207,13 @@ def set_status(kind: str, task_id: int, status: str, user_id: str,
             # **受け側の完了をもって完了**（F-11-3・FR-48）。送った側の操作だけで閉じない
             raise ValueError("他部署への依頼は、受け側の完了を記録して閉じます（「受け側が完了」）")
     done = store.now_s() if status == "完了" else None
+    prev = store.one(f"SELECT status{', project_id, title' if table == 'task' else ''} FROM {table} WHERE id=?", (task_id,))
     with store.tx() as c:
+        # 案件のタスクの進捗の変更は、カルテの「履歴」に残す（点検 M-3: 誰がいつ完了にしたかが出なかった）
+        if table == "task" and prev is not None and prev["status"] != status:
+            c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                      (prev["project_id"], store.now_s(), user_id, "タスクの進捗",
+                       f"{prev['title']}: {prev['status']} → {status}"))
         if table == "task" and ai_used is not None:
             c.execute("UPDATE task SET status=?, done_at=?, ai_used=? WHERE id=?",
                       (status, done, 1 if ai_used in ("1", "true", "on") else 0,
@@ -623,6 +630,9 @@ def dashboard(user_id: str) -> dict:
         "upcoming": _p.upcoming(4),
         "attention": {
             "tasks_total": store.val("SELECT COUNT(*) FROM task", (), 0),
+            # 「タスクの期限」の割合は未完了だけで（点検 L-6）
+            "open_total": sum(store.val(f"SELECT COUNT(*) FROM {tb} WHERE status IN ('未着手','着手','保留')", (), 0)
+                              for tb in ("task", "work_item")),
             "projects_total": store.val("SELECT COUNT(*) FROM project WHERE stage != '中止'", (), 0),
             "no_due": c["none"],
             "no_hours": store.val(
@@ -720,6 +730,8 @@ def update_task(kind: str, task_id: int, f: dict, user_id: str) -> dict:
         if p is not None and p["source_of_truth"] != "app":
             raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
     v = _clean_fields({k: f[k] for k in EDIT_FIELDS if k in f}, partial=True)
+    if table == "work_item" and "category" in f:          # 案件外の仕事の「区分」も直せる（点検 L-9）
+        v["category"] = (f.get("category") or "").strip()[:60] or None
     if not v:
         return {"ok": True, "changed": []}
     _check_order(v.get("start_on", cur["start_on"]), v.get("due_on", cur["due_on"]))

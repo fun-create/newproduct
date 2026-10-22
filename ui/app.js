@@ -26,7 +26,7 @@
   // ゲート盤・発売後評価は「案件」の下。機会カレンダーは「プラン」の下。
   // **帯は7つまで**（keiei の layout.py の上限。selfcheck が見張っている）。
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
-  var ALIAS = { "#/gates": "#/projects", "#/review": "#/projects",
+  var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
                 "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
@@ -150,7 +150,31 @@
     // **タブを5枚開いて見比べるのが日常。**タイトルが全部同じだと選べない（§5-1）
     document.title = (sub ? label + " " + sub : label) + " ／ " + APP;
   }
-  function clear() { BOX.innerHTML = ""; return BOX; }
+  // 帯の下に「この中の画面」（点検 §3-3）。寄せた画面（ALIAS）がどこにあるか分かるように、親の画面の仲間を並べる。
+  // 売上・原価は salesSubnav が持つのでここには入れない
+  var SUBNAV = [
+    [["#/", "ダッシュボード"], ["#/reports", "月次レポート"]],
+    [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
+    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"]],
+    [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
+    [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"]],
+    [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]
+  ];
+  function subnavFor(path) {
+    var g = SUBNAV.filter(function (grp) { return grp.some(function (x) { return x[0] === path; }); })[0];
+    if (!g) return null;
+    var n = el("nav", { "class": "np-filters np-subnav", "aria-label": "この中の画面" });
+    g.forEach(function (x) { n.appendChild(el("a", { href: x[0], text: x[1], "aria-current": x[0] === path ? "true" : null })); });
+    return n;
+  }
+  /** 画面の先頭（「この中の画面」の帯があればその下） */
+  function topOf(b) { var f = b.firstChild; return f && f.classList && f.classList.contains("np-subnav") ? f.nextSibling : f; }
+  function clear() {
+    BOX.innerHTML = "";
+    var sn = subnavFor(hashPath());
+    if (sn) BOX.appendChild(sn);
+    return BOX;
+  }
   function put(node) { BOX.appendChild(node); }
   function loading() { clear().appendChild(el("p", { "class": "fca-note", text: "読み込んでいます。" })); }
   function fail(e) {
@@ -776,7 +800,7 @@
       function filled(label, x, n, href, why) { return { label: label, value: n ? x / n * 100 : null, valueText: x + " / " + n, href: href, note: why,
         tag: n > 0 && x === 0 ? { word: "すべて空欄", tone: "alert" } : n > 0 && x === n ? { word: "そろった", tone: "ok" } : null }; }
       ac.appendChild(hbars([
-        filled("タスクの期限", allT - a.no_due, allT, "#/tasks?when=none"),
+        filled("タスクの期限（未完了）", (a.open_total || 0) - a.no_due, a.open_total || 0, "#/tasks?when=none&mine=0"),
         filled("タスクの所要時間", a.tasks_total - a.no_hours, a.tasks_total),
         filled("案件の工数ポイント", a.projects_total - a.effort_unknown, a.projects_total, "#/projects"),
         filled("案件の発売予定日", lo.projects_dated, tot, "#/projects")], { max: 100, label: "入力済みの割合" }));
@@ -874,13 +898,16 @@
         b.appendChild(el("p", { "class": "np-sub", text: "ゲートの記号: ● 通過 ／ ◐ 待ち ／ ◼ 差戻・保留・中止 ／ ○ 未 ／ / 対象外。語は次のゲートだけを書いています。" }));
       }
       d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
-      b.appendChild(newProjectForm(d.filters.flow));
+      // 入口は一覧の上に（点検 M-12・M-5: 「案件を起こす」が長い一覧のいちばん下、ゲート盤へのボタンが無かった）
+      var npf = newProjectForm(d.filters.flow);
+      b.insertBefore(npf, topOf(b));
+      b.insertBefore(el("p", { "class": "np-sub", text: "新しい案件は、ふつうは年間プランの枠の「案件にする」から起こします。枠に無い案件だけ、ここから起こします。" }), npf);
     }).catch(fail);
   }
 
   function newProjectForm(flows) {
     var box = el("details", { "class": "np-card" });
-    box.appendChild(el("summary", { text: "案件を起こす" }));
+    box.appendChild(el("summary", { text: "案件を起こす（年間プランの枠に無い案件）" }));
     var f = el("form", { "class": "np-filters" });
     function inp(name, ph) { return el("input", { name: name, placeholder: ph, "aria-label": ph }); }
     f.appendChild(inp("internal_name", "社内呼称（商品名ではありません）"));
@@ -921,6 +948,22 @@
   // **17枚をタブにしない。**タブにすると、開いていないタブの不備が見えなくなる。
   // **B「いま欠けているもの」を最上段に置くのがこの画面の設計そのもの。**
   // ══════════════════════════════════════════════════════
+  /** 履歴にメモを足す（点検 L-13: 準備シートの「商品改訂履歴」のように、発売後の改訂などを人が書く欄が無かった） */
+  function memoForm(pid) {
+    var f = el("form", { "class": "np-field" });
+    var ta = el("textarea", { name: "body", rows: "2", "aria-label": "履歴に残すメモ", placeholder: "例 2026-11-20 台座の色を黒に変更（仕入先の都合）" });
+    var st = el("span", { "class": "np-status", role: "status" });
+    f.appendChild(el("label", { text: "履歴にメモを足す（商品の改訂・決めたことなど）" }));
+    f.appendChild(ta);
+    f.appendChild(el("p", null, [el("button", { type: "submit", text: "足す" }), txt(" "), st]));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      if (!ta.value.trim()) { st.textContent = "メモを書いてください"; return; }
+      post("/api/projects/" + encodeURIComponent(pid) + "/memo", { body: ta.value }).then(function () { go(); })
+        .catch(function (e) { st.className = "np-err"; st.textContent = "できませんでした: " + e.message; });
+    });
+    return f;
+  }
   /** カルテの頭の欄を直す（点検 H-3）。空の欄を埋めるだけなら理由は要らない。発売予定日は下の別の欄 */
   function headerEdit(pid, h, meta) {
     var w = el("div");
@@ -996,7 +1039,7 @@
         b.appendChild(head);
 
         // B. いま欠けているもの（最上段）
-        var miss = el("div", { "class": "np-card" });
+        var miss = el("div", { "class": "np-card", id: "np-sec-B" });
         var ng = d.next_gate;
         miss.appendChild(el("h2", {
           text: "B. いま欠けているもの" + (ng ? "（" + ng.gate + " " + ng.name
@@ -1285,12 +1328,19 @@
         var g = el("div", { "class": "np-card", id: "np-sec-G" });
         g.appendChild(el("h2", { text: ng ? "G. ゲートの判定（" + ng.gate + " " + ng.name + "）と履歴" : "G. 履歴 — 誰がいつ何を決めたか" }));
         if (ng) g.appendChild(gateForm(d, ng, meta));
+        if (h.editable) g.appendChild(memoForm(d.id));
         g.appendChild(table(["日時", "誰が", "何を"], d.revisions.map(function (x) {
-          return el("tr", null, [el("td", { text: x.changed_at }),
-            el("td", { text: dash(x.changed_by) }), el("td", { text: x.what })]);
+          return el("tr", null, [el("td", { "class": "np-nowrap", text: x.changed_at }),
+            el("td", { text: dash(x.changed_by) }),
+            el("td", null, [txt(x.what), x.detail ? el("div", { "class": "np-sub", text: x.detail }) : null])]);
         })));
         b.appendChild(g);
+        // タスクの節は「いま欠けているもの」のすぐ下へ（点検 M-9: 毎日触るのに下から3番目だった）
+        if (miss.nextSibling) b.insertBefore(tv, miss.nextSibling);
         foldSections(b);
+        // ?sec= で節を指定して開く（ゲート盤・原価の一覧から。点検 M-5・M-8）
+        var want = hashQuery().get("sec");
+        if (want && document.getElementById("np-sec-" + want)) setTimeout(function () { goSection("np-sec-" + want); }, 0);
       }).catch(fail);
 
     function row(k, v) {
@@ -1306,7 +1356,8 @@
   function foldSections(b) {
     var cards = Array.prototype.filter.call(b.children, function (c) {
       // ヘッダ（A）はたたまない（判断の起点なので常に見せる。「A節へ」の飛び先でもある）
-      return c.classList && c.classList.contains("np-card") && /^np-sec-/.test(c.id || "") && c.id !== "np-sec-A";
+      // B（いま欠けているもの）もたたまない（次の判定に足りないものを最上段に出す設計）
+      return c.classList && c.classList.contains("np-card") && /^np-sec-/.test(c.id || "") && c.id !== "np-sec-A" && c.id !== "np-sec-B";
     });
     if (!cards.length) return;
     var toc = [];
@@ -1679,13 +1730,20 @@
       if (!meta) { api("/api/meta").then(function (m) { meta = m; bt.click(); }).catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); }); return; }
       var tf = taskFields(meta, t);
       var form = el("form", { "class": "np-field" }, [tf.row]);
+      var cat = null;
+      if (kind === "work") {                      // 案件外の仕事は「区分」も直せる（点検 L-9）
+        cat = el("input", { name: "category", size: "10", value: t.category || "", "aria-label": "区分" });
+        form.appendChild(el("p", null, [txt("区分 "), cat]));
+      }
       var st = el("span", { "class": "np-status", role: "status" });
-      var bar = el("p", null, [el("button", { type: "submit", text: "保存" }), txt(" "), st]);
+      var bar = el("p", null, [el("button", { type: "submit", text: "保存する" }), txt(" "), st]);
       form.appendChild(bar);
       form.addEventListener("submit", function (ev) {
         ev.preventDefault();
         st.textContent = "保存中…";
-        post("/api/tasks/" + kind + "/" + t.id + "/edit", tf.values())
+        var vals = tf.values();
+        if (cat && cat.value.trim()) vals.category = cat.value;
+        post("/api/tasks/" + kind + "/" + t.id + "/edit", vals)
           .then(function (r) { st.textContent = r.changed.length ? "保存しました" : "変わったところはありません"; if (r.changed.length) setTimeout(go, 400); })
           .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
       });
@@ -2607,7 +2665,7 @@
             if (!t.due_on && !sepDone) {
               sepDone = true;
               rows.push(el("tr", { "class": "np-sep" }, [
-                el("td", { colspan: "10", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
+                el("td", { colspan: "8", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
             }
             // 期限切れ（未完）の行に左の帯と「！期限切れ n日」（FR-195 第2段）
             var late = !!(t.due_on && t.due_on < d.today && t.status !== "完了" && t.status !== "対象外");
@@ -2623,25 +2681,24 @@
               el("td", { text: t.role_label + (t.role_external ? "（他部署）" : "") }),
               assigneeCell(t.project_id ? "task" : "work", t),
               el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
-              el("td", { text: t.ai_used ? "適用済" : "未" }),
-              el("td", { "class": "np-num",
-                text: t.ai_reduction_rate === null || t.ai_reduction_rate === undefined
-                  ? "—" : Math.round(t.ai_reduction_rate * 100) + "%" }),
+              // 「AI適用」「削減見込」はひな形の性質なので一覧から外した（点検 M-4）。量は下の見通しの表「AI削減可能h」で見る
               taskEditCell(t.project_id ? "task" : "work", t, null, t.project_id)
             ]));
           });
           b.appendChild(table(["進捗", "期限", "案件", "タスク名", "ロール",
-            "担当", "標準h", "AI適用", "削減見込", ""], rows));
+            "担当", "時間（h）", ""], rows));
           // ダッシュボードから来たときは、その行へ移って印を付ける（点検 H-2）
           var fr = focus && b.querySelector('tr[data-focus="1"]');
           if (fr) setTimeout(function () { fr.scrollIntoView({ block: "center" }); }, 0);
-          else if (focus) b.insertBefore(el("p", { "class": "np-note", text: "選んだタスクはこの期間の一覧にありません（期限や進捗が変わったかもしれません）。" }), b.firstChild);
+          else if (focus) b.insertBefore(el("p", { "class": "np-note", text: "選んだタスクはこの期間の一覧にありません（期限や進捗が変わったかもしれません）。" }), topOf(b));
         }
         if (tab === "work" || tab === "request") b.appendChild(workItemForm(tab));
         d.notes.forEach(function (n) { b.appendChild(el("p", { "class": "np-note", text: n })); });
 
         // 自動化依頼の入口は「設定」へ移した（2026-10-19 目視チェック「設定内に移動してほしい」）
 
+        // ここから下は見通しの表（点検 M-4: 毎日の消し込みに要らない表が起票欄の下に続いていた）。最後にたたんだ箱へ移す
+        var anN = b.children.length;
         // ロール別の負荷（F-5-5）
         b.appendChild(el("h2", { text: "ロール別の負荷（月 × ロール）" }));
         b.appendChild(el("p", { "class": "np-note", text: d.load.caption }));
@@ -2725,6 +2782,9 @@
           })));
         b.appendChild(el("p", { "class": "np-note",
           text: "⑦ページリニューアルはこの表に出ません。標準タスクが1行も定義されていないためです。" }));
+        var an = el("details", { "class": "np-card np-analysis" }, [el("summary", { text: "見通しの表（ロール別の負荷・標準工数）— 毎日の消し込みには使いません" })]);
+        while (b.children.length > anN) an.appendChild(b.children[anN]);
+        b.appendChild(an);
       }).catch(fail);
   }
 
@@ -2868,14 +2928,14 @@
           var tds = [
             el("td", null, [el("a", { href: "#/projects/" + r.id, text: r.product })]),
             el("td", { text: r.flow_label }),
-            el("td", { text: r.next_gate }),
+            el("td", null, [txt(r.next_gate), r.mine ? el("div", null, [el("a", { href: "#/projects/" + r.id + "?sec=G", text: "判定する →" })]) : null]),
             el("td", { text: r.who })
           ];
           r.cells.forEach(function (c) {
             tds.push(el("td", { "data-gate": c.state }, [
               el("span", { "aria-hidden": "true", text: c.glyph }), " ",
               c.state === "判定待ち" && c.missing_n
-                ? el("a", { href: "#/projects/" + r.id, text: c.word + "（欠 " + c.missing_n + "）" })
+                ? el("a", { href: "#/projects/" + r.id + "?sec=B", text: c.word + "（欠 " + c.missing_n + "）" })
                 : txt(c.word)
             ]));
           });
@@ -3130,6 +3190,44 @@
     return w;
   }
 
+  /** このアイデアを年間プランの枠に入れる（点検 H-4・ADR-121。シートではアイデアリストの良い案を緑に塗って年間プランに書いていた） */
+  function ideaPlanBox(d) {
+    var ps = d.plan_slots || { placed: [], candidates: [] };
+    var w = el("div", { "class": "np-card" });
+    w.appendChild(el("h3", { text: "年間プランの枠" }));
+    if (ps.placed.length) {
+      w.appendChild(el("ul", null, ps.placed.map(function (x) {
+        var li = el("li", null, [txt(x.launch_month + "　" + (x.product || "（発売する商品は未記入）") + "（" + x.version_label + "・" + x.state + "）")]);
+        if (x.project_id) li.appendChild(el("span", null, [txt(" → "), el("a", { href: "#/projects/" + encodeURIComponent(x.project_id), text: "案件 " + x.project_id })]));
+        else if (ps.can_link) {
+          var rm = el("button", { type: "button", "class": "np-linkbtn", text: "枠から外す" });
+          rm.addEventListener("click", function () {
+            post("/api/plan/slots/" + encodeURIComponent(x.id) + "/idea-remove", {}).then(function () { go(); })
+              .catch(function (e) { li.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+          });
+          li.appendChild(txt(" ")); li.appendChild(rm);
+        }
+        return li;
+      })));
+    } else {
+      w.appendChild(el("p", { "class": "np-sub", text: "まだどの枠にも入っていません。良い案は、年間プランの空いている枠に入れます（入れると、ステージが「候補」になります）。" }));
+    }
+    if (!ps.can_link) { w.appendChild(el("p", { "class": "np-sub", text: "枠に入れるのは、商品開発部・管理者・社長の業務ロールの人です。" })); return w; }
+    if (!ps.candidates.length) { w.appendChild(el("p", { "class": "np-sub", text: "入れられる空いた枠がありません。年間プランで枠を足してから入れます。" })); return w; }
+    var sel = el("select", { "aria-label": "入れる枠" });
+    ps.candidates.forEach(function (x) {
+      sel.appendChild(el("option", { value: x.id, text: x.launch_month + "　" + (x.product || "（未記入）") + "・" + dash(x.kind_label) + "（" + x.version_label + "・" + x.state + "）" }));
+    });
+    var ok = el("button", { type: "button", text: "この枠に入れる" });
+    var st = el("span", { "class": "np-status", role: "status" });
+    ok.addEventListener("click", function () {
+      st.textContent = "保存中…";
+      post("/api/plan/slots/" + encodeURIComponent(sel.value) + "/idea", { idea_id: d.id }).then(function () { go(); })
+        .catch(function (e) { st.className = "np-err"; st.textContent = "できませんでした: " + e.message; });
+    });
+    w.appendChild(el("p", null, [txt("空いている枠 "), sel, txt(" "), ok, txt(" "), st]));
+    return w;
+  }
   function viewIdea(id) {
     loading();
     Promise.all([api("/api/ideas/" + encodeURIComponent(id)), api("/api/meta"),
@@ -3151,6 +3249,7 @@
         if (first) first.focus({ preventScroll: true });
       });
       b.appendChild(btnRow([toEdit]));
+      b.appendChild(ideaPlanBox(d));
       b.appendChild(table(["項目", "値"], [
         ["ステージ", d.stage],
         ["テーマ", dash(d.theme_label)],
@@ -4087,7 +4186,7 @@
 
   function ideaFieldsForm(d, meta) {
     var box = el("details", { "class": "np-card", id: "np-ideafields" });
-    box.appendChild(el("summary", { text: "項目を足す・直す（概要・ターゲット・参考URL・エリア・採点の項目）" }));
+    box.appendChild(el("summary", { text: "項目を足す・直す（商品案名・概要・ターゲット・参考URL・エリア・採点の項目）" }));
     var f = el("form", { "class": "np-form" });
     // 文の項目も足す・直せるように（サーバーは以前から受けていた。画面に欄が無かった・2026-10-19）
     function area(name, label, cur, rows) {
@@ -4100,6 +4199,7 @@
       i.value = cur || "";
       return el("label", { "class": "np-label" }, [el("span", { text: label }), i]);
     }
+    f.appendChild(line("title", "商品案名", d.title));
     f.appendChild(area("summary", "概要・仕様", d.summary, 4));
     f.appendChild(area("target_scene", "想定ターゲットと使用シーン", d.target_scene, 3));
     f.appendChild(line("ref_url1", "参考商品1（URL）", d.ref_url1, "https://"));
@@ -4228,21 +4328,31 @@
                  api("/api/meta")]).then(function (r) {
       var d = r[0], meta = r[1];
       var b = clear();
-      b.appendChild(planVersionBar(d));
+      var vbar = planVersionBar(d);
+      b.appendChild(vbar);
       if (!d.current) {
         b.appendChild(el("p", { "class": "np-note", text: d.empty_note ||
           "この年度の版がまだありません。" }));
         return;
       }
       setTitle("年間プラン", d.current.version.label);
-      b.appendChild(btnRow([navBtn("#/opportunities", "機会カレンダーを開く"), navBtn("#/simulate", "販売計画シミュレーション")]));
-      b.appendChild(el("p", { "class": "np-sub", text: "機会カレンダーでは、イベントの2か月前を発売の目安にして枠を足せます。" }));
+      // 並び（点検 M-7）: 毎回使う「月ごとの枠」を先に。版の管理・見通し・挿入ルールは後ろでたたむ
+      var cv = d.current.version;
+      var vdet = el("details", { "class": "np-card np-fold-plain" }, [el("summary", { text: "版の管理（いま見ている版: " + cv.label + "・" + cv.state + "）— プランを変えたいとき・版を作る・承認" })]);
+      vdet.appendChild(vbar);
+      // 機会カレンダー・販売計画シミュレーションへは上の「この中の画面」から
+      b.appendChild(el("p", { "class": "np-sub", text: "上の「機会カレンダー」では、イベントの2か月前を発売の目安にして枠を足せます。プランを変えたいときは、いちばん下の「版の管理」を開きます。" }));
       d.current._can_link = d.can_link;
-      b.appendChild(planUnlinked(d));
-      b.appendChild(planCharts(d.current));
-      b.appendChild(planRules(d.current));
+      if ((d.unlinked_projects || []).length) b.appendChild(planUnlinked(d));
       b.appendChild(planMonths(d.current, meta));
-      if (d.current.editable) b.appendChild(planAddSlot(d.current, meta));
+      if (d.current.editable && d.can_link) b.appendChild(planAddSlot(d.current, meta));
+      var adet = el("details", { "class": "np-card np-fold-plain" }, [el("summary", { text: "見通しと挿入ルールの検査（月ごとの本数・工数・比率）" })]);
+      if (d.current.editable) adet.open = true;          // 策定中は検査を見ながら直す
+      adet.appendChild(planCharts(d.current));
+      adet.appendChild(planRules(d.current));
+      b.appendChild(adet);
+      b.appendChild(vdet);
+      if (cv.state === "策定中") vdet.open = true;        // 下書きを開いたときは承認・消すがすぐ見える
     }).catch(fail);
   }
 
@@ -4282,7 +4392,9 @@
         .then(function () { go(); })
         .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
     });
-    box.appendChild(f);
+    // 版を作るのは商品開発部・管理者・社長（点検 L-11）。権限の無い人には欄を出さず、理由を書く
+    if (d.can_link === false) box.appendChild(el("p", { "class": "np-sub", text: "版を作る・直すのは、商品開発部・管理者・社長の業務ロールの人です。" }));
+    else box.appendChild(f);
     if (cur) {
       var acts = el("p", { "class": "np-actions" });
       if (cur.state === "策定中" && !d.can_approve) {
@@ -4295,7 +4407,7 @@
             .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
         });
         acts.appendChild(ap);
-      } else if (cur.state !== "策定中") {
+      } else if (cur.state !== "策定中" && d.can_link !== false) {
         var rv = el("button", { type: "button", text: "改訂版を作る（枠ごと写す）" });
         rv.addEventListener("click", function () {
           post("/api/plan/versions/" + encodeURIComponent(cur.id) + "/revise", {})
@@ -4584,10 +4696,12 @@
         });
         last.appendChild(txt(" ")); last.appendChild(ul);
       }
+    } else if (!cur._can_link) {
+      last.appendChild(el("span", { "class": "np-sub", text: "（案件にするのは商品開発部・管理者・社長）" }));
     } else if (cur.version && cur.version.state !== "失効" && !cur.editable) {
       // 承認済みの版でも新しい案件を起こせる（点検 H-4。枠の中身は変わらない）
       last.appendChild(convertButton(x));
-      if (cur._can_link) { last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x)); }
+      last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x));
     } else if (cur.editable) {
       last.appendChild(convertButton(x));
       if (cur._can_link) { last.appendChild(txt(" ")); last.appendChild(slotLinkButton(x)); }
@@ -5502,7 +5616,8 @@
       var b = clear();
       setTitle("原価・調達");
       b.appendChild(salesSubnav("#/cost"));
-      b.appendChild(el("p", { "class": "np-note", text: "発売前の案件の締切と試算、発売後の「試算と確定」の突き合わせを出します。相見積の候補と試算原価は、各案件の画面の「原価・調達」で入れます。外注先・仕入先・原材料の一覧は CIP が持ちます。" }));
+      b.appendChild(el("p", { "class": "np-note" }, [el("strong", { text: "この画面は見るだけです。" }),
+        txt("相見積の候補と試算原価は、各案件の「原価・調達」で入れます（表の「原価・調達を開く →」からその節へ移れます）。発売前の案件の締切と試算、発売後の「試算と確定」の突き合わせを出します。外注先・仕入先・原材料の一覧は CIP が持ちます。")]));
       b.appendChild(el("h2", { text: "発売前" }));
       costBoard(b, d);
       b.appendChild(el("h2", { text: "発売後：試算と確定" }));
@@ -5554,7 +5669,8 @@
           var dl = r.deadline;
           return el("tr", null, [
             el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.id }),
-              txt(" " + (r.internal_name || r.product))]),
+              txt(" " + (r.internal_name || r.product)),
+              el("div", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id) + "?sec=cost", text: "原価・調達を開く →" })])]),
             el("td", { text: dash(r.launch_date) }),
             el("td", { text: dl.state + (dl.due ? "（" + dl.due + (dl.days_left >= 0 ? "・あと" + dl.days_left + "日" : "・" + (-dl.days_left) + "日超過") + "）" : "") }),
             el("td", { "class": "np-num", text: r.candidates + "（" + r.adopted + "／" + r.undecided + "）" }),
@@ -6597,13 +6713,13 @@
       else b.appendChild(btnRow([navBtn("#/settings", "← 設定へ戻る", "back"), manualTabBtn("別のタブで開く（操作しながら見る）", sec)]));
       var doc = mdRender(d.body_md);
       // 目次。見出しに印を付け、押すとそこへ移る（hash は変えない）
-      var heads = doc.querySelectorAll("h3, h4"), toc = el("nav", { "class": "np-toc", "aria-label": "目次" }), cur = null, target = null;
+      var heads = doc.querySelectorAll("h3, h4"), toc = el("nav", { "class": "np-mtoc", "aria-label": "目次" }), cur = null, target = null;
       Array.prototype.forEach.call(heads, function (h, i) {
         h.id = "np-man-" + i;
         h.setAttribute("tabindex", "-1");
         var bt = el("button", { type: "button", "class": "np-linkbtn", text: h.textContent });
         bt.addEventListener("click", function () { h.scrollIntoView({ block: "start" }); h.focus({ preventScroll: true }); });
-        if (h.tagName === "H3") { cur = el("ul"); toc.appendChild(el("p", { "class": "np-toc-h" }, [bt])); toc.appendChild(cur); }
+        if (h.tagName === "H3") { cur = el("ul"); toc.appendChild(el("p", { "class": "np-mtoc-h" }, [bt])); toc.appendChild(cur); }
         else if (cur) cur.appendChild(el("li", null, [bt]));
         if (sec && !target && h.textContent.indexOf(sec) === 0) target = h;
       });

@@ -482,10 +482,10 @@ tr[data-focus="1"] > td { background: var(--np-info-bg); }
 tr[data-focus="1"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-info-line); }
 
 /* 操作マニュアルの目次と、開いた節の印（FR-215） */
-.np-toc { columns: 2 16rem; column-gap: 2rem; }
-.np-toc .np-toc-h { margin: .5rem 0 .1rem; font-weight: 700; break-after: avoid; }
-.np-toc ul { margin: 0 0 .4rem 1rem; padding: 0; }
-.np-toc li { list-style: none; }
+.np-mtoc { columns: 2 16rem; column-gap: 2rem; }
+.np-mtoc .np-mtoc-h { margin: .5rem 0 .1rem; font-weight: 700; break-after: avoid; }
+.np-mtoc ul { margin: 0 0 .4rem 1rem; padding: 0; }
+.np-mtoc li { list-style: none; }
 .np-report h4[data-focus="1"], .np-report h3[data-focus="1"] { background: var(--np-info-bg); box-shadow: inset 4px 0 0 var(--np-info-line); padding-left: .5rem; }
 .np-report h3, .np-report h4 { scroll-margin-top: 1rem; }
 
@@ -496,3 +496,8 @@ tr[data-focus="1"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-info-li
     border: 1px solid currentColor; border-radius: 50%; font-weight: 700; }
   #np-help .np-help-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+/* 年間プランの後ろでたたむ箱（点検 M-7）。中の .np-card は枠を重ねない */
+details.np-fold-plain > summary { cursor: pointer; font-weight: 700; }
+details.np-fold-plain > .np-card { border: 0; box-shadow: none; padding-left: 0; padding-right: 0; }
+details.np-analysis > summary { cursor: pointer; font-weight: 700; }

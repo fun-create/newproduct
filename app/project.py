@@ -32,7 +32,7 @@ SECTIONS = [
     {"key": "D", "title": "いくらで作るか", "asks": "儲かる理由", "fields": [
         ("D.material", "資材の検討・決定"),
         ("D.cost", "原価算出のメモ（試算原価は「原価・調達」で作ります）"),
-        ("D.price", "販売価格"),
+        ("D.price", "販売価格の考え方のメモ（価格は「原価・調達」の版で入れます）"),
         ("D.goal", "目標設定のメモ（年間目標は「年間目標」で決めます）"),
     ]},
     {"key": "E", "title": "どう作るか", "asks": "作れる理由", "fields": [
@@ -569,6 +569,19 @@ def set_revenue(pid: str, counted: bool, basis: str, user_id: str) -> dict:
 
 
 # ── 発売予定日（2026-10-09 十文字さんの選択・ADR-085）。**理由を必ず残す**（前→後を履歴に）──
+def add_memo(pid: str, body: str, user_id: str) -> dict:
+    """履歴に人が書くメモ（点検 L-13）。消さない・直さない（履歴なので）。"""
+    body = (body or "").strip()
+    if not body:
+        raise ValueError("メモを書いてください")
+    if store.one("SELECT 1 FROM project WHERE id=?", (pid,)) is None:
+        raise LookupError("案件がありません")
+    with store.tx() as c:
+        c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                  (pid, store.now_s(), user_id, "メモ", body[:1000]))
+    return {"ok": True}
+
+
 HEADER_FIELDS = {"internal_name": "社内呼称", "flow_type": "開発タイプ", "cat1": "分類1", "cat2": "分類2", "cat3": "分類3",
                  "size": "サイズ", "area": "作成エリア", "owner": "担当", "occasion": "機会", "effort_point": "工数ポイント"}
 

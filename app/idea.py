@@ -445,6 +445,10 @@ EDITABLE = {
 }
 
 
+FIELD_LABEL = {"design_freedom": "デザインの自由度", "production_feasibility": "生産のしやすさ",
+               "expected_margin_yen": "想定粗利額（円）"}   # 文に鍵の名前を出さない（点検 L-1）
+
+
 def update_fields(idea_id: str, user_id: str, **f) -> dict:
     """採点・案件化のときに埋まる項目。**起票フォームには出さない。**"""
     if store.one("SELECT 1 FROM idea WHERE id=?", (idea_id,)) is None:
@@ -455,7 +459,7 @@ def update_fields(idea_id: str, user_id: str, **f) -> dict:
             continue
         v = f.get(k)
         if kind is int:
-            v = _int_or_none(v, rng[0], rng[1], k)
+            v = _int_or_none(v, rng[0], rng[1], FIELD_LABEL.get(k, k))
         else:
             v = (v or "").strip() or None
         sets.append(f"{k}=?"); params.append(v)
@@ -469,6 +473,12 @@ def update_fields(idea_id: str, user_id: str, **f) -> dict:
         if v and store.one("SELECT 1 FROM theme WHERE id=?", (v,)) is None:
             raise ValueError(f"知らないテーマ {v!r}")
         sets.append("theme_id=?"); params.append(v)
+    if "title" in f:
+        # 商品案名も直せる（点検 L-8: ここだけ直せなかった）。空にはできない
+        v = (f.get("title") or "").strip()[:200]
+        if not v:
+            raise ValueError("商品案名は空にできません")
+        sets.append("title=?"); params.append(v)
     if "stage" in f:
         v = (f.get("stage") or "").strip()
         if v not in STAGES:

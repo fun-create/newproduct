@@ -160,5 +160,66 @@ class OpsReview(unittest.TestCase):
         self.assertEqual(self.store.val("SELECT product FROM plan_slot WHERE id=?", (sid,)), "ビールジョッキ再販")
 
 
+    def test_status_change_goes_to_history_and_memo(self):
+        pid = self.project.create("u", expand=False, internal_name="x")["id"]
+        with self.store.tx() as c:
+            tid = c.execute("INSERT INTO task (project_id,seq,title,role,status) VALUES (?,?,?,?,?)",
+                            (pid, 1, "撮影", "admin", "未着手")).lastrowid
+        self.task.set_status("task", tid, "完了", "chieko")
+        r = self.store.one("SELECT changed_by, what, detail FROM project_revision WHERE project_id=? ORDER BY id DESC LIMIT 1", (pid,))
+        self.assertEqual(tuple(r), ("chieko", "タスクの進捗", "撮影: 未着手 → 完了"))
+        self.project.add_memo(pid, "台座の色を黒に変更", "chieko")
+        self.assertEqual(self.store.val("SELECT detail FROM project_revision WHERE project_id=? AND what='メモ'", (pid,)), "台座の色を黒に変更")
+        with self.assertRaises(ValueError):
+            self.project.add_memo(pid, "  ", "chieko")
+
+    def test_no_due_counts_open_only_and_small_edits(self):
+        pid = self.project.create("u", expand=False, internal_name="x")["id"]
+        with self.store.tx() as c:
+            c.execute("INSERT INTO task (project_id,seq,title,role,status) VALUES (?,1,'a','admin','完了')", (pid,))
+            c.execute("INSERT INTO task (project_id,seq,title,role,status) VALUES (?,2,'b','admin','未着手')", (pid,))
+        self.assertEqual(self.task.counts()["none"], 1, "期限なしは未完了だけ")
+        w = self.task.create_work_item({"kind": "案件外", "title": "FBA納品", "role": "admin", "category": "FBA"}, "u")["id"]
+        self.task.update_task("work", w, {"category": "BtoB"}, "u")
+        self.assertEqual(self.store.val("SELECT category FROM work_item WHERE id=?", (w,)), "BtoB")
+        from app import idea, plan
+        iid = idea.create("u", title="推し色アクスタ", origin=idea.ORIGIN_CODES[0])["id"]
+        idea.update_fields(iid, "u", title="推し色アクスタ（大）")
+        self.assertEqual(self.store.val("SELECT title FROM idea WHERE id=?", (iid,)), "推し色アクスタ（大）")
+        with self.assertRaises(ValueError):
+            idea.update_fields(iid, "u", title=" ")
+        with self.assertRaises(ValueError) as e:
+            idea.update_fields(iid, "u", expected_margin_yen="abc")
+        self.assertNotIn("expected_margin_yen", str(e.exception), "鍵の名前を出さない")
+        vid = plan.create_version("tester", 2026)["id"]
+        with self.assertRaises(ValueError) as e:
+            plan.create_slot("tester", version_id=vid, launch_date="2026/05/01")
+        self.assertIn("2026-05-01 の形", str(e.exception))
+        with self.assertRaises(ValueError) as e:
+            plan.create_slot("tester", version_id=vid, launch_month="2026-05", effort_point="abc")
+        self.assertIn("数で入れて", str(e.exception))
+
+
+    def test_idea_into_slot(self):
+        from app import idea, plan
+        with self.store.tx() as c:
+            c.execute("INSERT OR IGNORE INTO role_member (role_code,user_id) VALUES ('president','tester')")
+        iid = idea.create("u", title="推し色アクスタ", origin=idea.ORIGIN_CODES[0])["id"]
+        vid = plan.create_version("tester", 2026)["id"]
+        sid = plan.create_slot("tester", version_id=vid, launch_month="2027-01", product="推し色アクスタ")["id"]
+        self.assertEqual([x["id"] for x in plan.idea_slots(iid)["candidates"]], [sid])
+        plan.approve(vid, "tester")
+        plan.attach_idea(sid, iid, "u")                                  # 承認済みの版の枠にも入れられる
+        self.assertEqual(self.store.val("SELECT stage FROM idea WHERE id=?", (iid,)), "候補", "枠に入った案は候補")
+        self.assertEqual([x["id"] for x in plan.idea_slots(iid)["placed"]], [sid])
+        other = idea.create("u", title="別の案", origin=idea.ORIGIN_CODES[0])["id"]
+        with self.assertRaises(ValueError):
+            plan.attach_idea(sid, other, "u")                            # 別のアイデアが入っている
+        r = plan.convert(sid, "tester")
+        self.assertEqual(self.store.val("SELECT idea_id FROM project WHERE id=?", (r["project_id"],)), iid, "案件にアイデアが付く")
+        with self.assertRaises(ValueError):
+            plan.detach_idea(sid, "u")                                   # 案件になった枠からは外せない
+
+
 if __name__ == "__main__":
     unittest.main()

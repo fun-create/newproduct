@@ -203,6 +203,53 @@ def can_link(user_id: str) -> bool:
     return bool(set(gate.roles_of(user_id)) & set(LINKERS))
 
 
+# ── アイデアを枠に入れる（点検 H-4 の4・ADR-121）────────────────────
+# シートではアイデアリストの良い案を緑に塗り、年間プランに書いていた。枠に idea_id の列はあった（FR-82）が、入れる口が無かった。
+# 入れられるのは、失効していない版の、案件になっていない枠。入れるのは人。承認済みの版にも入れられる（どの案で埋めるかの記録）
+def idea_slots(idea_id: str) -> dict:
+    placed = store.rows(store.q(
+        "SELECT s.id, s.launch_month, s.launch_date, s.product, s.project_id, v.label AS version_label, v.state "
+        "FROM plan_slot s JOIN plan_version v ON v.id=s.version_id WHERE s.idea_id=? AND v.state != '失効' "
+        "ORDER BY s.launch_month", (idea_id,)))
+    cands = store.rows(store.q(
+        "SELECT s.id, s.launch_month, s.launch_date, s.product, k.label AS kind_label, v.label AS version_label, v.state "
+        "FROM plan_slot s JOIN plan_version v ON v.id=s.version_id LEFT JOIN product_kind k ON k.code=s.product_kind "
+        "WHERE v.state != '失効' AND s.idea_id IS NULL AND s.project_id IS NULL "
+        "ORDER BY v.fiscal_year DESC, (v.state='承認済') DESC, s.launch_month, s.id"))
+    return {"placed": placed, "candidates": cands}
+
+
+def attach_idea(slot_id: str, idea_id: str, user_id: str) -> dict:
+    s = store.one("SELECT s.*, v.state FROM plan_slot s JOIN plan_version v ON v.id=s.version_id WHERE s.id=?", (slot_id,))
+    if s is None:
+        raise LookupError("その枠がありません")
+    if s["state"] == "失効":
+        raise ValueError("失効した版の枠には入れられません")
+    if s["project_id"]:
+        raise ValueError("案件になった枠には入れられません（案件の側で扱います）")
+    if s["idea_id"] and s["idea_id"] != idea_id:
+        raise ValueError("この枠には別のアイデアが入っています。先に外してください")
+    i = store.one("SELECT stage FROM idea WHERE id=?", (idea_id,))
+    if i is None:
+        raise LookupError("そのアイデアがありません")
+    with store.tx() as c:
+        c.execute("UPDATE plan_slot SET idea_id=?, updated_at=?, updated_by=? WHERE id=?", (idea_id, store.now_s(), user_id, slot_id))
+        if i["stage"] in ("起票", "採点済"):         # 枠に入った案は「候補」（シートの緑）
+            c.execute("UPDATE idea SET stage='候補', updated_at=?, updated_by=? WHERE id=?", (store.now_s(), user_id, idea_id))
+    return {"ok": True, "slot_id": slot_id, "idea_id": idea_id}
+
+
+def detach_idea(slot_id: str, user_id: str) -> dict:
+    s = store.one("SELECT s.*, v.state FROM plan_slot s JOIN plan_version v ON v.id=s.version_id WHERE s.id=?", (slot_id,))
+    if s is None:
+        raise LookupError("その枠がありません")
+    if s["project_id"]:
+        raise ValueError("案件になった枠からは外せません")
+    with store.tx() as c:
+        c.execute("UPDATE plan_slot SET idea_id=NULL, updated_at=?, updated_by=? WHERE id=?", (store.now_s(), user_id, slot_id))
+    return {"ok": True}
+
+
 def link_slot(slot_id: str, project_id: str, user_id: str) -> dict:
     if not can_link(user_id):
         raise PermissionError("枠と案件を結べるのは、商品開発部・管理者・社長の業務ロールの人です")
@@ -380,6 +427,24 @@ def _month_ok(s: str) -> str:
     return s
 
 
+def _date_ok(s: str) -> None:
+    """日付の形を確かめる。英語の文（Invalid isoformat string）を出さない（点検 L-1）。"""
+    try:
+        _dt.date.fromisoformat(s)
+    except ValueError:
+        raise ValueError(f"発売日は 2026-05-01 の形で入れてください（{s}）") from None
+
+
+def _num_ok(v, what: str) -> float:
+    try:
+        n = float(str(v).strip())
+    except ValueError:
+        raise ValueError(f"{what}は数で入れてください（例 1.5）") from None
+    if n < 0:
+        raise ValueError(f"{what}は 0 以上で入れてください")
+    return n
+
+
 def create_slot(user_id: str, **f) -> dict:
     vid = (f.get("version_id") or "").strip()
     v = store.one("SELECT * FROM plan_version WHERE id=?", (vid,))
@@ -389,7 +454,7 @@ def create_slot(user_id: str, **f) -> dict:
         raise ValueError(f"{v['state']}の版は編集できません。改訂版を作ってください")
     date = (f.get("launch_date") or "").strip() or None
     if date:
-        _dt.date.fromisoformat(date)     # 形が違えば ValueError で弾く
+        _date_ok(date)
         month = date[:7]
     else:
         month = _month_ok(f.get("launch_month", ""))
@@ -414,7 +479,7 @@ def create_slot(user_id: str, **f) -> dict:
             "occasion,note,product,created_at,created_by,updated_at,updated_by) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (sid, vid, month, date, kind, ft, (f.get("area") or "").strip() or None,
-             float(ep) if ep not in (None, "") else None, src,
+             _num_ok(ep, "工数ポイント") if ep not in (None, "") else None, src,
              (f.get("owner") or "").strip() or None,
              (f.get("idea_id") or "").strip() or None,
              (f.get("occasion") or "").strip() or None,
@@ -446,11 +511,11 @@ def update_slot(slot_id: str, user_id: str, **f) -> dict:
         if k == "effort_point":
             sets.append("effort_src=?")
             p.append("manual" if v is not None else None)
-            v = float(v) if v is not None else None
+            v = _num_ok(v, "工数ポイント") if v is not None else None
         sets.append(f"{k}=?")
         p.append(v)
     if "launch_date" in f and f["launch_date"]:
-        _dt.date.fromisoformat(str(f["launch_date"]).strip())
+        _date_ok(str(f["launch_date"]).strip())
         sets.append("launch_month=?")
         p.append(str(f["launch_date"]).strip()[:7])
     elif f.get("launch_month"):

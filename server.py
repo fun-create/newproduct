@@ -984,6 +984,10 @@ class H(BaseHTTPRequestHandler):
                 r = project_m.move_stage(pid, d.get("action", ""), uid, d.get("reason_code", ""), d.get("note", ""))
                 store.audit(uid, "project.stage", pid, {k: d.get(k) for k in ("action", "reason_code")}, ip)
                 return self.sendj(200, r)
+            if what == "memo":
+                r = project_m.add_memo(pid, d.get("body", ""), uid)
+                store.audit(uid, "project.memo", pid, {}, ip)
+                return self.sendj(200, r)
             if what == "header":
                 r = project_m.update_header(pid, d, d.get("reason", ""), uid)
                 store.audit(uid, "project.header", pid, {k: d.get(k) for k in project_m.HEADER_FIELDS if k in d}, ip)
@@ -1172,6 +1176,7 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(404, {"error": "アイデアがありません"})
             d["ai_proposals"] = ai_m.proposals_of(parts[1])        # AI採点の案（ADR-081）
             d["ai_web"] = ai_web_m.of("idea", parts[1], "demand")    # ウェブで調べた需要・市場（ADR-088）
+            d["plan_slots"] = {**plan_m.idea_slots(parts[1]), "can_link": plan_m.can_link(uid)}   # 年間プランの枠（ADR-121）
             return self.sendj(200, d)
         if len(parts) == 3 and parts[0] == "ideas" and method == "POST":
             iid, what = parts[1], parts[2]
@@ -1247,6 +1252,14 @@ class H(BaseHTTPRequestHandler):
             r["can_approve"] = plan_m.can_approve(uid)            # 承認のボタンは社長にだけ出す（ADR-058）
             r["can_delete"] = plan_m.can_delete(uid)              # 策定中の版を消す（ADR-064）
             return self.sendj(200, r)
+        # 年間プランを書く操作（版を作る・改訂版・枠を足す／直す／消す・案件にする・例外の承知）は
+        # 商品開発部・管理者・社長（点検 L-11・ADR-121。承認は社長だけ・版を消すは社長と管理者のまま）
+        plan_write = (method == "POST" and len(parts) >= 2 and parts[0] == "plan"
+                      and (parts[1:] == ["versions"] or parts[1:] == ["slots"]
+                           or (len(parts) == 4 and parts[1] == "versions" and parts[3] in ("revise", "ack"))
+                           or (len(parts) == 4 and parts[1] == "slots" and parts[3] in ("update", "delete", "convert", "idea", "idea-remove"))))
+        if plan_write and not plan_m.can_link(uid):
+            raise PermissionError("年間プランを作る・直すのは、商品開発部・管理者・社長の業務ロールの人です")
         if parts == ["plan", "versions"] and method == "POST":
             d = self.body()
             r = plan_m.create_version(uid, d.get("fiscal_year"),
@@ -1297,6 +1310,11 @@ class H(BaseHTTPRequestHandler):
             if what == "delete":
                 r = plan_m.delete_slot(sid)
                 store.audit(uid, "plan.slot.delete", sid, {}, ip)
+                return self.sendj(200, r)
+            if what in ("idea", "idea-remove"):
+                # アイデアを枠に入れる・外す（点検 H-4・ADR-121）
+                r = plan_m.attach_idea(sid, d.get("idea_id", ""), uid) if what == "idea" else plan_m.detach_idea(sid, uid)
+                store.audit(uid, "plan.slot." + what, sid, {"idea_id": d.get("idea_id")}, ip)
                 return self.sendj(200, r)
             if what in ("link", "unlink"):
                 # 既にある案件を枠に結ぶ・外す（FR-203・ADR-118）
