@@ -2293,10 +2293,94 @@
           + "登録できたら消え、共通商品コードだけが残ります。" }));
       if (!o.configured) box.appendChild(el("p", { "class": "np-warn",
         text: "この画面からの登録はまだできません。" + o.why }));
+      var aiBox = el("div");
+      if (o.configured && o.editable) box.appendChild(aiBox);
       o.targets.forEach(function (t) { box.appendChild(seisanTarget(pid, o, t)); });
+      if (o.configured && o.editable) seisanAiBox(pid, aiBox, box);
     }).catch(fail);
   }
 
+  /** CIP 登録票の AI 入力アシスト（FR-228）。AI は CIP の選択肢と商品の構成から候補を出すだけ。「登録票に入れる」で下書きの欄に入る（保存・登録は人） */
+  var SEISAN_LABEL = { sales_type: "販売タイプ", cat1: "大分類", cat2: "中分類", cat3: "小分類", shape: "形状", size: "サイズ", color: "色", copy_recipe_from: "レシピ複製元" };
+  function seisanAiBox(pid, w, panel) {
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    w.className = "np-how";
+    w.appendChild(el("h3", { text: "AI に登録票の候補を出させる" }));
+    w.appendChild(el("p", { "class": "np-sub", text: "AI が、カルテの文と CIP の商品の構成（販売タイプ・分類・形状・サイズ・色・レシピの有無。商品名は使いません）を読み、販売タイプ・分類・形状・サイズ・色・レシピ複製元の候補を理由つきで出します。CIP に無い値は出しません。共通商品コードは下の「コードの案」、商品名は人が決めます。" }));
+    var st = el("p", { "class": "np-sub", role: "status" });
+    api(P + "/seisan-ai").then(function (o) {
+      var p = o.proposal;
+      if (p) {
+        w.appendChild(el("p", null, [tag("AI の案", "info"), txt(" " + dash(p.model) + "・CIP の構成は " + dash(p.as_of) + " 時点")]));
+        w.appendChild(table(["欄", "候補", "理由（AI）"], Object.keys(SEISAN_LABEL).filter(function (k) { return p.fields[k]; }).map(function (k) {
+          return el("tr", null, [el("td", { text: SEISAN_LABEL[k] }), el("td", null, [el("strong", { text: p.fields[k] })]),
+            el("td", { text: dash(p.reasons[k] || p.reasons[SEISAN_LABEL[k]]) })]);
+        })));
+        if (p.unverified.length) w.appendChild(el("p", { "class": "np-sub", text: "未確認: " + p.unverified.join("／") }));
+        if (o.can_run) {
+          var forms = panel.querySelectorAll("form[data-seisan-target]");
+          var put = el("button", { type: "button", "class": "np-btn", text: "登録票に入れる（" + forms.length + " つの下書き・空の欄だけ）" });
+          var sk = el("button", { type: "button", text: "見送る" });
+          put.addEventListener("click", function () {
+            var n = 0;
+            Array.prototype.forEach.call(forms, function (f) {
+              Object.keys(SEISAN_LABEL).forEach(function (k) {
+                var inp = f.elements[k];
+                if (!inp || !p.fields[k] || inp.value) return;
+                if (inp.tagName === "SELECT" && ![].some.call(inp.options, function (op) { return op.value === p.fields[k]; })) return;
+                inp.value = p.fields[k]; inp.setAttribute("data-np-dirty", "1"); n++;
+              });
+            });
+            st.textContent = n + " か所に入れました。中身を確かめて、各下書きの「下書きを保存」を押してください（まだ保存していません）。";
+            post(P + "/seisan-ai-decide", { proposal_id: p.id, state: "使った" }).catch(function () {});
+          });
+          sk.addEventListener("click", function () { post(P + "/seisan-ai-decide", { proposal_id: p.id, state: "見送り" }).then(function () { go(); }).catch(function (e) { st.textContent = e.message; }); });
+          w.appendChild(btnRow([put, sk]));
+        }
+      }
+      if (!o.can_run) { w.appendChild(el("p", { "class": "np-sub", text: "AI に出させられるのは、商品開発部・管理者・社長の業務ロールの人です。" })); return; }
+      var bt = el("button", { type: "button", "class": p ? "" : "np-btn", text: p ? "出し直させる" : "AI に候補を出させる" });
+      bt.addEventListener("click", function () {
+        bt.setAttribute("disabled", "disabled");
+        post(P + "/seisan-ai", {}).then(function (r) {
+          if (!r.started) { st.textContent = r.reason; bt.removeAttribute("disabled"); return; }
+          st.textContent = "CIP の商品の構成を読んで、候補を選んでいます（1分ほど）。";
+          var tries = 0;
+          (function poll() {
+            api("/api/ai/score-runs/" + r.run_id).then(function (x) {
+              if (x.stage === "待ち" || x.stage === "実行中") { if (++tries < 40) return setTimeout(poll, 3000); st.textContent = "まだ終わりません。少したってから開き直してください。"; return; }
+              if (x.stage === "失敗") { st.textContent = "出せませんでした: " + (x.error || ""); bt.removeAttribute("disabled"); return; }
+              go();
+            }).catch(function (e) { st.textContent = e.message; });
+          })();
+        }).catch(function (e) { st.textContent = "できませんでした: " + e.message; bt.removeAttribute("disabled"); });
+      });
+      w.appendChild(btnRow([bt]));
+    }).catch(function (e) { st.textContent = e.message; });
+    w.appendChild(st);
+  }
+  /** 共通商品コードの採番の案（FR-227）。大分類・中分類から、CIP の既存のコードの付け方に合わせた「次の番号」を出す */
+  function codeSuggest(pid, f, input) {
+    var w = el("span");
+    var bt = el("button", { type: "button", text: "コードの案を出す" });
+    var out = el("span", { "class": "np-sub", role: "status" });
+    bt.addEventListener("click", function () {
+      var c1 = f.elements.cat1 ? f.elements.cat1.value : "", c2 = f.elements.cat2 ? f.elements.cat2.value : "", c3 = f.elements.cat3 ? f.elements.cat3.value : "";
+      out.textContent = " 調べています…";
+      api("/api/projects/" + encodeURIComponent(pid) + "/seisan-code-suggest?cat1=" + encodeURIComponent(c1) + "&cat2=" + encodeURIComponent(c2) + "&cat3=" + encodeURIComponent(c3))
+        .then(function (r) {
+          while (out.firstChild) out.removeChild(out.firstChild);
+          if (!r.proposal) { out.textContent = " " + r.why; return; }
+          var use = el("button", { type: "button", text: r.proposal + " を入れる" });
+          use.addEventListener("click", function () { input.value = r.proposal; input.setAttribute("data-np-dirty", "1"); });
+          out.appendChild(txt(" 案: ")); out.appendChild(el("strong", { text: r.proposal })); out.appendChild(txt(" "));
+          out.appendChild(use);
+          out.appendChild(el("span", { "class": "np-sub", text: "（" + r.basis + "。" + r.note + (r.others.length ? "。ほかの頭: " + r.others.map(function (x) { return x.prefix + " " + x.n + "件"; }).join("・") : "") + "）" }));
+        }).catch(function (e) { out.textContent = " " + e.message; });
+    });
+    w.appendChild(bt); w.appendChild(out);
+    return w;
+  }
   function seisanTarget(pid, o, t) {
     var w = el("div", { "class": "np-field" });
     var vid = t.variant_id === null ? "" : String(t.variant_id);
@@ -2328,7 +2412,7 @@
       text: "前回 CIP が断った理由: " + t.last_error }));
 
     // 下書き。**seisan の画面と同じ並び・同じ選択肢**
-    var f = el("form");
+    var f = el("form", { "data-seisan-target": vid || "0" });
     o.fields.forEach(function (fd) {
       var id = "sz-" + pid + "-" + (vid || "0") + "-" + fd.key;
       var lab = el("label", { "for": id, text: fd.label + (fd.required ? "（必須）" : "") });
@@ -2352,6 +2436,7 @@
       if (fd.hint) row.appendChild(el("span", { "class": "np-sub", text: " " + fd.hint }));
       f.appendChild(row);
       if (fd.key === "copy_recipe_from" && o.configured && o.editable) f.appendChild(similarPicker(pid, f, input));
+      if (fd.key === "code" && o.configured && o.editable) row.appendChild(codeSuggest(pid, f, input));
     });
     if (o.vocab.cat1 === null) f.appendChild(el("p", { "class": "np-sub",
       text: "分類は、CIP の登録口ができるまで既存の値と照らせません。CIP の画面の表記どおりに入れてください。" }));
@@ -2377,6 +2462,7 @@
       ev.preventDefault();
       var obj = { variant_id: vid };
       o.fields.forEach(function (fd) { obj[fd.key] = f.elements[fd.key].value; });
+      Array.prototype.forEach.call(f.querySelectorAll('[data-np-dirty="1"]'), function (x) { x.removeAttribute("data-np-dirty"); });  // 保存するので書きかけではない
       post("/api/projects/" + pid + "/seisan-draft", obj)
         .then(function () { go(); }).catch(function (e) { err(bar, e); });
     });

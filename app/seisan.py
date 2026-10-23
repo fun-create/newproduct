@@ -187,6 +187,56 @@ def store_codes() -> dict:
             "fba": [{k: it.get(k) for k in fk} for it in (j.get("fba") or [])]}
 
 
+# ── 共通商品コードの採番の案（FR-227・ADR-125・2026-10-23 十文字さん選択）──────────
+# CIP は採番しない（登録する人が決める）。既存のコードはほぼ全部「英字2文字＋数字4桁」（2026-10-23 本番で 3,282 件中 3,278 件）で、
+# 頭の英字は商品の系統ごとに分かれている（AG＝アクリルスタンド・BD＝スキンシール 等。ただし PM のように分類をまたぐものもある）。
+# **決まりは文書になっていない**ので、ここは「この分類で多い頭の英字の、いまの最大の次」を**案として**出すだけ。決めるのは人。
+_CODE = __import__("re").compile(r"^([A-Z]{2})(\d{4})$")
+
+
+def code_suggest(cat1: str, cat2: str = "", cat3: str = "", exists_fn=None, codes_fn=None) -> dict:
+    """{"proposal", "prefix", "basis", "max_code", "others"}。案が出せなければ proposal=None と理由。"""
+    import collections
+    if not (cat1 or "").strip():
+        return {"proposal": None, "why": "大分類を選ぶと、案を出せます"}
+    rows = (codes_fn or (lambda: store_codes()["items"]))()
+    seen, allc = set(), []
+    for it in rows:
+        c = str(it.get("product_code") or "")
+        m = _CODE.match(c)
+        if not m or c in seen:
+            continue
+        seen.add(c)
+        allc.append((c, m.group(1), int(m.group(2)), it.get("cat1") or "", it.get("cat2") or "", it.get("cat3") or ""))
+    def pick(f):
+        cnt = collections.Counter(x[1] for x in allc if f(x))
+        return cnt.most_common(4), sum(cnt.values())
+    level, (top, n) = "大分類・中分類・小分類", pick(lambda x: x[3] == cat1 and x[4] == cat2 and x[5] == cat3) if cat2 and cat3 else ((), 0)
+    if not top and cat2:
+        level, (top, n) = "大分類・中分類", pick(lambda x: x[3] == cat1 and x[4] == cat2)
+    if not top:
+        level, (top, n) = "大分類", pick(lambda x: x[3] == cat1)
+    if not top:
+        return {"proposal": None, "why": f"「{cat1}」の分類の既存のコードが見つからないので、案を出せません。頭の英字は CIP の管理者に確かめてください"}
+    prefix, hit = top[0]
+    mx = max(x[2] for x in allc if x[1] == prefix)
+    exists_fn = exists_fn or exists
+    nxt = mx + 1
+    for _ in range(30):                       # CIP に同じコードがあれば次へ（紐付け表に無い商品もあるため）
+        cand = f"{prefix}{nxt:04d}"
+        if nxt > 9999:
+            return {"proposal": None, "why": f"「{prefix}」の番号が 9999 に達しています。頭の英字は CIP の管理者に確かめてください"}
+        if not exists_fn(cand):
+            break
+        nxt += 1
+    else:
+        return {"proposal": None, "why": f"「{prefix}」で空いている番号が見つかりませんでした"}
+    return {"proposal": cand, "prefix": prefix, "max_code": f"{prefix}{mx:04d}",
+            "basis": f"{level}が同じ既存の商品 {n} 件のうち {hit} 件が「{prefix}」。「{prefix}」のいまの最大は {prefix}{mx:04d}",
+            "others": [{"prefix": p, "n": k} for p, k in top[1:]],
+            "note": "頭の英字の決まりは文書になっていないので案です。CIP に同じコードが無いことは確かめました"}
+
+
 # ── 外注先・原材料（2026-10-01 吉田さん実装・ADR-047・FR-184）────────────
 # **マスタは seisan。**ここは読むのと、採用した候補を seisan の規則で登録するだけ。
 # 書き込みは seisan 側でも「CIP の管理者か」を確かめる（押した人の共通IDを actor で渡す）

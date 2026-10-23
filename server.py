@@ -941,6 +941,20 @@ class H(BaseHTTPRequestHandler):
             try:
                 if what == "seisan" and method == "GET":
                     return self.sendj(200, seisan_m.overview(pid, uid))
+                if what == "seisan-ai" and method == "GET":
+                    from app import ai_seisan
+                    return self.sendj(200, {"proposal": ai_seisan.latest(pid), "can_run": ai_m.can_run(uid)})
+                if what in ("seisan-ai", "seisan-ai-decide") and method == "POST":
+                    # CIP 登録票の AI 入力アシスト（FR-228・ADR-125）。**案だけ**。下書きに入れるのも保存・登録も人
+                    from app import ai_seisan
+                    d = self.body()
+                    r = (ai_seisan.start_run(pid, uid) if what == "seisan-ai"
+                         else ai_seisan.decide(int(d.get("proposal_id")), d.get("state", ""), uid))
+                    store.audit(uid, "project." + what, pid, {"proposal_id": d.get("proposal_id"), "state": d.get("state")}, ip)
+                    return self.sendj(200, r)
+                if what == "seisan-code-suggest" and method == "GET":
+                    # 共通商品コードの採番の案（FR-227）。**案だけ**。決めて登録するのは人
+                    return self.sendj(200, seisan_m.code_suggest(qs.get("cat1", ""), qs.get("cat2", ""), qs.get("cat3", "")))
                 if what == "seisan-similar" and method == "GET":
                     return self.sendj(200, {"rows": seisan_m.similar(
                         qs.get("cat1", ""), qs.get("cat2", ""), qs.get("cat3", ""))})
