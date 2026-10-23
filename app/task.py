@@ -142,7 +142,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "role_external": bool(r["role_external"]),
             "assignee": r["assignee"],
             "hours": r["hours"], "ai_used": bool(r["ai_used"]),
-            "ai_reduction_rate": r["ai_reduction_rate"],
+            "ai_reduction_rate": r["ai_reduction_rate"], "date_locked": bool(r["date_locked"]),
         } for r in rs]
     else:
         sql, pr = _bounds(when or DEFAULT_WHEN, t, "w.")

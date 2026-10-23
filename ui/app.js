@@ -1290,6 +1290,13 @@
           tv.appendChild(el("p", { "class": "np-note", text: "タスクはありません。" }));
         } else {
           tv.appendChild(schedulePanel(d));
+          if (h.editable) {             // 発売予定日に合わせて日程を計算し直す（FR-225）。開いたときに計算する
+            var rsd = el("details", { "class": "np-card np-fold-plain" }, [el("summary", { text: "発売予定日に合わせて、開始日・期限を計算し直す" })]);
+            var rsb = el("div"), rsDone = false;
+            rsd.appendChild(rsb);
+            rsd.addEventListener("toggle", function () { if (rsd.open && !rsDone) { rsDone = true; reschedulePanel(d.id, rsb, { from: h.launch_date }); } });
+            tv.appendChild(rsd);
+          }
           // 期間の帯。期限が入っていれば塗り、目安だけなら白抜きの点線。**完了日が今日より後の行は描かない**（移行時の年の推定の疑い）
           var tl = d.tasks.map(function (t) {
             var sus = t.status === "完了" && t.done_at && t.done_at.slice(0, 10) > d.today;
@@ -1308,7 +1315,7 @@
               return el("tr", null, [
                 el("td", { "class": "np-num", text: String(t.seq) }),
                 el("td", null, [h.editable ? statusForm(Object.assign({ kind: "task" }, t)) : txt(t.status)]),
-                el("td", { "class": "np-nowrap", text: t.due_on ? t.due_on : "期限なし" }),
+                el("td", { "class": "np-nowrap" }, [txt(t.due_on ? t.due_on : "期限なし"), t.date_locked ? el("div", null, [tag("固定", "neutral")]) : null]),
                 el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
                 el("td", { text: dash(t.role_label) }),
@@ -1452,6 +1459,60 @@
   }
 
   // 発売予定日（ADR-085）。**理由が要る。**変えるとタスクの目安を計算し直す（期限は変えない）
+  /** 発売予定日に合わせてタスクの日程を計算し直す（FR-225・ADR-124・石原さんの依頼書 §2）。
+   *  見込みを一覧で出し、「反映する」で書く。完了・対象外・固定は動かさない。直前の反映は元に戻せる */
+  function reschedulePanel(pid, box, o) {
+    o = o || {};
+    var P = "/api/projects/" + encodeURIComponent(pid);
+    box.appendChild(el("p", { "class": "np-note", text: "計算しています…" }));
+    api(P + "/reschedule").then(function (r) {
+      while (box.firstChild) box.removeChild(box.firstChild);
+      if (o.title) box.appendChild(el("h3", { text: o.title }));
+      if (!r.ok) { box.appendChild(el("p", { "class": "np-warn", text: r.why })); return; }
+      box.appendChild(el("p", { "class": "np-sub", text: "発売予定日 " + r.launch + " に合わせて、開始日・期限を営業日（カレンダーの会社休業日）で計算しました。"
+        + "完了・対象外のタスクと、日付を固定したタスクは動かしません。"
+        + (r.flow_guessed && r.flow ? "開発タイプが空なので、タスク名から「" + r.flow + "」のルールを当てています。" : "") }));
+      var chg = r.rows.filter(function (x) { return x.change; });
+      var st = el("span", { "class": "np-status", role: "status" });
+      if (!chg.length) box.appendChild(el("p", { "class": "np-note", text: "日程が変わるタスクはありません。" }));
+      else {
+        box.appendChild(el("p", null, [tag(chg.length + " 件の日程が変わります", "info")]));
+        box.appendChild(table(["タスク", "いま（開始〜期限）", "計算した日程", "ルール"], chg.map(function (x) {
+          function span(a, b2) { return a || b2 ? dash(a) + (b2 && b2 !== a ? " 〜 " + b2 : "") : "（空）"; }
+          return el("tr", null, [el("td", { "class": "np-what", text: x.title }), el("td", { "class": "np-nowrap", text: span(x.old_start, x.old_due) }),
+            el("td", { "class": "np-nowrap" }, [el("strong", { text: span(x.new_start, x.new_due) })]),
+            el("td", null, [txt(dash(x.rule_label)), x.rule_src === "proposal" ? el("div", null, [tag("提案のルール", "neutral")]) : null])]);
+        })));
+        if (r.proposal) box.appendChild(el("p", { "class": "np-sub", text: "「提案のルール」は、シートが固定の日付だった開発タイプ（資材リニューアル・既成デザイン）などで、アプリが Webdeco などの流れに合わせて置いたものです。" }));
+        var ap = el("button", { type: "button", "class": "np-btn", text: "この日程で反映する（" + chg.length + " 件）" });
+        var armed = PHASE !== "parallel";
+        if (!armed) box.appendChild(el("p", { "class": "np-warn", text: "並行運用中（" + mdLabel(SHEET_UNTIL) + " まで）は進捗管理シートが正です。反映すると、ここの日付がシートと違う行になります（次の同期でシートの値が入らなくなります）。シートにも同じ日付を書く場合だけ反映してください。" }));
+        ap.addEventListener("click", function () {
+          if (!armed) { armed = true; ap.textContent = "もう一度押すと反映します（シートにも書く場合）"; return; }
+          ap.disabled = true; st.textContent = "反映しています…";
+          post(P + "/reschedule", { launch_from: o.from || "" }).then(function () { go(); })
+            .catch(function (e) { ap.disabled = false; st.className = "np-err"; st.textContent = "できませんでした: " + e.message; });
+        });
+        box.appendChild(el("p", null, [ap, txt(" "), st]));
+      }
+      var skip = r.rows.filter(function (x) { return x.why && !/^(完了|対象外)のタスク|予備時間/.test(x.why); });
+      if (skip.length) {
+        var det = el("details", { "class": "np-more" }, [el("summary", { text: "計算しないタスク " + skip.length + " 件（理由）" })]);
+        det.appendChild(table(["タスク", "理由"], skip.map(function (x) { return el("tr", null, [el("td", { text: x.title }), el("td", { text: x.why })]); })));
+        box.appendChild(det);
+      }
+      if (r.last_undo) {
+        var ub = el("button", { type: "button", text: "直前の反映を元に戻す（" + r.last_undo.applied_at.slice(0, 16).replace("T", " ") + "・" + r.last_undo.n + " 件）" });
+        var us = el("span", { "class": "np-status", role: "status" });
+        ub.addEventListener("click", function () {
+          ub.disabled = true;
+          post(P + "/reschedule-undo", {}).then(function (u) { us.textContent = u.restored + " 件を元に戻しました" + (u.kept ? "（反映のあと直された " + u.kept + " 件はそのまま）" : ""); setTimeout(go, 1200); })
+            .catch(function (e) { ub.disabled = false; us.className = "np-err"; us.textContent = "できませんでした: " + e.message; });
+        });
+        box.appendChild(el("p", null, [ub, txt(" "), us]));
+      }
+    }).catch(function (e) { while (box.firstChild) box.removeChild(box.firstChild); box.appendChild(el("p", { "class": "np-err", text: e.message })); });
+  }
   function launchControl(d) {
     var f = el("form", { "class": "np-inline" });
     var di = el("input", { type: "date", name: "launch_date", "aria-label": "発売予定日" });
@@ -1465,8 +1526,12 @@
       ev.preventDefault();
       post("/api/projects/" + encodeURIComponent(d.id) + "/launch-date", { launch_date: di.value, reason: ri.value })
         .then(function (r) {
-          if (r.schedule && !r.schedule.ok) window.alert("発売予定日を保存しました。タスクの目安は出せませんでした: " + r.schedule.why);
-          go();
+          // 保存したら、その場でタスクの日程の見込みを出す（FR-225。反映するかは人が決める）
+          while (msg.firstChild) msg.removeChild(msg.firstChild);
+          msg.appendChild(txt(" 発売予定日を保存しました。"));
+          var box = el("div", { "class": "np-card np-resched", id: "np-resched-after" });
+          f.parentNode.insertBefore(box, f.nextSibling);
+          reschedulePanel(d.id, box, { from: d.header.launch_date, title: "タスクの日程も、新しい発売予定日に合わせますか？" });
         })
         .catch(function (e) { msg.textContent = " " + e.message; });
     });
@@ -1730,6 +1795,13 @@
       if (!meta) { api("/api/meta").then(function (m) { meta = m; bt.click(); }).catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); }); return; }
       var tf = taskFields(meta, t);
       var form = el("form", { "class": "np-field" }, [tf.row]);
+      var lk = null;
+      if (kind === "task") {                      // 日付の固定（FR-225）。日付を手で変えたら固定にする（外すこともできる）
+        lk = el("input", { type: "checkbox", name: "date_locked" });
+        if (t.date_locked) lk.checked = true;
+        form.appendChild(el("p", null, [el("label", null, [lk, txt(" 日付を固定（発売予定日を変えても、この開始日・期限は動かさない）")])]));
+        [tf.f.start_on, tf.f.due_on].forEach(function (inp) { inp.addEventListener("change", function () { lk.checked = true; }); });
+      }
       var cat = null;
       if (kind === "work") {                      // 案件外の仕事は「区分」も直せる（点検 L-9）
         cat = el("input", { name: "category", size: "10", value: t.category || "", "aria-label": "区分" });
@@ -1744,7 +1816,12 @@
         var vals = tf.values();
         if (cat && cat.value.trim()) vals.category = cat.value;
         post("/api/tasks/" + kind + "/" + t.id + "/edit", vals)
-          .then(function (r) { st.textContent = r.changed.length ? "保存しました" : "変わったところはありません"; if (r.changed.length) setTimeout(go, 400); })
+          .then(function (r) {
+            var lockChanged = lk && lk.checked !== !!t.date_locked;
+            var done = function () { st.textContent = (r.changed.length || lockChanged) ? "保存しました" : "変わったところはありません"; if (r.changed.length || lockChanged) setTimeout(go, 400); };
+            if (!lockChanged) return done();
+            return post("/api/tasks/task/" + t.id + "/lock", { locked: lk.checked ? "1" : "0" }).then(done);
+          })
           .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
       });
       c.appendChild(form);

@@ -181,15 +181,19 @@ def expand_tasks(project_id: str, user_id: str) -> int:
     tpl = store.q("SELECT t.* FROM task_template t JOIN flow_type f ON f.code=t.flow_type "
                   "AND t.template_version=f.active_template_version WHERE t.flow_type=? ORDER BY t.seq",
                   (p["flow_type"],))
+    from app import schedule_rules
     with store.tx() as c:
         for t in tpl:
+            # 日程の計算ルールを**タスクに持つ**（テンプレートを改訂しても、この案件のルールは変わらない・FR-225）
+            r = schedule_rules.rule_for(p["flow_type"], t["title"]) if t["kind"] != "予備" else None
             c.execute(
                 "INSERT INTO task (project_id,template_id,seq,title,role,hours,"
-                "status,ai_category,ai_reduction_rate,created_at,kind) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "status,ai_category,ai_reduction_rate,created_at,kind,rule_start,rule_due,rule_src) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (project_id, t["id"], t["seq"], t["title"], t["role"],
                  t["standard_hours"], "未着手", t["ai_category"],
-                 t["ai_reduction_rate"], store.now_s(), t["kind"]))
+                 t["ai_reduction_rate"], store.now_s(), t["kind"],
+                 r[0] if r else None, r[1] if r else None, r[2] if r else None))
     return len(tpl)
 
 

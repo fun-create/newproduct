@@ -107,7 +107,7 @@ def _touches_tasks(path: str) -> bool:
     """タスクの期限・担当・状態が変わり得る書き込み（カレンダーへ送り直す合図）。"""
     p = path[len("/api/"):] if path.startswith("/api/") else path
     return (p.startswith("tasks/") or p.startswith("work-items") or p == "projects"
-            or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
+            or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/reschedule", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
 
 # Caddy を通ると必ず付くヘッダ。1つでもあれば「外から来た」とみなす
 FORWARD_HEADERS = ("X-Forwarded-Proto", "X-Real-IP", "X-Forwarded-For",
@@ -865,6 +865,17 @@ class H(BaseHTTPRequestHandler):
             return self.sendj(200, lpreq_m.build(parts[1]))
 
         # 新商品の発売後の売上（FR-183）。見るだけ
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "reschedule" and method == "GET":
+            # 発売予定日に合わせた日程の見込み（**書かない**・FR-225）。launch= で別の日を試せる
+            from app import reschedule
+            r = reschedule.plan(parts[1], qs.get("launch") or None)
+            r["last_undo"] = reschedule.last_undo(parts[1])
+            return self.sendj(200, r)
+        if len(parts) == 4 and parts[0] == "tasks" and parts[1] == "task" and parts[3] == "lock" and method == "POST":
+            from app import reschedule
+            r = reschedule.set_lock(int(parts[2]), self.body().get("locked") in ("1", "true", "on"), uid)
+            store.audit(uid, "task.lock", parts[2], r, ip)
+            return self.sendj(200, r)
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "sales" and method == "GET":
             return self.sendj(200, sales_m.project_sales(parts[1]))
 
@@ -994,6 +1005,18 @@ class H(BaseHTTPRequestHandler):
             if what == "header":
                 r = project_m.update_header(pid, d, d.get("reason", ""), uid)
                 store.audit(uid, "project.header", pid, {k: d.get(k) for k in project_m.HEADER_FIELDS if k in d}, ip)
+                return self.sendj(200, r)
+            if what == "reschedule":
+                # 発売予定日に合わせてタスクの日程を計算し直す（FR-225・ADR-124）。only は「この行だけ」
+                from app import reschedule
+                only = [int(x) for x in str(d.get("only") or "").split(",") if x.strip().isdigit()] or None
+                r = reschedule.apply(pid, uid, d.get("launch_from") or None, only)
+                store.audit(uid, "project.reschedule", pid, {"changed": r["changed"]}, ip)
+                return self.sendj(200, r)
+            if what == "reschedule-undo":
+                from app import reschedule
+                r = reschedule.undo(pid, uid)
+                store.audit(uid, "project.reschedule_undo", pid, r, ip)
                 return self.sendj(200, r)
             if what == "launch-date":
                 r = project_m.set_launch_date(pid, d.get("launch_date", ""), d.get("reason", ""), uid)
