@@ -811,7 +811,8 @@ class H(BaseHTTPRequestHandler):
         if parts == ["settings", "role"] and method == "POST":
             d = self.body()
             return self.sendj(200, admin_m.set_role(d.get("user_id", ""), d.get("role", ""),
-                                                    d.get("on") in ("1", "true", "on"), uid, user.get("role"), ip))
+                                                    d.get("on") in ("1", "true", "on"), uid, user.get("role"), ip,
+                                                    kind=d.get("kind") or "task"))
 
         # 年間目標（FR-109/110・FR-106）。**3方式と根拠が必須**。未設定は「目標未設定」
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "target":
@@ -1039,7 +1040,7 @@ class H(BaseHTTPRequestHandler):
             mq = qs.get("mine")
             if mq not in ("0", "1"):
                 from app import gate
-                mq = "1" if gate.roles_of(uid) else "0"
+                mq = "1" if gate.task_roles_of(uid) else "0"
             return self.sendj(200, task_m.listing(
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
                 qs.get("role", ""), qs.get("assignee", ""),
@@ -1100,7 +1101,12 @@ class H(BaseHTTPRequestHandler):
             return self.sendj(200, sheetsync.summary())
         if parts == ["users"] and method == "GET":
             # 担当を選ぶための一覧（共通ログインIDと名前だけ。秘密は返さない）
-            return self.sendj(200, {"rows": sorted(({"user_id": x.get("user_id"), "name": x.get("name") or x.get("user_id")}
+            # 担当区分も添える（担当を選ぶ欄で、そのタスクの区分の人を上に出す・石原さんの依頼書 §3-3・ADR-123）
+            troles: dict = {}
+            for r in store.q("SELECT user_id, role_code FROM role_member"):
+                troles.setdefault(r["user_id"], []).append(r["role_code"])
+            return self.sendj(200, {"rows": sorted(({"user_id": x.get("user_id"), "name": x.get("name") or x.get("user_id"),
+                                                      "roles": troles.get(x.get("user_id"), [])}
                                                      for x in auth.users() if x.get("active", True)), key=lambda x: x["user_id"])})
         if parts == ["settings", "calfc-tasks"] and method == "GET":
             return self.sendj(200, calfc_tasks_m.status())
@@ -1446,6 +1452,10 @@ def gates_board(user_id: str) -> dict:
     role_label = {r["code"]: r["label"] for r in
                   store.q("SELECT code,label FROM role")}
     flow_label = {f["code"]: f["label"] for f in project_m.flow_types()}
+    names = {u["user_id"]: (u.get("name") or u["user_id"]) for u in auth.public_users()}
+    approvers: dict = {}
+    for r in store.q("SELECT role_code, user_id FROM role_member UNION SELECT role_code, user_id FROM approval_member"):
+        approvers.setdefault(r["role_code"], []).append(names.get(r["user_id"], r["user_id"]))
     rows = []
     for r in store.q("SELECT * FROM project ORDER BY (launch_date IS NULL), "
                      "launch_date, id"):
@@ -1456,8 +1466,9 @@ def gates_board(user_id: str) -> dict:
         no_gate = gate_m.out_of_turn(p)
         if no_gate:
             nx = None
-        who = ("／".join(role_label.get(x, x) for x in nx["approver_role"])
-               if nx else "—")
+        # 誰の番か: 区分の名前に、承認できる人の名前を添える（ADR-123。区分の名前だけだと、承認できる人が担当区分と同じに見える）
+        who = ("／".join(role_label.get(x, x) + ("（" + "・".join(approvers.get(x, [])) + "）" if approvers.get(x) else "")
+                        for x in nx["approver_role"]) if nx else "—")
         rows.append({
             "id": p["id"], "product": project_m.display_name(p),
             "flow_label": flow_label.get(p["flow_type"] or "", "—"),

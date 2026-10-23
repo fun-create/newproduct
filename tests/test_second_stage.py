@@ -105,7 +105,7 @@ class TestSeedCounts(Base):
 
     def test_masters(self):
         self.assertEqual(self.counts["flow_type"], 7)
-        self.assertEqual(self.counts["role"], 7)
+        self.assertEqual(self.counts["role"], 8)          # SE部を足した（ADR-123）
         self.assertEqual(self.counts["gate_def"], 7)
         self.assertEqual(self.counts["hold_reason"], 6)   # 6つ目は sheet_removed（ADR-105）
         self.assertEqual(self.counts["abort_reason"], 4)

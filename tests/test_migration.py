@@ -134,11 +134,12 @@ class TestLedger(Base):
         self.assertIsNone(self.ledger._date("8月17日", None), "年度が無ければ日付を作らない")
         self.assertIsNone(self.ledger._date("期限", 2025))
 
-    def test_unknown_role_stays_null(self):
+    def test_se_role_is_mapped(self):
+        # 2026-10-23 石原さんの依頼書 §3-3 で「SE部」を担当区分に加えた（ADR-123）。それまでは NULL にしていた
         allt = [t for g in self.d["groups"] for t in g["tasks"]]
         se = [t for t in allt if t["role_raw"] == "SE部"]
         self.assertEqual(len(se), 1)
-        self.assertIsNone(se[0]["role"], "役割マスタに無いものを発明しない")
+        self.assertEqual(se[0]["role"], "se")
 
     def test_status_and_role_vocab(self):
         allt = [t for g in self.d["groups"] for t in g["tasks"]]

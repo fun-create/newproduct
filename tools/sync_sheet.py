@@ -42,7 +42,7 @@ from app import store                  # noqa: E402
 SHEET = "01_進捗管理商品開発__全タスク一覧.tsv"         # 鍵は前回の取り込みと同じ（source_sheet）
 STATUS = {"未着手": "未着手", "完了": "完了", "取組み中": "着手"}
 ROLE = {"管理者": "admin", "メンバー": "member", "商品開発部": "devdept",
-        "Webマーケ": "webmkt", "生産部": "prod", "パートさん": "part", "パート": "part"}
+        "Webマーケ": "webmkt", "生産部": "prod", "パートさん": "part", "パート": "part", "SE部": "se"}
 TYPES = {"ページリニューアル": "pagerenew", "既成デザイン": "readymade", "フリーカット": "freecut",
          "スキンシール": "newmodel", "名入れ": "meire", "Web deco": "webdeco", "Webdeco": "webdeco"}
 OUTSIDE = "商品発売以外のタスク"

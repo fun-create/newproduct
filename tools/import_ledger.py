@@ -50,7 +50,7 @@ SRC = BASE / "seed" / "01_進捗管理商品開発__全タスク一覧.tsv"
 SHEET = "01_進捗管理商品開発__全タスク一覧.tsv"
 STATUS = {"未着手": "未着手", "完了": "完了", "取組み中": "着手"}
 ROLE = {"管理者": "admin", "メンバー": "member", "商品開発部": "devdept",
-        "Webマーケ": "webmkt", "生産部": "prod", "パートさん": "part", "パート": "part"}
+        "Webマーケ": "webmkt", "生産部": "prod", "パートさん": "part", "パート": "part", "SE部": "se"}
 FOLD = "折り畳む"
 OUTSIDE = "商品発売以外のタスク"
 

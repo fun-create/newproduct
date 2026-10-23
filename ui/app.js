@@ -1801,11 +1801,20 @@
     var sel = el("select", { "aria-label": "担当" });
     sel.appendChild(el("option", { value: "", text: "（担当なし）" }));
     function fill(rows) {
-      rows.forEach(function (u) {
+      // そのタスクの担当区分の人を先に（区分に対応する人から選べるように・ADR-123）。ほかの人も選べる
+      function opt(u) {
         var o = el("option", { value: u.user_id, text: u.user_id + (u.name && u.name !== u.user_id ? " " + u.name : "") });
         if (u.user_id === t.assignee) o.setAttribute("selected", "selected");
-        sel.appendChild(o);
-      });
+        return o;
+      }
+      var inRole = t.role ? rows.filter(function (u) { return (u.roles || []).indexOf(t.role) >= 0; }) : [];
+      if (inRole.length) {
+        var g1 = el("optgroup", { label: "この区分（" + (t.role_label || t.role) + "）の人" });
+        inRole.forEach(function (u) { g1.appendChild(opt(u)); });
+        var g2 = el("optgroup", { label: "ほかの人" });
+        rows.filter(function (u) { return inRole.indexOf(u) < 0; }).forEach(function (u) { g2.appendChild(opt(u)); });
+        sel.appendChild(g1); sel.appendChild(g2);
+      } else rows.forEach(function (u) { sel.appendChild(opt(u)); });
       if (t.assignee && !rows.some(function (u) { return u.user_id === t.assignee; })) {
         var o2 = el("option", { value: t.assignee, text: t.assignee + "（台帳に無い）" }); o2.setAttribute("selected", "selected"); sel.appendChild(o2);
       }
@@ -2612,9 +2621,11 @@
     var tab = q.get("tab") || "project";
     var focus = q.get("focus");
     var mine, mq;
-    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab) + (q.get("mine") ? "&mine=" + q.get("mine") : ""))
+    var roleQ = q.get("role") || "";                                      // 担当区分で絞る（ADR-123）
+    api("/api/tasks?when=" + encodeURIComponent(when) + "&tab=" + encodeURIComponent(tab) + (q.get("mine") ? "&mine=" + q.get("mine") : "")
+        + (roleQ ? "&role=" + encodeURIComponent(roleQ) : ""))
       .then(function (d) {
-        mine = !!d.mine; mq = mine ? "&mine=1" : "&mine=0";      // 既定はサーバが決める（業務ロールのある人は自分の分）
+        mine = !!d.mine; mq = (mine ? "&mine=1" : "&mine=0") + (roleQ ? "&role=" + encodeURIComponent(roleQ) : "");  // 既定はサーバが決める
         var b = clear();
         setTitle("タスク", "／ " + (WHEN_LABEL[when] || when));
 
@@ -2647,8 +2658,19 @@
         b.appendChild(fl);
         // 自分の分だけ（担当者が自分＋自分の業務ロール）。ダッシュボードの「自分のやること」の続き
         var mf = el("div", { "class": "np-filters" });
-        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=0", text: "全員の分", "aria-current": mine ? null : "true" }));
-        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1", text: "自分の分だけ", "aria-current": mine ? "true" : null }));
+        var rq = roleQ ? "&role=" + encodeURIComponent(roleQ) : "";
+        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=0" + rq, text: "全員の分", "aria-current": mine ? null : "true" }));
+        mf.appendChild(el("a", { href: "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=1" + rq, text: "自分の分だけ", "aria-current": mine ? "true" : null }));
+        // 担当区分で絞る（他部署パートさんへの依頼中のタスクを一覧で見る、など・石原さんの依頼書 §3-4）
+        var rs = el("select", { "aria-label": "担当区分で絞る" });
+        rs.appendChild(el("option", { value: "", text: "担当区分（すべて）" }));
+        api("/api/meta").then(function (m) {
+          (m.roles || []).forEach(function (r) { var o = el("option", { value: r.code, text: r.label }); if (r.code === roleQ) o.setAttribute("selected", "selected"); rs.appendChild(o); });
+        }).catch(function () { /* 読めなければ絞れないだけ */ });
+        rs.addEventListener("change", function () {
+          location.hash = "#/tasks?when=" + encodeURIComponent(when) + "&tab=" + tab + "&mine=" + (mine ? "1" : "0") + (rs.value ? "&role=" + encodeURIComponent(rs.value) : "");
+        });
+        mf.appendChild(rs);
         b.appendChild(btnRow([navBtn("#/tasks/assign", "担当をまとめて割り振る"), navBtn("#/routines", "繰り返しの仕事（ルーティン）")]));
         b.appendChild(mf);
         b.appendChild(el("p", { "class": "np-note",
@@ -6104,28 +6126,37 @@
       // 業務ロール（ADR-059）。全員に見せる。付け外しはアプリ権限 admin（十文字さんの選択）
       var rc = el("div", { "class": "np-card", id: "np-set-roles" });
       var R = st.roles;
-      rc.appendChild(el("h2", { text: "業務ロール（誰が何を判定するか）" }));
-      rc.appendChild(el("p", { "class": "np-sub", text: "ゲートや年間プランを承認できる資格は、ここの業務ロールで決まります（アプリの管理者かどうかとは別です）。"
+      // 担当区分（誰の業務か）と、承認できる人（ゲート・年間プラン）を分けて出す（2026-10-23 石原さんの依頼書 §3・ADR-123）
+      rc.appendChild(el("h2", { text: "担当区分と、承認できる人" }));
+      rc.appendChild(el("p", { "class": "np-sub", text: "「担当区分」は、タスクが誰の業務かを表します（「自分のやること」に出るタスクが決まります）。"
+        + "「承認できる人」は、ゲートや年間プランを承認できる資格です。どちらもアプリの管理者かどうかとは別です。"
         + (R.can_edit ? "印を押すと付け外しできます。" : "付け外しできるのは、アプリ権限が管理者（admin）の人です。")
         + "利用者そのものの追加は、カレンダーの ☰ →「人とアプリ」で行います。" }));
-      var roleCols = R.roles;                       // 他部署のロール（生産部など）も G4 の承認に使うので全部出す
-      rc.appendChild(table(["利用者"].concat(roleCols.map(function (r) { return r.label; })), R.people.map(function (p) {
-        var mine = R.members[p.user_id] || [];
-        return el("tr", null, [el("td", { text: p.name + "（" + p.user_id + "）" })].concat(roleCols.map(function (r) {
-          var has = mine.indexOf(r.code) >= 0, td = el("td");
-          if (!R.can_edit) { td.appendChild(txt(has ? "あり" : "—")); return td; }
-          var bt = el("button", { type: "button", text: has ? "あり" : "—", "aria-pressed": String(has),
-            "aria-label": p.name + " の " + r.label + (has ? "を外す" : "を付ける") });
-          bt.addEventListener("click", function () {
-            if (!window.confirm(p.name + " さんの「" + r.label + "」を" + (has ? "外します" : "付けます") + "。よろしいですか")) return;
-            post("/api/settings/role", { user_id: p.user_id, role: r.code, on: has ? "0" : "1" })
-              .then(function () { viewSettings({ id: "np-set-roles", msg: p.name + " さんの「" + r.label + "」を" + (has ? "外しました" : "付けました") }); })
-              .catch(function (e) { td.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
-          });
-          td.appendChild(bt);
-          return td;
+      function roleMatrix(title, note, cols, have, kind) {
+        rc.appendChild(el("h3", { text: title }));
+        if (note) rc.appendChild(el("p", { "class": "np-sub", text: note }));
+        rc.appendChild(table(["利用者"].concat(cols.map(function (r) { return r.label; })), R.people.map(function (p) {
+          var mine = have[p.user_id] || [];
+          return el("tr", null, [el("td", { text: p.name + "（" + p.user_id + "）" })].concat(cols.map(function (r) {
+            var has = mine.indexOf(r.code) >= 0, td = el("td");
+            if (!R.can_edit) { td.appendChild(txt(has ? "あり" : "—")); return td; }
+            var bt = el("button", { type: "button", text: has ? "あり" : "—", "aria-pressed": String(has),
+              "aria-label": p.name + " の " + title + "「" + r.label + "」" + (has ? "を外す" : "を付ける") });
+            bt.addEventListener("click", function () {
+              if (!window.confirm(p.name + " さんの" + title + "「" + r.label + "」を" + (has ? "外します" : "付けます") + "。よろしいですか")) return;
+              post("/api/settings/role", { user_id: p.user_id, role: r.code, on: has ? "0" : "1", kind: kind })
+                .then(function () { viewSettings({ id: "np-set-roles", msg: p.name + " さんの" + title + "「" + r.label + "」を" + (has ? "外しました" : "付けました") }); })
+                .catch(function (e) { td.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+            });
+            td.appendChild(bt);
+            return td;
+          })));
         })));
-      })));
+      }
+      roleMatrix("担当区分（誰の業務か）", "他部署パートさんはログインが無いので、ここには出ません（タスクの担当区分としてだけ使います）。",
+        R.roles.filter(function (r) { return r.code !== "part"; }), R.members, "task");
+      roleMatrix("承認できる人（ゲート・年間プラン）", "G1・G5・G6 は商品開発部管理者、G2 は商品開発部管理者か社長、G3 と年間プランの承認は社長、G4 は生産部の資格で承認します。",
+        R.approval_roles || [], R.approvals || {}, "approval");
       b.appendChild(rc);
 
       // 変更の記録（全員に見せる）

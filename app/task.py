@@ -103,7 +103,7 @@ def _mine_cond(user_id: str, roles, pfx: str = ""):
 def _mine(user_id: str, pfx: str):
     """「自分の分だけ」（ダッシュボードの「自分のやること」と同じ数え方）。"""
     from . import gate
-    sql, prm = _mine_cond(user_id, gate.roles_of(user_id), pfx)
+    sql, prm = _mine_cond(user_id, gate.task_roles_of(user_id), pfx)
     return " AND " + sql, prm
 
 
@@ -526,7 +526,8 @@ def dashboard(user_id: str) -> dict:
     td, tdp = _bounds("today", t)
 
     # 自分のゲート待ち。**人ごとに出さないと「誰かがやる」になる**（画面設計 3-1）
-    my_roles = set(gate.roles_of(user_id)) if user_id else set()
+    my_roles = set(gate.roles_of(user_id)) if user_id else set()          # ゲートの判定待ちは承認の資格で
+    my_task_roles = set(gate.task_roles_of(user_id)) if user_id else set()  # 自分のやることは担当区分で（ADR-123）
     waiting, by_role = [], {}
     launched_no_gate = []
     for r in store.q("SELECT * FROM project WHERE stage NOT IN ('中止','評価完了')"):
@@ -555,14 +556,14 @@ def dashboard(user_id: str) -> dict:
     my_tasks, my_n = [], 0
     my_counts = {"overdue": None, "today": None, "next7": None}
     if user_id:
-        mc, cp = _mine_cond(user_id, my_roles)
+        mc, cp = _mine_cond(user_id, my_task_roles)
         until = (t + _dt.timedelta(days=7)).isoformat()
         open_ = "status NOT IN ('完了','対象外')"
         where = f"{open_} AND due_on IS NOT NULL AND due_on <= ? AND {mc}"
         my_n = (store.val(f"SELECT COUNT(*) FROM task WHERE {where}", [until] + cp, 0)
                 + store.val(f"SELECT COUNT(*) FROM work_item WHERE {where}", [until] + cp, 0))
         rows = []
-        tmc, _ = _mine_cond(user_id, my_roles, "t.")
+        tmc, _ = _mine_cond(user_id, my_task_roles, "t.")
         for r in store.q(f"SELECT t.*, p.cat1, p.cat2, p.cat3, p.size, p.internal_name FROM task t "
                          f"LEFT JOIN project p ON p.id=t.project_id WHERE t.status NOT IN ('完了','対象外') "
                          f"AND t.due_on IS NOT NULL AND t.due_on <= ? AND {tmc} "
@@ -595,7 +596,7 @@ def dashboard(user_id: str) -> dict:
         "launch_outlook": _launch_outlook(),
         "newproduct_sales": _newproduct_sales(),
         "my": {"tasks": my_tasks, "tasks_n": my_n, "gates": waiting[:10], "gates_n": len(waiting),
-               "counts": my_counts, "roles": [role_label.get(x, x) for x in sorted(my_roles)]},
+               "counts": my_counts, "roles": [role_label.get(x, x) for x in sorted(my_task_roles)]},
         # ── 1段目: いま詰まっているもの ──
         "stuck": {
             "overdue": {

@@ -195,6 +195,17 @@ def next_gate(proj: dict) -> dict | None:
 
 # ── 誰が通せるか（§10-2 ②）────────────────────────────────
 def roles_of(user_id: str) -> list[str]:
+    """**権限に使うロール**（ゲートの承認・書く操作）。担当区分（role_member）と承認できる人（approval_member）の和。
+
+    2026-10-23 石原さんの依頼書 §3・ADR-123: 承認できる人を担当区分と分けた。増地さんは担当区分が
+    「商品開発部メンバー」でも、承認できる人として「管理者」の資格を持てる。"""
+    return [r["role_code"] for r in store.q(
+        "SELECT role_code FROM role_member WHERE user_id=? UNION SELECT role_code FROM approval_member WHERE user_id=?",
+        (user_id, user_id))]
+
+
+def task_roles_of(user_id: str) -> list[str]:
+    """**担当区分**（誰の業務か）。「自分のやること」と割り振りはこちらだけを見る（承認の資格では増えない）。"""
     return [r["role_code"] for r in
             store.q("SELECT role_code FROM role_member WHERE user_id=?", (user_id,))]
 

@@ -219,46 +219,65 @@ def set_value(key: str, value, reason: str, user_id: str, app_role: str, ip: str
 
 
 # ── 業務ロールの付け外し（アプリ権限 admin・十文字さんの選択）─────────────────
+APPROVAL_ROLES = ("president", "admin", "prod")   # ゲートの承認者に出てくる区分（G0 は起票の確認なので除く）
+
+
 def roles_view(app_role: str) -> dict:
+    """担当区分（role_member）と承認できる人（approval_member）を別の表で（ADR-123）。"""
     import auth
     people = [{"user_id": u["user_id"], "name": u.get("name") or u["user_id"]}
               for u in auth.public_users() if u.get("active") and not u.get("test")]
     roles = store.rows(store.q("SELECT code, label, external FROM role ORDER BY sort"))
-    have = {}
+    have, appr = {}, {}
     for r in store.q("SELECT user_id, role_code FROM role_member"):
         have.setdefault(r["user_id"], []).append(r["role_code"])
+    for r in store.q("SELECT user_id, role_code FROM approval_member"):
+        appr.setdefault(r["user_id"], []).append(r["role_code"])
     return {"people": sorted(people, key=lambda x: x["user_id"]), "roles": roles, "members": have,
+            "approval_roles": [r for r in roles if r["code"] in APPROVAL_ROLES], "approvals": appr,
             "can_edit": app_role == "admin"}
 
 
-def set_role(target: str, role: str, on: bool, user_id: str, app_role: str, ip: str = "") -> dict:
+def set_role(target: str, role: str, on: bool, user_id: str, app_role: str, ip: str = "", kind: str = "task") -> dict:
+    """kind="task" は担当区分、"approval" は承認できる人（ADR-123）。"""
     if app_role != "admin":
         raise PermissionError("業務ロールを付け外しできるのは、アプリ権限が管理者（admin）の人です")
     if store.one("SELECT 1 FROM role WHERE code=?", (role,)) is None:
         raise LookupError("その業務ロールはありません")
+    table = "approval_member" if kind == "approval" else "role_member"
+    if table == "approval_member" and role not in APPROVAL_ROLES:
+        raise ValueError("承認できる人に付けられるのは、社長・商品開発部管理者・生産部です")
     import auth
     if not any(u["user_id"] == target for u in auth.public_users()):
         raise LookupError("その利用者はいません")
-    has = store.one("SELECT 1 FROM role_member WHERE role_code=? AND user_id=?", (role, target)) is not None
+    has = store.one(f"SELECT 1 FROM {table} WHERE role_code=? AND user_id=?", (role, target)) is not None
     if on == has:
         return {"ok": True, "changed": False}
-    if not on and role == "president" and store.val(
-            "SELECT COUNT(*) FROM role_member WHERE role_code='president'", (), 0) <= 1:
-        raise ValueError("社長の業務ロールを持つ人が居なくなります（年間プランの承認と G2・G3 を誰も通せなくなるため外せません）")
+    if not on and role == "president":
+        # 外したあとも、社長として承認できる人が残るか（担当区分と承認の和で数える）
+        left = store.val("SELECT COUNT(*) FROM (SELECT user_id FROM role_member WHERE role_code='president' "
+                         "UNION SELECT user_id FROM approval_member WHERE role_code='president') "
+                         f"WHERE user_id != ? OR user_id IN (SELECT user_id FROM "
+                         f"{'role_member' if table == 'approval_member' else 'approval_member'} WHERE role_code='president')",
+                         (target,), 0)
+        if left < 1:
+            raise ValueError("社長の業務ロールを持つ人が居なくなります（年間プランの承認と G2・G3 を誰も通せなくなるため外せません）")
     with store.tx() as c:
         if on:
-            c.execute("INSERT INTO role_member (role_code,user_id,granted_by,granted_at) VALUES (?,?,?,?)",
+            c.execute(f"INSERT INTO {table} (role_code,user_id,granted_by,granted_at) VALUES (?,?,?,?)",
                       (role, target, user_id, store.now_s()))
         else:
-            c.execute("DELETE FROM role_member WHERE role_code=? AND user_id=?", (role, target))
-    store.audit(user_id, "role.grant" if on else "role.revoke", target, {"role": role}, ip)
+            c.execute(f"DELETE FROM {table} WHERE role_code=? AND user_id=?", (role, target))
+    act = ("approval." if table == "approval_member" else "role.") + ("grant" if on else "revoke")
+    store.audit(user_id, act, target, {"role": role}, ip)
     return {"ok": True, "changed": True}
 
 
 # ── 全体に効く変更の記録（全員に見せる）────────────────────────────────
-LOG_ACTIONS = ("setting.%", "role.%", "event.%", "template.%", "ideas.import%", "flow.%", "plan.version.approve",
+LOG_ACTIONS = ("setting.%", "role.%", "approval.%", "event.%", "template.%", "ideas.import%", "flow.%", "plan.version.approve",
                "plan.version.delete", "plan.sim.%")
-ACTION_LABEL = {"role.grant": "業務ロールを付けた", "role.revoke": "業務ロールを外した", "plan.version.approve": "年間プランを承認",
+ACTION_LABEL = {"role.grant": "担当区分を付けた", "role.revoke": "担当区分を外した",
+                "approval.grant": "承認できる人に加えた", "approval.revoke": "承認できる人から外した", "plan.version.approve": "年間プランを承認",
                 "event.save": "イベントを登録・修正", "event.active": "イベントを使うに戻した", "event.inactive": "イベントを使わないにした",
                 "template.draft": "ひな形の下書きを作った", "template.discard": "ひな形の下書きを捨てた",
                 "template.activate": "ひな形の版を使い始めた", "template.revert": "ひな形をひとつ前の版に戻した",

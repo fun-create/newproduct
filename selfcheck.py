@@ -299,7 +299,7 @@ def check_stage2_db(cl: Client):
     if not isinstance(db, dict) or "error" in db:
         return note(NG, "第2段: DB の件数が /api/health に出る", str(db))
 
-    want = {"flow_type": 7, "role": 7, "gate_def": 7,
+    want = {"flow_type": 7, "role": 8, "gate_def": 7,          # role は SE部 を足して 8（ADR-123）
             "hold_reason": 6, "abort_reason": 4, "task_template": 178,
             # 6フロー × 管理者/メンバー。**実作業178と混ぜない**（2026-09-23）
             "task_template_reserve": 12}
