@@ -73,9 +73,27 @@ def has_text(d: dict) -> bool:
     return any(lab in d for _k, lab in SECTIONS)
 
 
+ATTRS = ("sales_type", "cat1", "cat2", "cat3", "shape", "size", "color")
+
+
+def group(products: list[dict]) -> list[dict]:
+    """同じ構成（販売タイプ・分類・形状・サイズ・色）の商品は1行にまとめる（渡す量と費用を減らす）。
+    代表のコードはレシピのあるものを先に。件数を添える。"""
+    out: dict = {}
+    for p in products:
+        key = tuple(str(p.get(a) or "") for a in ATTRS)
+        g = out.get(key)
+        if g is None:
+            out[key] = g = {**{a: p.get(a) for a in ATTRS}, "code": p.get("code"), "has_recipe": bool(p.get("has_recipe")), "n": 0}
+        g["n"] += 1
+        if p.get("has_recipe") and not g["has_recipe"]:
+            g["code"], g["has_recipe"] = p.get("code"), True
+    return list(out.values())
+
+
 def build_prompt(k: dict, voc: dict, products: list[dict]) -> str:
-    lines = "\n".join("\t".join(str(x.get(f) or "") for f in ("code", "sales_type", "cat1", "cat2", "cat3", "shape", "size", "color"))
-                      + "\t" + ("あり" if x.get("has_recipe") else "なし") for x in products)
+    lines = "\n".join("\t".join(str(x.get(f) or "") for f in ("code",) + ATTRS)
+                      + "\t" + ("あり" if x.get("has_recipe") else "なし") + "\t" + str(x.get("n") or 1) for x in group(products))
     return ("次の新商品のカルテを読み、CIP の商品マスタの登録票の候補を出してください。\n\n"
             "答えの形:\n"
             '{"fields":{"sales_type":"","cat1":"","cat2":"","cat3":"","shape":"","size":"","color":"","copy_recipe_from":""},'
@@ -83,7 +101,7 @@ def build_prompt(k: dict, voc: dict, products: list[dict]) -> str:
             "カルテ:\n" + json.dumps(k, ensure_ascii=False, indent=1) + "\n\n"
             "CIP の選択肢:\n" + json.dumps({"販売タイプ": voc.get("sales_types"), "大分類": voc.get("cat1"),
                                           "中分類": voc.get("cat2"), "小分類": voc.get("cat3")}, ensure_ascii=False) + "\n\n"
-            "CIP の商品の構成（コード・販売タイプ・大分類・中分類・小分類・形状・サイズ・色・レシピ。タブ区切り。商品名は無い）:\n" + lines)
+            "CIP の商品の構成（代表のコード・販売タイプ・大分類・中分類・小分類・形状・サイズ・色・レシピ・同じ構成の件数。タブ区切り。商品名は無い）:\n" + lines)
 
 
 def parse_answer(text: str) -> dict:
@@ -94,8 +112,13 @@ def parse_answer(text: str) -> dict:
         j = json.loads(m.group(0))
     except ValueError:
         raise ai_score.EnvFailure("返事の JSON が読めませんでした") from None
-    f = j.get("fields") if isinstance(j.get("fields"), dict) else {}
+    # 欄を "fields" の外に書く・日本語の欄名で書く返事も読む（2026-10-23 本番の1回目が全部空で読めなかった）
+    f = j.get("fields") if isinstance(j.get("fields"), dict) else j
+    ja = {"販売タイプ": "sales_type", "大分類": "cat1", "中分類": "cat2", "小分類": "cat3", "形状": "shape",
+          "サイズ": "size", "色": "color", "レシピ複製元": "copy_recipe_from"}
+    f = {ja.get(str(k), str(k)): v for k, v in f.items()} if isinstance(f, dict) else {}
     r = j.get("reasons") if isinstance(j.get("reasons"), dict) else {}
+    r = {ja.get(str(k), str(k)): v for k, v in r.items()}
     return {"fields": {k: str(f.get(k) or "").strip() for k in FIELDS},
             "reasons": {str(k): str(v).strip()[:120] for k, v in r.items() if str(v).strip()},
             "unverified": [str(x).strip()[:120] for x in (j.get("unverified") or []) if str(x).strip()][:8]}
@@ -190,7 +213,9 @@ def _work(run_id: int, project_id: str, runner=None, products_fn=None, record: b
             except (ai_budget.BudgetUnavailable, ai_budget.OverCap) as e:
                 raise ai_score.EnvFailure(f"使った額を記録できませんでした: {e}") from None
         if not any(fields.values()):
-            raise ai_score.EnvFailure("CIP にある値で出せた候補がありませんでした" + (f"（{dropped[0]}）" if dropped else ""))
+            raw = re.sub(r"\s+", " ", (r.get("text") or ""))[:300]
+            raise ai_score.EnvFailure("CIP にある値で出せた候補がありませんでした" + (f"（{dropped[0]}）" if dropped else "")
+                                      + f"。返事の先頭: {raw}")
         unv = list(ans["unverified"]) + dropped + ["共通商品コードと商品名は AI に出させていない（コードは採番の案・名前は人）"]
         now = store.now_s()
         with store.tx() as c:

@@ -101,6 +101,13 @@ class SeisanAssist(unittest.TestCase):
         self.assertEqual((p2["fields"]["sales_type"], p2["fields"]["cat2"]), ("", ""), "CIP に無い値・無い組み合わせは落とす")
         self.assertEqual(p2["fields"]["cat1"], "アクリル製品")
 
+    def test_parse_top_level_and_japanese_keys(self):
+        a = self.m.parse_answer('{"販売タイプ":"フリーカット","大分類":"アクリル製品","reasons":{"大分類":"アクリル"}}')
+        self.assertEqual((a["fields"]["sales_type"], a["fields"]["cat1"], a["reasons"]["cat1"]), ("フリーカット", "アクリル製品", "アクリル"))
+        g = self.m.group(PRODS + [dict(PRODS[1], code="AG1200", has_recipe=True)])
+        self.assertEqual(len(g), 2, "同じ構成は1行に")
+        self.assertEqual([x["code"] for x in g if x["size"] == "15cm"], ["AG1200"], "代表はレシピのあるもの")
+
     def test_not_logged_in_and_empty_karte(self):
         runner = lambda cmd, **kw: _proc({"result": "Not logged in · Please run /login", "is_error": True})  # noqa: E731
         r = self.m.start_run(self.pid, "u", runner=runner, products_fn=lambda: (VOC, PRODS), sync=True, force=True)
