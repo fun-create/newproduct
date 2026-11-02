@@ -6365,7 +6365,7 @@
       b.appendChild(syc);
       api("/api/sheet-sync").then(function (d) {
         syc.appendChild(el("p", { "class": "np-sub", text: (d.phase === "parallel"
-          ? mdLabel(d.sheet_until) + " までは進捗管理シートが正です。毎週月曜の朝に、シートの内容をアプリへ写します（自動ではなく、手で写す段取りです）。"
+          ? mdLabel(d.sheet_until) + " までは進捗管理シートが正です。11/3 から並行運用の終わりまで、毎朝 7:30 ごろにシートの内容をアプリへ写します（衝突があるときは写さずに確かめます）。"
             + "下の行は、前回写した後にアプリで進捗・期限などが変わった行で、次の同期ではシートの値が入りません。シートとアプリのどちらかに揃えてください。"
           : "アプリが正になりました。シートからは写しません（同期の道具も、切り替えの日からは動かないようにしてあります）。") }));
         syc.appendChild(el("p", null, [txt("前回の同期: "), el("strong", { text: d.last_sheet_date ? "シートの " + d.last_sheet_date + " の内容" : "まだありません" }),
