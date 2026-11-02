@@ -1310,12 +1310,23 @@
             tv.appendChild(chartCard("タスクの期間（塗り＝期限・白抜きの点線＝目安・灰色＝完了）", timeline(tl, { today: d.today,
               title: "タスクの期間" }), { note: "縦の破線が今日です。" }));
           }
-          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table(["#", "進捗", "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""],
+          var picks = {};                // まとめてずらす行（追補依頼書 8-3）
+          var shiftBox = h.editable ? shiftPanel(d, picks) : null;
+          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table((h.editable ? ["選ぶ"] : []).concat(["#", "進捗", h.editable ? "開始・期限" : "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""]),
             d.tasks.map(function (t) {
+              var pick = null;
+              if (h.editable) {
+                var cb = el("input", { type: "checkbox", "aria-label": "ずらす行に選ぶ: " + t.seq + " " + t.title });
+                if (t.status === "完了" || t.status === "対象外" || t.kind === "予備") cb.disabled = true;
+                cb.addEventListener("change", function () { if (cb.checked) picks[t.id] = cb; else delete picks[t.id]; shiftBox.refresh(); });
+                pick = el("td", null, [cb]);
+              }
               return el("tr", null, [
+                pick,
                 el("td", { "class": "np-num", text: String(t.seq) }),
                 el("td", null, [h.editable ? statusForm(Object.assign({ kind: "task" }, t)) : txt(t.status)]),
-                el("td", { "class": "np-nowrap" }, [txt(t.due_on ? t.due_on : "期限なし"), t.date_locked ? el("div", null, [tag("固定", "neutral")]) : null]),
+                h.editable ? dateEditCell("task", t, { lock: true })
+                  : el("td", { "class": "np-nowrap" }, [txt(t.due_on ? t.due_on : "期限なし"), t.date_locked ? el("div", null, [tag("固定", "neutral")]) : null]),
                 el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
                 el("td", { text: dash(t.role_label) }),
@@ -1324,6 +1335,7 @@
                 h.editable ? taskEditCell("task", t, meta, d.id) : el("td")
               ]);
             }))]));
+          if (shiftBox) tv.appendChild(shiftBox);
           if (h.editable) tv.appendChild(taskAddForm(d.id, meta, d.tasks));
           tv.appendChild(el("p", { "class": "np-note", text: "担当を入れると、期限のあるタスクが担当者のカレンダー（Calendar アプリ）のタスクに出ます（FR-121）。担当が無いタスクは送られません。" }));
           tv.appendChild(el("p", { "class": "np-note",
@@ -1461,6 +1473,76 @@
   // 発売予定日（ADR-085）。**理由が要る。**変えるとタスクの目安を計算し直す（期限は変えない）
   /** 発売予定日に合わせてタスクの日程を計算し直す（FR-225・ADR-124・石原さんの依頼書 §2）。
    *  見込みを一覧で出し、「反映する」で書く。完了・対象外・固定は動かさない。直前の反映は元に戻せる */
+  // 選んだタスクを営業日でまとめてずらす（追補依頼書 8-3）。見込みを一覧で見てから反映・直後なら元に戻せる
+  function shiftPanel(d, picks) {
+    var box = el("div", { "class": "np-card np-shift" });
+    box.appendChild(el("h3", { text: "選んだタスクをまとめてずらす（営業日）" }));
+    var cnt = el("span", { "class": "np-sub" });
+    var days = el("input", { type: "number", step: "1", min: "-250", max: "250", size: "4", value: "", "aria-label": "ずらす営業日（＋は後ろ・−は前）", placeholder: "+3" });
+    var see = el("button", { type: "button", text: "変わる前後を見る" });
+    var below = el("button", { type: "button", "class": "np-linkbtn", text: "選んだ最初の行から下を全部選ぶ" });
+    var out = el("div");
+    box.appendChild(el("p", { "class": "np-inline" }, [cnt, txt(" を "), days, txt(" 営業日ずらす（＋は後ろ・−は前） "), see, txt(" "), below]));
+    box.appendChild(el("p", { "class": "np-note", text: "土日とカレンダーアプリの会社休業日を飛ばして数え、休業日には着地しません。完了・対象外と、日付を固定したタスクは動かしません。表の左の「選ぶ」で行を選んでください。" }));
+    box.appendChild(out);
+    box.refresh = function () {
+      var n = Object.keys(picks).length;
+      cnt.textContent = n ? "選んだ " + n + " 件" : "（まだ選んでいません）";
+      see.disabled = !n; below.disabled = !n;
+      while (out.firstChild) out.removeChild(out.firstChild);
+    };
+    below.addEventListener("click", function () {
+      var first = null;
+      d.tasks.forEach(function (t) { if (picks[t.id] && (first === null || t.seq < first)) first = t.seq; });
+      var rows = BOX.querySelectorAll('#np-sec-tasks input[type="checkbox"][aria-label^="ずらす行に選ぶ"]');
+      d.tasks.forEach(function (t, i) {
+        var cb = rows[i];
+        if (cb && !cb.disabled && t.seq >= first && !cb.checked) { cb.checked = true; picks[t.id] = cb; }
+      });
+      box.refresh();
+    });
+    function ids() { return Object.keys(picks).join(","); }
+    see.addEventListener("click", function () {
+      var n = parseInt(String(days.value).replace("+", ""), 10);
+      while (out.firstChild) out.removeChild(out.firstChild);
+      if (!n) { out.appendChild(el("p", { "class": "np-err", text: "ずらす営業日を入れてください（例: +3、-2）" })); return; }
+      out.appendChild(el("p", { "class": "np-note", text: "計算しています…" }));
+      api("/api/projects/" + d.id + "/shift?ids=" + ids() + "&days=" + n).then(function (r) {
+        while (out.firstChild) out.removeChild(out.firstChild);
+        out.appendChild(table(["#", "タスク", "いま（開始〜期限）", "ずらしたあと", ""], r.rows.map(function (x) {
+          var span = function (a, b) { return (a || "—") + " 〜 " + (b || "—"); };
+          return el("tr", { "data-tone": x.change ? null : "muted" }, [el("td", { "class": "np-num", text: String(x.seq) }), el("td", { text: x.title }),
+            el("td", { "class": "np-nowrap", text: span(x.old_start, x.old_due) }),
+            el("td", { "class": "np-nowrap", text: x.change ? span(x.new_start, x.new_due) : "—" }),
+            el("td", { "class": "np-sub", text: x.why || "" })]);
+        })));
+        if (!r.n_change) { out.appendChild(el("p", { "class": "np-note", text: "変わるタスクはありません。" })); return; }
+        var go1 = el("button", { type: "button", text: r.n_change + " 件を " + (n > 0 ? "+" : "−") + Math.abs(n) + " 営業日ずらす" });
+        var st = el("span", { "class": "np-status", role: "status" });
+        go1.addEventListener("click", function () {
+          if (PHASE === "parallel" && !window.confirm("並行運用中は進捗管理シートが正です。シートにも同じことを書きましたか？\n「OK」でアプリの日程もずらします。")) return;
+          go1.disabled = true; st.textContent = "反映しています…";
+          post("/api/projects/" + d.id + "/shift", { ids: ids(), days: String(n) }).then(function (a) {
+            st.textContent = a.changed + " 件をずらしました。";
+            var u = el("button", { type: "button", "class": "np-linkbtn", text: "元に戻す" });
+            u.addEventListener("click", function () {
+              post("/api/projects/" + d.id + "/reschedule-undo", {}).then(function (b) {
+                st.textContent = b.restored + " 件を元に戻しました" + (b.kept ? "（そのあと直された " + b.kept + " 件はそのまま）" : "") + "。";
+                setTimeout(go, 900);
+              }).catch(function (e) { st.textContent = "戻せませんでした: " + e.message; });
+            });
+            var rl = el("button", { type: "button", "class": "np-linkbtn", text: "表を読み直す" });
+            rl.addEventListener("click", go);
+            st.appendChild(txt(" ")); st.appendChild(u); st.appendChild(txt(" ")); st.appendChild(rl);
+          }).catch(function (e) { go1.disabled = false; st.textContent = "できませんでした: " + e.message; });
+        });
+        out.appendChild(btnRow([go1, txt(" "), st]));
+      }).catch(function (e) { while (out.firstChild) out.removeChild(out.firstChild); out.appendChild(el("p", { "class": "np-err", text: "計算できませんでした: " + e.message })); });
+    });
+    box.refresh();
+    return box;
+  }
+
   function reschedulePanel(pid, box, o) {
     o = o || {};
     var P = "/api/projects/" + encodeURIComponent(pid);
@@ -1787,6 +1869,65 @@
     var row = el("p", { "class": "np-inline" }, [f.title, txt(" ロール "), f.role, txt(" 開始 "), f.start_on, txt(" 期限 "), f.due_on, txt(" 時間 "), f.hours]);
     return { f: f, row: row, values: function () { var o = {}; Object.keys(f).forEach(function (k) { o[k] = f[k].value; }); return o; } };
   }
+  // 開始日・期限をその場で直す（フォームを開かない・追補依頼書 8-1）。kind は "task"／"work"。
+  // o.lock なら「固定」の切り替えも置く（カルテの表）。並行運用中は進捗と同じく確かめてから書く
+  function dateEditCell(kind, t, o) {
+    o = o || {};
+    var c = el("td", { "class": "np-nowrap np-dates" });
+    var cur = { start_on: t.start_on || "", due_on: t.due_on || "" };
+    var msg = el("div", { "class": "np-status", role: "status" });
+    function clearMsg() { while (msg.firstChild) msg.removeChild(msg.firstChild); msg.className = "np-status"; }
+    var inp = {};
+    function save(k, v, back) {
+      clearMsg(); msg.textContent = "保存中…";
+      var body = {}; body[k] = v;
+      return post("/api/tasks/" + kind + "/" + t.id + "/edit", body).then(function () {
+        var prev = cur[k]; cur[k] = v; t[k] = v || null; inp[k].value = v;
+        clearMsg();
+        msg.appendChild(txt(back ? "元に戻しました" : "保存しました"));
+        if (!back) {
+          var u = el("button", { type: "button", "class": "np-linkbtn", text: "元に戻す" });
+          u.addEventListener("click", function () { save(k, prev, true); });
+          msg.appendChild(txt(" ")); msg.appendChild(u);
+        }
+        if (o.onSaved) o.onSaved();
+      }).catch(function (e) { inp[k].value = cur[k]; clearMsg(); msg.className = "np-err"; msg.textContent = "できませんでした: " + e.message; });
+    }
+    [["start_on", "開始"], ["due_on", "期限"]].forEach(function (x) {
+      var k = x[0];
+      var i = el("input", { type: "date", value: cur[k], "aria-label": x[1] + "（" + t.title + "）", "class": "np-dateinp" });
+      inp[k] = i;
+      i.addEventListener("change", function () {
+        var v = i.value;
+        if (v === cur[k]) return;
+        if (PHASE !== "parallel") return save(k, v);
+        i.value = cur[k]; clearMsg();                // 確かめるまで変えない
+        msg.appendChild(txt("並行運用中は進捗管理シートが正です。シートにも同じことを書きましたか？ "));
+        var ok = el("button", { type: "button", "class": "np-linkbtn", text: "アプリでも " + x[1] + " を " + (v || "空") + " にする" });
+        var no = el("button", { type: "button", "class": "np-linkbtn", text: "やめる" });
+        ok.addEventListener("click", function () { save(k, v); });
+        no.addEventListener("click", clearMsg);
+        msg.appendChild(ok); msg.appendChild(txt(" ")); msg.appendChild(no);
+      });
+      c.appendChild(el("label", { "class": "np-dateline" }, [el("span", { "class": "np-sub", text: x[1] + " " }), i]));
+    });
+    if (o.lock) {
+      var lk = el("input", { type: "checkbox" });
+      lk.checked = !!t.date_locked;
+      lk.addEventListener("change", function () {
+        clearMsg(); msg.textContent = "保存中…";
+        post("/api/tasks/task/" + t.id + "/lock", { locked: lk.checked ? "1" : "0" }).then(function () {
+          t.date_locked = lk.checked; clearMsg(); msg.textContent = lk.checked ? "固定しました" : "固定を外しました";
+        }).catch(function (e) { lk.checked = !lk.checked; clearMsg(); msg.className = "np-err"; msg.textContent = "できませんでした: " + e.message; });
+      });
+      c.appendChild(el("label", { "class": "np-dateline np-sub" }, [lk, txt(" 日付を固定")]));
+    } else if (t.date_locked) {
+      c.appendChild(el("div", null, [tag("固定", "neutral")]));
+    }
+    if (o.after) c.appendChild(o.after);
+    c.appendChild(msg);
+    return c;
+  }
   function taskEditCell(kind, t, meta, pid) {
     var c = el("td", { "class": "np-nowrap" });
     var bt = el("button", { type: "button", text: "直す" });
@@ -1796,11 +1937,11 @@
       var tf = taskFields(meta, t);
       var form = el("form", { "class": "np-field" }, [tf.row]);
       var lk = null;
-      if (kind === "task") {                      // 日付の固定（FR-225）。日付を手で変えたら固定にする（外すこともできる）
+      if (kind === "task") {                      // 日付の固定（FR-225）。**手で日付を直しても自動では固定にしない**（追補依頼書 8-2）
         lk = el("input", { type: "checkbox", name: "date_locked" });
         if (t.date_locked) lk.checked = true;
         form.appendChild(el("p", null, [el("label", null, [lk, txt(" 日付を固定（発売予定日を変えても、この開始日・期限は動かさない）")])]));
-        [tf.f.start_on, tf.f.due_on].forEach(function (inp) { inp.addEventListener("change", function () { lk.checked = true; }); });
+        form.appendChild(el("p", { "class": "np-note", text: "手で日付を直しても固定にはなりません。発売予定日を変えたときは計算し直されます。今の日付を守りたいときだけ固定を付けてください。" }));
       }
       var cat = null;
       if (kind === "work") {                      // 案件外の仕事は「区分」も直せる（点検 L-9）
@@ -2858,7 +2999,9 @@
             rows.push(el("tr", { "data-tone": late ? "alert" : null, id: "np-row-" + fk, "data-focus": fk === focus ? "1" : null }, [
               el("td", null, [t.dept !== undefined && tab === "request" ? requestCell(t) : statusForm(t),
                 t.sheet_diff ? el("div", null, [tag("シートと違う", "alert")]) : null]),
-              el("td", { "class": "np-nowrap" }, [txt(dash(t.due_on)), late ? overdueFlag(t.due_on, d.today) : null]),
+              t.dept !== undefined && tab === "request"
+                ? el("td", { "class": "np-nowrap" }, [txt(dash(t.due_on)), late ? overdueFlag(t.due_on, d.today) : null])
+                : dateEditCell(t.project_id ? "task" : "work", t, { after: late ? overdueFlag(t.due_on, d.today) : null }),
               el("td", null, [t.project_id
                 ? el("a", { href: "#/projects/" + t.project_id, text: t.project })
                 : txt("—")]),
@@ -2870,7 +3013,7 @@
               taskEditCell(t.project_id ? "task" : "work", t, null, t.project_id)
             ]));
           });
-          b.appendChild(table(["進捗", "期限", "案件", "タスク名", "ロール",
+          b.appendChild(table(["進捗", "開始・期限", "案件", "タスク名", "ロール",
             "担当", "時間（h）", ""], rows));
           // ダッシュボードから来たときは、その行へ移って印を付ける（点検 H-2）
           var fr = focus && b.querySelector('tr[data-focus="1"]');
@@ -6222,9 +6365,9 @@
       b.appendChild(syc);
       api("/api/sheet-sync").then(function (d) {
         syc.appendChild(el("p", { "class": "np-sub", text: (d.phase === "parallel"
-          ? mdLabel(d.sheet_until) + " までは進捗管理シートが正です。毎週月曜の朝にシートの内容をアプリへ写します。"
+          ? mdLabel(d.sheet_until) + " までは進捗管理シートが正です。毎週月曜の朝に、シートの内容をアプリへ写します（自動ではなく、手で写す段取りです）。"
             + "下の行は、前回写した後にアプリで進捗・期限などが変わった行で、次の同期ではシートの値が入りません。シートとアプリのどちらかに揃えてください。"
-          : "アプリが正になりました。シートからは写しません。") }));
+          : "アプリが正になりました。シートからは写しません（同期の道具も、切り替えの日からは動かないようにしてあります）。") }));
         syc.appendChild(el("p", null, [txt("前回の同期: "), el("strong", { text: d.last_sheet_date ? "シートの " + d.last_sheet_date + " の内容" : "まだありません" }),
           txt(d.last_applied_at ? "（" + d.last_applied_at.slice(0, 16).replace("T", " ") + " に写しました）" : "")]));
         if (d.phase !== "parallel") return;

@@ -166,6 +166,87 @@ def apply(pid: str, user_id: str, launch_from: str | None = None, only: list[int
     return {"ok": True, "changed": len(undo), "undo_id": uid}
 
 
+def _shift(d: str | None, days: int, cal: Calendar) -> str | None:
+    """d を営業日で days ずらす（d 自身は数えない・着地は必ず営業日）。"""
+    if not d:
+        return None
+    return cal.step(dt.date.fromisoformat(d), abs(days), 1 if days > 0 else -1).isoformat()
+
+
+def shift_plan(pid: str, task_ids: list[int], days: int, doc: dict | None = None) -> dict:
+    """選んだタスクの開始日・期限を、営業日で同じ日数だけずらした結果（**書かない**・石原さんの追補依頼書 8-3）。
+
+    - 営業日はカレンダーアプリの会社休業日（発売予定日の計算し直しと同じ `Calendar`）。着地は必ず営業日
+    - 完了・対象外は動かさない。日付を固定したタスクも動かさない（固定を外せばずらせる）
+    """
+    if not isinstance(days, int) or days == 0 or abs(days) > 250:
+        raise ValueError("ずらす日数は 1〜250 の営業日で、前（−）か後（＋）を入れてください")
+    if not task_ids:
+        raise ValueError("ずらすタスクを選んでください")
+    if store.one("SELECT 1 FROM project WHERE id=?", (pid,)) is None:
+        raise LookupError("案件がありません")
+    qs = ",".join("?" * len(task_ids))
+    tasks = store.rows(store.q(f"SELECT * FROM task WHERE project_id=? AND id IN ({qs}) ORDER BY seq, id", (pid, *task_ids)))
+    if len(tasks) != len(set(task_ids)):
+        raise LookupError("この案件に無いタスクが含まれています")
+    dates = [dt.date.fromisoformat(x) for t in tasks for x in (t["start_on"], t["due_on"]) if x]
+    cal, cal_err = None, None
+    if dates:
+        pad = dt.timedelta(days=abs(days) * 2 + 40)
+        try:
+            cal = Calendar(min(dates) - pad, max(dates) + pad, doc)
+        except calfc.NotConnected as e:
+            cal_err = str(e)
+    rows = []
+    for t in tasks:
+        r = {"id": t["id"], "seq": t["seq"], "title": t["title"], "status": t["status"],
+             "old_start": t["start_on"], "old_due": t["due_on"], "new_start": None, "new_due": None, "change": False, "why": None}
+        rows.append(r)
+        if t["status"] in SKIP:
+            r["why"] = f"{t['status']}のタスクは動かしません"
+        elif t["kind"] == "予備":
+            r["why"] = "予備時間の行（日付を持たない）"
+        elif t["date_locked"]:
+            r["why"] = "日付を固定しています（固定を外すとずらせます）"
+        elif not (t["start_on"] or t["due_on"]):
+            r["why"] = "開始日も期限も入っていません"
+        elif cal is None:
+            r["why"] = cal_err
+        else:
+            try:
+                r["new_start"], r["new_due"] = _shift(t["start_on"], days, cal), _shift(t["due_on"], days, cal)
+            except calfc.NotConnected as e:
+                r["why"] = str(e)
+                continue
+            r["change"] = (r["new_start"], r["new_due"]) != (t["start_on"], t["due_on"])
+    return {"ok": True, "days": days, "rows": rows, "n_change": sum(1 for r in rows if r["change"])}
+
+
+def shift_apply(pid: str, task_ids: list[int], days: int, user_id: str, doc: dict | None = None) -> dict:
+    """選んだタスクを営業日でずらして書く。控えを残す（「元に戻す」は計算し直しと同じ `undo`）。"""
+    pl = shift_plan(pid, task_ids, days, doc)
+    now = store.now_s()
+    undo = []
+    with store.tx() as c:
+        for r in pl["rows"]:
+            if not r["change"]:
+                continue
+            c.execute("UPDATE task SET start_on=?, due_on=? WHERE id=? AND status NOT IN ('完了','対象外') AND date_locked=0",
+                      (r["new_start"], r["new_due"], r["id"]))
+            undo.append({"id": r["id"], "start_on": r["old_start"], "due_on": r["old_due"],
+                         "set_start": r["new_start"], "set_due": r["new_due"]})
+        uid = None
+        if undo:
+            launch = c.execute("SELECT launch_date FROM project WHERE id=?", (pid,)).fetchone()["launch_date"]
+            uid = c.execute("INSERT INTO schedule_undo (project_id,launch_from,launch_to,rows,applied_by,applied_at) "
+                            "VALUES (?,?,?,?,?,?)", (pid, launch, launch, json.dumps(undo), user_id, now)).lastrowid
+            c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                      (pid, now, user_id, "タスクの日程をまとめてずらした",
+                       f"{len(undo)} 件の開始日・期限を {'+' if days > 0 else '−'}{abs(days)} 営業日ずらした"
+                       "（完了・対象外・固定は動かしていない）"))
+    return {"ok": True, "changed": len(undo), "undo_id": uid}
+
+
 def last_undo(pid: str) -> dict | None:
     r = store.one("SELECT * FROM schedule_undo WHERE project_id=? AND undone_at IS NULL ORDER BY id DESC LIMIT 1", (pid,))
     if r is None:

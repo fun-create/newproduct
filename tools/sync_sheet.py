@@ -274,7 +274,25 @@ def _set_task(c, tid, st, now):
               (str(tid), f"{st['title']}#{st['nth']}", _digest(st["status"], st["start"], st["due"], st["role"], st["hours"]), now))
 
 
+class AfterCutover(Exception):
+    """切り替え（アプリが正）のあとは、シートから書かない。"""
+
+
+def guard(sheet_date: str) -> None:
+    """**11/9 からはシートを読んでアプリに書かない**（石原さんの追補依頼書 9・2026-11-02）。
+
+    日付は実際の今日（`store.today()`）で見る。`--today` では抜けられない。延期は `NEWPRODUCT_CUTOVER` で切り替え日ごと動かす。
+    """
+    from app import cutover
+    if cutover.phase() != "parallel":
+        raise AfterCutover(f"切り替え（{cutover.app_primary_from().isoformat()}）のあとは、アプリが正本です。"
+                           "進捗管理シートからの同期はしません")
+    if sheet_date > cutover.last_sheet_day():
+        raise AfterCutover(f"シートの日付 {sheet_date} は並行運用の最終日（{cutover.last_sheet_day()}）より後です。同期しません")
+
+
 def apply(groups, plan, renames, today, sheet_date, user_id="sync") -> dict:
+    guard(sheet_date)
     ps = plan_sync(groups, plan, renames, today)
     now = store.now_s()
     n = {"projects_updated": 0, "projects_created": 0, "renamed": 0, "tasks_updated": 0, "tasks_added": 0,
@@ -416,6 +434,11 @@ def main() -> int:
     ap.add_argument("--today")
     a = ap.parse_args()
     store.migrate()
+    try:
+        guard(a.sheet_date)
+    except AfterCutover as e:
+        print(f"止めました: {e}", file=sys.stderr)
+        return 3
     rd = lambda p: list(csv.reader(open(p, encoding="utf-8"), delimiter="\t"))   # noqa: E731
     groups, plan = parse_ledger(rd(a.ledger)), parse_plan(rd(a.plan))
     renames = dict(x.split("=", 1) for x in a.rename)

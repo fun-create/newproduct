@@ -107,7 +107,7 @@ def _touches_tasks(path: str) -> bool:
     """タスクの期限・担当・状態が変わり得る書き込み（カレンダーへ送り直す合図）。"""
     p = path[len("/api/"):] if path.startswith("/api/") else path
     return (p.startswith("tasks/") or p.startswith("work-items") or p == "projects"
-            or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/reschedule", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
+            or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/reschedule", "/shift", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
 
 # Caddy を通ると必ず付くヘッダ。1つでもあれば「外から来た」とみなす
 FORWARD_HEADERS = ("X-Forwarded-Proto", "X-Real-IP", "X-Forwarded-For",
@@ -871,6 +871,15 @@ class H(BaseHTTPRequestHandler):
             r = reschedule.plan(parts[1], qs.get("launch") or None)
             r["last_undo"] = reschedule.last_undo(parts[1])
             return self.sendj(200, r)
+        if len(parts) == 3 and parts[0] == "projects" and parts[2] == "shift" and method == "GET":
+            # 選んだタスクを営業日でずらした見込み（**書かない**・追補依頼書 8-3）
+            from app import reschedule
+            ids = [int(x) for x in (qs.get("ids") or "").split(",") if x.strip().isdigit()]
+            try:
+                days = int((qs.get("days") or "0").replace("+", "").strip())
+            except ValueError:
+                raise ValueError("ずらす日数は数字で入れてください") from None
+            return self.sendj(200, reschedule.shift_plan(parts[1], ids, days))
         if len(parts) == 4 and parts[0] == "tasks" and parts[1] == "task" and parts[3] == "lock" and method == "POST":
             from app import reschedule
             r = reschedule.set_lock(int(parts[2]), self.body().get("locked") in ("1", "true", "on"), uid)
@@ -1026,6 +1035,20 @@ class H(BaseHTTPRequestHandler):
                 only = [int(x) for x in str(d.get("only") or "").split(",") if x.strip().isdigit()] or None
                 r = reschedule.apply(pid, uid, d.get("launch_from") or None, only)
                 store.audit(uid, "project.reschedule", pid, {"changed": r["changed"]}, ip)
+                return self.sendj(200, r)
+            if what == "shift":
+                # 選んだタスクを営業日でまとめてずらす（石原さんの追補依頼書 8-3）
+                from app import reschedule
+                pr = store.one("SELECT source_of_truth FROM project WHERE id=?", (pid,))
+                if pr is not None and pr["source_of_truth"] != "app":
+                    raise PermissionError("Drive 側が正本の案件はアプリで編集できません")
+                ids = [int(x) for x in str(d.get("ids") or "").split(",") if x.strip().isdigit()]
+                try:
+                    days = int(str(d.get("days") or "0").replace("+", "").strip())
+                except ValueError:
+                    raise ValueError("ずらす日数は数字で入れてください") from None
+                r = reschedule.shift_apply(pid, ids, days, uid)
+                store.audit(uid, "project.shift", pid, {"days": days, "changed": r["changed"]}, ip)
                 return self.sendj(200, r)
             if what == "reschedule-undo":
                 from app import reschedule

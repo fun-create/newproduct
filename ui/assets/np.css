@@ -501,3 +501,10 @@ tr[data-focus="1"] > td:first-child { box-shadow: inset 4px 0 0 var(--np-info-li
 details.np-fold-plain > summary { cursor: pointer; font-weight: 700; }
 details.np-fold-plain > .np-card { border: 0; box-shadow: none; padding-left: 0; padding-right: 0; }
 details.np-analysis > summary { cursor: pointer; font-weight: 700; }
+
+/* その場で開始日・期限を直す（追補依頼書 8-1）。1行に「開始」「期限」を縦に並べる */
+.np-dates .np-dateline { display: block; white-space: nowrap; }
+.np-dates .np-dateinp { font: inherit; font-size: .88rem; padding: 1px 4px; max-width: 9.5em; }
+.np-dates .np-status, .np-dates .np-err { display: block; white-space: normal; max-width: 16em; font-size: .82rem; }
+/* まとめてずらす（追補依頼書 8-3） */
+.np-shift tr[data-tone="muted"] td { color: var(--fca-muted); }

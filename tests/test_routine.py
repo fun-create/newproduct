@@ -75,6 +75,13 @@ class Routine(unittest.TestCase):
         r = self.m.save({"title": "翌週のプラン作成", "cadence": "weekly", "weekdays": "4", "role": "devdept", "assignee": "chieko", "hours": "0.5"}, "chieko")
         self.m.save({"title": "使わない仕事", "cadence": "weekly", "weekdays": "4", "active": "0"}, "chieko")
         self.m.save({"title": "全店の注文メールチェック", "cadence": "daily", "timing": "出勤時"}, "chieko")
+        # 作った日時は本物の時計で入る。固定した「今日」（10/19）より後になると回が起きないので、そろえてから起こす
+        # （2026-11-02 に日付が進んで落ちた・時限の検査だった）
+        with self.store.tx() as c:
+            c.execute("UPDATE routine SET created_at='2026-10-19 09:00:00', edited_at=NULL")
+            c.execute("DELETE FROM routine_occurrence")
+            c.execute("DELETE FROM work_item WHERE category='ルーティン'")
+        self.m.ensure()
         ws = self.store.rows(self.store.q("SELECT * FROM work_item WHERE category='ルーティン'"))
         self.assertEqual([(w["title"], w["due_on"], w["assignee"], w["role"]) for w in ws],
                          [("翌週のプラン作成", "2026-10-23", "chieko", "devdept")], "6日以内の金曜1回だけ・使わない／毎日は起こさない")
