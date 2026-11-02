@@ -236,6 +236,20 @@ Calendar 側の3点（鍵の道・origin・完了の伝え先）は依頼書 fun
 
 2026-10-18 の初回: 案件 17 件を更新・7 件を追加・名前の付け替え 5・タスク 79 直す／152 足す／38 対象外・案件外 38 直す／14 足す・衝突 0・保留 3。2回目の差分は 0。
 
+## 移行元の一覧（2026-11-02 十文字さんから・商品開発部が使っているシートとフォルダ）
+
+| 移行元 | URL | アプリでの行き先 | 状態 |
+|---|---|---|---|
+| 新商品売上 | https://docs.google.com/spreadsheets/d/1Y5JaG3Mqr8yRYcmwLRIQROYC4N453LR_mJ9ktNLn9wo/edit?gid=1481694376 | 売上・原価（`past_product`・`tools/import_past_products.py`、seed `04_新商品売上状況__2022〜2025年度`）。発売後の売上は売上フィード | 2025年度までは取り込み済み（9/20 の写し）。2026年度の発売分はフィードから |
+| 新商品の進捗管理 | https://docs.google.com/spreadsheets/d/181gKmZadgcbEeoKjA17M5hVPJf01jjkd3gTbduW0pXM/edit?gid=1928588698 | 案件・タスク・年間プラン・繰り返しの仕事（`tools/sync_sheet.py`） | 並行運用中。**同期は 10/18 で止まっている（11/2 石原さん指摘）**。11/9 から読まない |
+| アイデアリスト | https://docs.google.com/spreadsheets/d/1KIeJDPRvk86q65hoscegzA1SHO6My4MG1W05vE6-IBI/edit?gid=1745801858 | アイデア（`tools/import_ideas.py`・seed `02_アイデアリスト__*`・`10_…LOVOT専用`） | 9/20 の写しで取り込み済み。その後の追記は未同期 |
+| 商品検討（フォルダ） | https://drive.google.com/drive/folders/13PGthd8aUPXkcGFzWG8T7BchAW7m7dBh | 未定 | **中身を見ていない**（11/2 時点） |
+| 新商品追加準備シート（フォルダ） | https://drive.google.com/drive/folders/1-XEbq7OCmJGSCIxFBg8U85TAHJvM6QKq | 案件のカルテ C〜F 節（`tools/import_prep_sheets.py`・ADR-080）。CIP への登録は登録票（11/9 から正） | 取り込み済みの分あり |
+| FANFUN REVIEW | https://docs.google.com/spreadsheets/d/1K0_s3hJFXlJM7H1aJ-c1e-X3zvF4m0v6r0CJkq-YNNY/edit?gid=863354602 | 未定 | **中身を見ていない**（11/2 時点） |
+| ミーティングメモ | https://docs.google.com/spreadsheets/d/1Y5JaG3Mqr8yRYcmwLRIQROYC4N453LR_mJ9ktNLn9wo/edit?gid=315449963 （新商品売上と同じブック） | 未定（案件の G 節のメモが近い） | **中身を見ていない**（11/2 時点） |
+
+**注意（11/2）**: Claude in Chrome は**このPCの Chrome** で使う。11/2 時点で拡張は別の Mac の Chrome にだけつながっていて、そこで押したダウンロードはこのPCに届かなかった（メモリ `claude-in-chrome-use-this-mac`）。
+
 ## 宿題: 移行の同期（毎週月曜の朝・十文字さんの依頼で）
 
 - 10/26（月）・11/2（月）の朝: シートを .xlsx で読み、差分 → 適用（手順は上の「移行期間の同期」）。衝突は管理者に確かめる
