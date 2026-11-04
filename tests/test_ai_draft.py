@@ -59,7 +59,7 @@ class AiDraft(unittest.TestCase):
                 seen["prompt"] = cmd[cmd.index("-p") + 1]
             ans = {"sections": sections, "unverified": ["価格帯は未確認"]}
             return _proc({"result": json.dumps(ans, ensure_ascii=False), "is_error": False,
-                          "total_cost_usd": 0.03, "modelUsage": {"claude-sonnet-5": {"canonicalModel": "claude-sonnet-5"}}})
+                          "total_cost_usd": 0.03, "modelUsage": {"claude-opus-5-5": {"canonicalModel": "claude-opus-5-5"}}})
         return run
 
     def _sec(self, key):
@@ -79,7 +79,7 @@ class AiDraft(unittest.TestCase):
         out = self.m.adopt(p["id"], "boss", "【キャッチコピーの案】\n推しの色と、毎日を。")
         self.assertTrue(out["edited"])
         body = self._sec("F.lp")
-        self.assertTrue(body.startswith("既にある依頼メモ\n\n── AI案（claude-sonnet-5・"), body)
+        self.assertTrue(body.startswith("既にある依頼メモ\n\n── AI案（claude-opus-5-5・"), body)
         self.assertTrue(body.endswith("推しの色と、毎日を。"))
         with self.assertRaises(ValueError):
             self.m.adopt(p["id"], "boss", "もう一度")
@@ -123,7 +123,7 @@ class AiDraft(unittest.TestCase):
                              runner=self._runner([{"title": "検品で見る点", "body": "印刷のずれ"}]))
             p = self.m.proposals_of(self.pid)[kind][0]
             self.m.adopt(p["id"], "boss", p["text"])
-            self.assertIn("── AI案（claude-sonnet-5・", self._sec(key))
+            self.assertIn("── AI案（claude-opus-5-5・", self._sec(key))
 
     def test_testorder_is_a_plan_not_an_order(self):
         """FR-149 の最後（テスト注文・ADR-098）。AI は手順を出すだけで、注文は人が行う。足す先は F.testorder。"""

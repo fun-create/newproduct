@@ -37,9 +37,9 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLAUDE_BIN = os.environ.get("NEWPRODUCT_CLAUDE_BIN", "/usr/bin/claude")
 AI_HOME = os.environ.get("NEWPRODUCT_AI_HOME", os.path.join(BASE, "data", "aihome"))
 LOGIN_FILE = os.path.join(AI_HOME, ".claude", ".credentials.json")
-# 日々の定型（採点の案出し）なので Sonnet（CLAUDE.md「日次の定例タスクは Sonnet」）。
-# 実際に答えたモデルの正式名は返事から取って残す
-DEFAULT_MODEL = "sonnet"
+# 2026-11-05 十文字さん「全て Opus 5.5 にしてほしい」（ADR-127）。系統名（"opus"）ではなく正式名で固定し、
+# claude の既定が変わっても勝手に別の版にならないようにする。実際に答えたモデルの正式名は返事から取って残す
+DEFAULT_MODEL = "claude-opus-5-5"
 TIMEOUT_SEC = int(os.environ.get("NEWPRODUCT_AI_TIMEOUT", "300"))
 LOGIN_HOW = f"sudo -u newproduct HOME={AI_HOME} claude   →  /login"
 

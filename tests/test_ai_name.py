@@ -56,7 +56,7 @@ class AiName(unittest.TestCase):
                 seen["prompt"] = cmd[cmd.index("-p") + 1]
             ans = {"candidates": cands, "unverified": unverified or []}
             return _proc({"result": json.dumps(ans, ensure_ascii=False), "is_error": False,
-                          "total_cost_usd": 0.02, "modelUsage": {"claude-sonnet-5-5": {}}})
+                          "total_cost_usd": 0.02, "modelUsage": {"claude-opus-5-5": {}}})
         return run
 
     def _fname(self):
@@ -73,7 +73,7 @@ class AiName(unittest.TestCase):
         p = self.m.proposals_of(self.pid)[0]
         self.assertEqual([c["name"] for c in p["candidates"]], ["推し色マグ いろどり"], "根拠の無い名前は案にしない")
         self.assertEqual(p["unverified"][0], self.m.TRADEMARK, "商標は必ず未確認")
-        self.assertEqual(p["model"], "claude-sonnet-5-5")
+        self.assertEqual(p["model"], "claude-opus-5-5")
         self.assertIn("コンセプト", p["inputs"]["項目"])
         self.assertIn("推しの色で毎日を過ごす", seen["prompt"])
 

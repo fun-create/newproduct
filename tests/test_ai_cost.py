@@ -59,7 +59,7 @@ class AiCost(unittest.TestCase):
             if seen is not None:
                 seen["prompt"] = cmd[cmd.index("-p") + 1]
             return _proc({"result": json.dumps(answer, ensure_ascii=False), "is_error": False, "total_cost_usd": 0.04,
-                          "modelUsage": {"claude-sonnet-5": {"canonicalModel": "claude-sonnet-5"}}})
+                          "modelUsage": {"claude-opus-5-5": {"canonicalModel": "claude-opus-5-5"}}})
         return run
 
     def test_needs_material_text(self):

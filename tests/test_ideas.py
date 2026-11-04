@@ -494,13 +494,13 @@ class TestAiScoring(Base):
                     "unverified": []}]
             p = self._proc({"result": "```json\n" + _j.dumps(ans) + "\n```", "is_error": False,
                             "total_cost_usd": 0.0123,
-                            "modelUsage": {"claude-haiku-4-5": {"canonicalModel": "claude-haiku-4-5"},
-                                           "claude-sonnet-5-5": {"canonicalModel": "claude-sonnet-5-5"}}})
+                            "modelUsage": {"claude-haiku-5-5": {"canonicalModel": "claude-haiku-5-5"},
+                                           "claude-opus-5-5": {"canonicalModel": "claude-opus-5-5"}}})
             p.stdout += "\nClient.listTools() called but server does not advertise tools capability"
             return p
         r = ai_score.start_run([i], "tester", scorer=ai_score.ClaudeScorer(runner=runner), sync=True, force=True)
         p = ai_score.proposals_of(i)[0]
-        self.assertEqual((p["model"], p["axes"]["theme_fit"]), ("claude-sonnet-5-5", 9))
+        self.assertEqual((p["model"], p["axes"]["theme_fit"]), ("claude-opus-5-5", 9))
         c = seen["cmd"]
         self.assertEqual(c[c.index("--tools") + 1], "", "ツールを渡さない")
         self.assertIn("--system-prompt", c)

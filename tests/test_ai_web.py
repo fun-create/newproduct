@@ -31,7 +31,7 @@ def _stream(answer: dict, opened=(), searched=(("名入れ マグ", ["https://it
         lines.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch", "input": {"url": u, "prompt": "価格"}}]}})
         lines.append({"type": "user", "message": {"content": [{"type": "tool_result", "content": "価格 2,980円"}]}})
     lines.append({"type": "result", "is_error": False, "result": json.dumps(answer, ensure_ascii=False),
-                  "total_cost_usd": 0.12, "modelUsage": {"claude-sonnet-5": {"canonicalModel": "claude-sonnet-5"}}})
+                  "total_cost_usd": 0.12, "modelUsage": {"claude-opus-5-5": {"canonicalModel": "claude-opus-5-5"}}})
     return types.SimpleNamespace(stdout="\n".join(json.dumps(x, ensure_ascii=False) for x in lines), stderr="", returncode=0)
 
 
