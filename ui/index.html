@@ -41,6 +41,8 @@
   <span class="fca-spacer"></span>
   <div class="fca-who">
     <!-- 操作マニュアルを別のタブで（2026-10-23 十文字さん依頼・FR-215）。いつも同じタブ（np-manual）に開き、行き先は app.js がいまの画面の節にする -->
+    <!-- やること（2026-11-09・ADR-133）。アプリが数えた件数。押すと一覧 -->
+    <a id="np-todo" href="#/todo" title="やること: いまやること・事前の準備"><span aria-hidden="true">📌</span> やること <span id="np-todo-n" class="np-todo-n"></span></a>
     <a id="np-help" href="/#/manual" target="np-manual" rel="noopener" title="使い方: 操作マニュアルを別のタブで開きます（いまの画面の説明へ）"><span class="np-help-q" aria-hidden="true">？</span><span class="np-help-t">使い方 ↗</span></a>
     <!-- 設定は右端へ（2026-11-09 十文字さん: 改善要望を帯に出すため。帯は7つまで） -->
     <a id="np-settings" href="#/settings" title="設定">設定</a>
@@ -69,6 +71,8 @@
   <!-- 切り替えの段階（app/cutover.py）。並行運用の間だけ app.js が埋めて出す（点検 H-1） -->
   <p id="np-phase" class="np-phase" role="note" hidden></p>
   <h1 class="fca-h1" id="view-title">ダッシュボード</h1>
+  <!-- この画面でやること（ADR-133）。app.js が埋める -->
+  <div id="np-screen-todo" class="np-screen-todo" role="note" hidden></div>
   <div id="view" class="fca-card">
     <p class="fca-note">読み込んでいます。</p>
   </div>

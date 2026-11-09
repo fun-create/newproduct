@@ -529,3 +529,13 @@ a.np-btn-primary:hover, button.np-btn-primary:hover { background: var(--fca-navy
 .np-edit-area > h2, .np-edit-area > h3 { margin: 0 0 .5rem; font-size: 1rem; }
 tr.np-edit-row > td { padding: .2rem .4rem .6rem; border-top: none; }
 tr[data-editing="1"] > td { background: var(--fca-bg); font-weight: 600; }
+
+/* やること（ADR-133）。右上の件数・この画面でやること */
+#np-todo .np-todo-n:not(:empty) { display: inline-block; min-width: 1.4em; padding: 0 .35em; margin-left: .2em; border-radius: 999px;
+  background: var(--fca-accent); color: #1B2A5C; font-weight: 700; text-align: center; }
+#np-todo[aria-current="page"] { color: var(--fca-bar-ink); background: rgba(255,255,255,.12); text-decoration: underline; text-underline-offset: 3px; }
+.np-screen-todo { border: 2px solid var(--fca-navy); border-left: 8px solid var(--fca-accent); border-radius: 8px;
+  background: var(--fca-card); padding: .6rem .9rem; margin: 0 0 1rem; }
+.np-screen-todo-h { margin: 0 0 .3rem; font-weight: 700; }
+.np-screen-todo ul, ul.np-guide { margin: 0; padding-left: 0; list-style: none; display: grid; gap: .45rem; }
+.np-guide-item[data-state="済"] { opacity: .7; }

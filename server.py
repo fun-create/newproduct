@@ -1141,6 +1141,20 @@ class H(BaseHTTPRequestHandler):
             r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)
             store.audit(uid, "task.assignee", f"{parts[1]}:{parts[2]}", r, ip)
             return self.sendj(200, r)
+        # やること（ガイド・ADR-133）。数えるのは app/guide.py だけ
+        if parts and parts[0] == "guide":
+            from app import guide
+            if parts == ["guide"] and method == "GET":
+                return self.sendj(200, guide.build(uid))
+            if parts == ["guide", "screen"] and method == "GET":
+                b = guide.build(uid)
+                path = qs.get("path") or ""
+                items = [x for x in b["now"] + [p for p in b["prep"] if p["state"] == "未"] if path in (x.get("screens") or [])]
+                return self.sendj(200, {"count": b["count"], "items": items, "failed": b["failed"]})
+            if parts == ["guide", "mark"] and method == "POST":
+                d = self.body()
+                return self.sendj(200, guide.mark(uid, d.get("key", ""), d.get("done") in ("1", "true", "on")))
+            return self.sendj(404, {"error": "not found"})
         # 発売後の改善要望（ADR-132）。受け付け・直すのは利用者全員。タスクにすると案件外の仕事になり、担当者と期限があればカレンダーへ
         if parts and parts[0] == "improve":
             from app import improve

@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -103,6 +103,8 @@
       if (a.getAttribute("data-view") === view) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    var td = document.getElementById("np-todo");
+    if (td) { if (location.hash.indexOf("#/todo") === 0) td.setAttribute("aria-current", "page"); else td.removeAttribute("aria-current"); }
     var sg = document.getElementById("np-settings");
     if (sg) { if (view === "settings") sg.setAttribute("aria-current", "page"); else sg.removeAttribute("aria-current"); }
   }
@@ -123,6 +125,7 @@
     }).then(function (r) {
       return r.json().then(function (j) {
         if (!r.ok) throw new Error(j && j.error ? j.error : ("HTTP " + r.status));
+        setTimeout(function () { refreshGuide(hashPath()); }, 300);     // 保存したら、やることを数え直す（ADR-133）
         return j;
       });
     });
@@ -157,7 +160,7 @@
   // 帯の下に「この中の画面」（点検 §3-3）。寄せた画面（ALIAS）がどこにあるか分かるように、親の画面の仲間を並べる。
   // 売上・原価は salesSubnav が持つのでここには入れない
   var SUBNAV = [
-    [["#/", "ダッシュボード"], ["#/reports", "月次レポート"]],
+    [["#/", "ダッシュボード"], ["#/todo", "やること"], ["#/reports", "月次レポート"]],
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
     [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
@@ -1432,6 +1435,73 @@
       box.appendChild(el("p", { "class": "np-note", text: "まだ作っていません（G5 を通すと作ります）。" }));
     }
     return box;
+  }
+
+  /** やること（ガイド・2026-11-09 十文字さん「Business Analysis のガイドと同じ仕組みを」・ADR-133）。
+   *  数えるのはサーバ（app/guide.py）だけ。ここは描くだけ。右上の件数・この画面でやること・一覧の3か所 */
+  var GUIDE_T = null;
+  function manualHref(sec) { return "/#/manual?sec=" + encodeURIComponent(sec); }
+  function guideItemLine(x, withHow) {
+    var tone = x.state === "期限切れ" ? "alert" : x.state === "今やる" ? "info" : x.state === "済" ? null : null;
+    return el("li", { "class": "np-guide-item", "data-state": x.state }, [
+      tag(x.state, tone), txt(" "),
+      x.href ? el("a", { href: x.href, text: x.title }) : txt(x.title),
+      x.due ? el("span", { "class": "np-sub", text: "　期限 " + x.due }) : null,
+      x.why ? el("div", { "class": "np-sub", text: x.why }) : null,
+      withHow && x.how ? el("div", { "class": "np-sub" }, [el("a", { href: manualHref(x.how), target: "np-manual", text: "やり方（使い方の「" + x.how + "」）↗" })]) : null]);
+  }
+  function refreshGuide(path) {
+    var n = document.getElementById("np-todo-n"), box = document.getElementById("np-screen-todo");
+    api("/api/guide/screen?path=" + encodeURIComponent(path || hashPath())).then(function (g) {
+      if (n) n.textContent = g.count ? String(g.count) : "";
+      if (!box) return;
+      box.textContent = "";
+      if (!g.items.length || path === "#/todo") { box.setAttribute("hidden", "hidden"); return; }
+      box.appendChild(el("p", { "class": "np-screen-todo-h", text: "この画面でやること" }));
+      var ul = el("ul");
+      g.items.forEach(function (x) { ul.appendChild(guideItemLine(x, false)); });
+      box.appendChild(ul);
+      box.appendChild(el("p", { "class": "np-sub" }, [el("a", { href: "#/todo", text: "やることをすべて見る" })]));
+      box.removeAttribute("hidden");
+    }).catch(function () { if (box) box.setAttribute("hidden", "hidden"); });
+    if (!GUIDE_T) GUIDE_T = setInterval(function () { refreshGuide(hashPath()); }, 30000);   // 30秒ごとに数え直す
+  }
+  function viewTodo() {
+    loading();
+    api("/api/guide").then(function (g) {
+      var b = clear();
+      setTitle("やること");
+      b.appendChild(el("p", { "class": "np-note", text: "アプリがデータを数えて、あなたに関係するやることを出しています（" + g.today + " 時点）。"
+        + "済んだものは自動で消えます。アプリで確かめられないものだけ「済にする」を押します。" }));
+      if (g.failed.length) b.appendChild(el("p", { "class": "np-warn", text: "数えられなかったもの: " + g.failed.join("・") + "（ほかは出しています）" }));
+      function section(title, items, empty, withMark) {
+        var c = el("div", { "class": "np-card" });
+        c.appendChild(el("h2", { text: title + "（" + items.length + "）" }));
+        if (!items.length) { c.appendChild(el("p", { "class": "np-note", text: empty })); return c; }
+        var ul = el("ul", { "class": "np-guide" });
+        items.forEach(function (x) {
+          var li = guideItemLine(x, true);
+          if (withMark && x.manual && g.can_mark) {
+            var bt = el("button", { type: "button", "class": "np-btn np-btn-sm", text: x.state === "済" ? "未に戻す" : "済にする" });
+            bt.addEventListener("click", function () { post("/api/guide/mark", { key: x.key, done: x.state === "済" ? "0" : "1" }).then(function () { go(); }); });
+            li.appendChild(bt);
+          }
+          if (x.state === "済" && x.done_by) li.appendChild(el("span", { "class": "np-sub", text: "　" + x.done_by + " が " + x.done_at + " に済" }));
+          ul.appendChild(li);
+        });
+        c.appendChild(ul);
+        return c;
+      }
+      b.appendChild(section("いまやること", g.now, "いまやることはありません。"));
+      b.appendChild(section("事前の準備", g.prep, "事前の準備はありません。", true));
+      b.appendChild(section("これから（30日以内）", g.soon, "30日以内の予定はありません。"));
+      var cc = el("div", { "class": "np-card" });
+      cc.appendChild(el("h2", { text: "1年の入力カレンダー" }));
+      cc.appendChild(table(["いつ", "何を", "どこで"], g.calendar.map(function (r) {
+        return el("tr", null, [el("td", { "class": "np-nowrap", text: r.when }), el("td", { text: r.what }), el("td", { text: r.where })]);
+      })));
+      b.appendChild(cc);
+    }).catch(fail);
   }
 
   /** 発売後の改善要望（2026-11-09 十文字さん・ADR-132）。受け付け → 優先度・担当部署・担当者・期限 → タスクにする。
@@ -7344,7 +7414,7 @@
   var HELP_SEC = {
     "#/routines": "タスク", "#/tasks/assign": "タスク", "#/trends": "トレンド（FCTR）", "#/ai-score": "アイデア",
     "#/calibration": "採点の校正", "#/devices": "新機種調査", "#/opportunities": "年間プラン", "#/simulate": "年間プラン",
-    "#/gates": "案件", "#/improve": "改善要望", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
+    "#/gates": "案件", "#/improve": "改善要望", "#/todo": "やること", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
     "#/settings/templates": "標準タスクのひな形を直すとき", "#/settings/ideas-import": "アイデアをまとめて登録するとき"
   };
   function setHelpLink(path, entry) {
@@ -7429,7 +7499,9 @@
     var m = /^#\/projects\/([A-Za-z0-9_-]+)$/.exec(path);
     var mi = /^#\/ideas\/([A-Za-z0-9_-]+)$/.exec(path);
     var ma = /^#\/automation\/([A-Za-z0-9_-]+)$/.exec(path);
+    refreshGuide(path);
     if (path === "#/") return viewHome();
+    if (path === "#/todo") return viewTodo();
     if (m) return viewProject(m[1]);
     if (mi) return viewIdea(mi[1]);
     if (path === "#/automation") return viewAutomation();
