@@ -71,6 +71,20 @@ class Unmeasured(unittest.TestCase):
         self.assertIn("対象なし", body, "数える案件が無いときの新商品の合計は「対象なし」")
         self.assertIn("作れなかった節", body)
 
+    def test_monthly_report_data_for_charts(self):
+        """図にするデータ（ADR-134）: 文と同じ数字・作れない節は欠けても他は出る・保存して読み戻せる"""
+        import json
+        from app import report
+        _body, problems, d = report.build_all("2026-09")
+        json.dumps(d, default=str)
+        self.assertEqual(d["month"], "2026-09")
+        self.assertEqual(d["problems"], problems)
+        for k in ("newprod", "dev", "plan"):
+            self.assertIn(k, d, k)
+        self.assertIsNone(d["newprod"]["totals"]["全額"])          # 数える案件が無いときは 0 ではない
+        report.save("2026-09", "tester")
+        self.assertEqual(report.get("2026-09")["data"]["month"], "2026-09")
+
     def test_dashboard_second_row_distinguishes_none_from_zero(self):
         from app import task, plan, idea
         pl = task.post_launch_pending()

@@ -539,3 +539,22 @@ tr[data-editing="1"] > td { background: var(--fca-bg); font-weight: 600; }
 .np-screen-todo-h { margin: 0 0 .3rem; font-weight: 700; }
 .np-screen-todo ul, ul.np-guide { margin: 0; padding-left: 0; list-style: none; display: grid; gap: .45rem; }
 .np-guide-item[data-state="済"] { opacity: .7; }
+
+/* 月次レポートを図で（ADR-134） */
+.np-report-sec { margin-top: 1rem; }
+.np-report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; align-items: start; }
+.np-report-sub { border: 1px solid var(--fca-line); border-radius: 8px; padding: .7rem .9rem; display: grid; gap: .5rem; }
+.np-report-sub > h3 { margin: 0; font-size: 1rem; }
+.np-stack { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--fca-line); font-size: .78rem; font-weight: 700; }
+.np-stack-seg { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; min-width: 0; }
+.np-stack-A { background: var(--fca-navy); color: var(--fca-card); }
+.np-stack-B { background: color-mix(in srgb, var(--fca-navy) 45%, var(--fca-card)); color: var(--fca-ink); }
+.np-stack-C { background: var(--fca-bg); color: var(--fca-ink); background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(127,127,127,.18) 4px 6px); }
+.np-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.np-chip { border: 1px solid var(--fca-line); border-radius: 999px; padding: .15rem .6rem; font-size: .85rem; }
+.np-chip[data-tone="ok"] { border-left: 4px solid var(--fca-navy); }
+.np-chip[data-tone="alert"] { border-left: 4px solid var(--fca-gold); }
+ol.np-timeline { list-style: none; margin: 0; padding: 0 0 0 .9rem; border-left: 3px solid var(--fca-accent); display: grid; gap: .45rem; }
+ol.np-timeline li { position: relative; display: flex; gap: .6rem; align-items: baseline; }
+ol.np-timeline li::before { content: ""; position: absolute; left: -1.28rem; top: .45em; width: .6rem; height: .6rem; border-radius: 50%; background: var(--fca-accent); }
+.np-timeline-date { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }

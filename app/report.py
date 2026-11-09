@@ -33,8 +33,21 @@ def prev_month(today: _dt.date | None = None) -> str:
 
 
 def build(month: str) -> tuple[str, list[str]]:
+    md, problems, _data = build_all(month)
+    return md, problems
+
+
+def _pct(cur, prev):
+    if cur is None or not prev:
+        return None
+    return round((cur - prev) / prev * 100, 1)
+
+
+def build_all(month: str) -> tuple[str, list[str], dict]:
+    """文（Markdown）と、同じ数字のデータ（画面で図にする・ADR-134）を一緒に作る。**数字は同じところから取る**"""
     from app import abc, salesfeed
     problems: list[str] = []
+    D: dict = {"month": month, "generated_at": store.now_s()}
     L = [f"# NEW PRODUCT 月次レポート {month}", "",
          f"作成 {store.now_s()}。金額は税込の商品代（取消・返金を除く）。会社の正式な売上（税抜・請求金額）とは一致しません。", ""]
 
@@ -42,10 +55,26 @@ def build(month: str) -> tuple[str, list[str]]:
     L += ["## 1. 売上（3店・売上フィード）", "", "| サイト | 売上 | 前年同月 | 前年比 |", "|---|---|---|---|"]
     try:
         py = salesfeed._month_add(month, -12)
+        sites, trend = [], {}
+        months = [salesfeed._month_add(month, -i) for i in range(11, -1, -1)]
         for key, (_shop, label, _c) in salesfeed.SHOPS.items():
             tot, _m = salesfeed.monthly(key)
             cur, prev = tot.get(month), (tot.get(py) if py >= salesfeed.SINCE[:7] else None)
             L.append(f"| {label} | {_yen(cur)} | {_yen(prev)} | {_yoy(cur, prev)} |")
+            sites.append({"key": key, "label": label, "cur": cur, "prev": prev, "yoy": _pct(cur, prev)})
+            for m in months:
+                pm = salesfeed._month_add(m, -12)
+                t = trend.setdefault(m, {"month": m, "cur": 0.0, "prev": 0.0, "has_cur": False, "has_prev": False})
+                if tot.get(m) is not None:
+                    t["cur"] += tot[m]; t["has_cur"] = True
+                if pm >= salesfeed.SINCE[:7] and tot.get(pm) is not None:
+                    t["prev"] += tot[pm]; t["has_prev"] = True
+        cs = [s["cur"] for s in sites if s["cur"] is not None]
+        ps = [s["prev"] for s in sites if s["prev"] is not None]
+        tc, tp = (sum(cs) if cs else None), (sum(ps) if len(ps) == len(sites) else None)
+        D["sales"] = {"sites": sites, "total": {"cur": tc, "prev": tp, "yoy": _pct(tc, tp)},
+                      "trend": [{"month": t["month"], "cur": t["cur"] if t["has_cur"] else None,
+                                 "prev": t["prev"] if t["has_prev"] else None} for t in (trend[m] for m in months)]}
         L.append("")
         L.append("Amazon（会社出荷・FBA）は売上フィードに入っていないため、ここには出ません。")
     except Exception as e:                                   # noqa: BLE001
@@ -55,10 +84,21 @@ def build(month: str) -> tuple[str, list[str]]:
 
     # 2. 商品ABC
     L += ["## 2. 商品ABC（前年同月と比較）", ""]
+    D["abc"] = []
     for key, (_shop, label, _c) in salesfeed.SHOPS.items():
         try:
             r = abc.analyze(key, month, month, "yoy")
             c = r["current"]
+            ab = {"site": key, "label": label, "count": c["count"], "total": c["total"],
+                  "classes": {k: c["classes"][k] for k in "ABC"},
+                  "top": [{"name": x["name"] or x["name_label"], "key": x["key"], "revenue": x["revenue"]}
+                          for x in r["rows"] if x["class"] == "A"][:5],
+                  "changes": ({k: {"count": r["changes"][k]["count"], "diff": r["changes"][k]["diff"]}
+                               for k in ("増加", "減少", "消滅", "新規")} if r.get("changes") else None),
+                  "movers": ({k: [{"name": x["name"] or x["name_label"], "diff": x["diff"]} for x in r["changes"][k]["rows"][:3]]
+                              for k in ("増加", "減少")} if r.get("changes") else None),
+                  "why": r.get("why_compare")}
+            D["abc"].append(ab)
             L.append(f"### {label}（{c['count']} 商品番号・{_yen(c['total'])}）")
             L.append("")
             L.append("| 区分 | 商品数 | 売上 | 構成比 |")
@@ -86,6 +126,7 @@ def build(month: str) -> tuple[str, list[str]]:
             elif r.get("why_compare"):
                 L += [r["why_compare"], ""]
         except Exception as e:                               # noqa: BLE001
+            D["abc"].append({"site": key, "label": label, "error": str(e)})
             problems.append(f"商品ABC {label}: {e}")
             L += [f"### {label}", f"（作れませんでした: {e}）", ""]
 
@@ -99,6 +140,20 @@ def build(month: str) -> tuple[str, list[str]]:
             return "対象なし" if v is None else _yen(v)          # 数える案件が無いときは 0円と書かない
         L.append(f"- 売上として数える案件: {n['counted']} 件／全額 {_amt(n['totals']['全額'])}／増分 {_amt(n['totals']['増分'])}"
                  f"／未計測 {n['totals']['未計測']} 件・方式未選択 {n['totals']['方式未選択']} 件")
+        D["newprod"] = {"count": n["count"], "by_flow": n["by_flow"], "counted": n["counted"], "totals": n["totals"]}
+        try:
+            from app import newprod
+            snap = newprod.latest()
+            if snap and snap.get("total"):
+                tot = snap["total"]
+                D["newprod"]["weekly"] = {"period_from": snap["period_from"], "period_to": snap["period_to"],
+                                          "sales": tot.get("sales"), "target": tot.get("target_sales"),
+                                          "top": sorted(({"label": r["label"], "sales": r["sales"] or 0, "target": r["target_sales"]}
+                                                         for r in snap["rows"]), key=lambda x: -x["sales"])[:8]}
+                L.append(f"- 週次レポート（{snap['period_from']}〜{snap['period_to']}）の新商品の売上: {_yen(tot.get('sales'))}"
+                         f"／期間目標 {_yen(tot.get('target_sales'))}")
+        except Exception as e:                               # noqa: BLE001
+            problems.append(f"新商品（週次レポート）: {e}")
     except Exception as e:                                   # noqa: BLE001
         problems.append(f"新商品: {e}")
         L.append(f"（作れませんでした: {e}）")
@@ -110,10 +165,12 @@ def build(month: str) -> tuple[str, list[str]]:
         from app import task
         st = store.q("SELECT stage, COUNT(*) n FROM project GROUP BY stage ORDER BY COUNT(*) DESC")
         L.append("- ステージ別: " + "・".join(f"{r['stage']} {r['n']}" for r in st))
+        D["dev"] = {"stages": [{"stage": r["stage"], "n": r["n"]} for r in st]}
         lo, hi = month + "-01", _add_month(month) + "-01"
         gr = store.q("SELECT gate, result, COUNT(*) n FROM gate_review WHERE approved_at >= ? AND approved_at < ? AND kind='review' "
                      "GROUP BY gate, result ORDER BY gate", (lo, hi))
         L.append("- この月の関門の判定: " + ("・".join(f"{r['gate']} {r['result']} {r['n']}" for r in gr) if gr else "なし"))
+        D["dev"]["gates"] = [{"gate": r["gate"], "result": r["result"], "n": r["n"]} for r in gr]
         up = store.q("SELECT id, internal_name, launch_date FROM project WHERE launch_date >= ? AND launch_date < ? "
                      "AND stage NOT IN ('中止','発売済','追跡中','評価完了') ORDER BY launch_date",
                      (store.today_s(), (store.today() + _dt.timedelta(days=60)).isoformat()))
@@ -122,6 +179,8 @@ def build(month: str) -> tuple[str, list[str]]:
         L.append(f"- 期限切れのタスク（作成時点）: {od} 件")
         pl = task.post_launch_pending()
         L.append(f"- 発売後チェックの未処理: {pl['value'] or pl['state']}")
+        D["dev"].update({"upcoming": [{"id": r["id"], "name": r["internal_name"] or r["id"], "date": r["launch_date"]} for r in up],
+                         "overdue": od, "post_launch": pl.get("value") or pl.get("state"), "as_of": store.today_s()})
     except Exception as e:                                   # noqa: BLE001
         problems.append(f"開発の進み: {e}")
         L.append(f"（作れませんでした: {e}）")
@@ -135,6 +194,8 @@ def build(month: str) -> tuple[str, list[str]]:
         L.append(f"- 今月の枠の消化（作成時点の月）: {sc.get('value') or sc.get('state')}" + (f"　{sc['why']}" if sc.get("why") else ""))
         vs = store.q("SELECT fiscal_year, label, state FROM plan_version ORDER BY fiscal_year DESC, id DESC LIMIT 3")
         L.append("- 版: " + "・".join(f"{r['fiscal_year']}年度 {r['label']}（{r['state']}）" for r in vs))
+        D["plan"] = {"consumption": {k: sc.get(k) for k in ("value", "state", "why", "slots", "converted", "month")},
+                     "versions": [{"fiscal_year": r["fiscal_year"], "label": r["label"], "state": r["state"]} for r in vs]}
     except Exception as e:                                   # noqa: BLE001
         problems.append(f"年間プラン: {e}")
         L.append(f"（作れませんでした: {e}）")
@@ -150,6 +211,9 @@ def build(month: str) -> tuple[str, list[str]]:
         for s in b["segments"]:
             L.append(f"- {s['name']}: " + "、".join(f"{t['label']}（{t['decayed']}）" for t in s["themes"] if t["top"]))
         L.append(f"- 週: {b['latest_week'] or '—'}")
+        D["trends"] = {"week": b["latest_week"], "why": b["why"],
+                       "segments": [{"name": s["name"], "themes": [{"label": t["label"], "score": t["decayed"]}
+                                                                   for t in s["themes"] if t["top"]]} for s in b["segments"]]}
     except Exception as e:                                   # noqa: BLE001
         problems.append(f"トレンド: {e}")
         L.append(f"（作れませんでした: {e}）")
@@ -161,7 +225,8 @@ def build(month: str) -> tuple[str, list[str]]:
           "- トレンド: Auto GROWTH の FCTR（市場性30点のみ）"]
     if problems:
         L += ["", "## 作れなかった節", ""] + [f"- {p}" for p in problems]
-    return "\n".join(L) + "\n", problems
+    D["problems"] = problems
+    return "\n".join(L) + "\n", problems, D
 
 
 def _add_month(m: str) -> str:
@@ -170,12 +235,13 @@ def _add_month(m: str) -> str:
 
 
 def save(month: str, by: str) -> dict:
-    body, problems = build(month)
+    body, problems, data = build_all(month)
     with store.tx() as c:
-        c.execute("INSERT INTO monthly_report (month,body_md,generated_at,generated_by,problems) VALUES (?,?,?,?,?) "
+        c.execute("INSERT INTO monthly_report (month,body_md,generated_at,generated_by,problems,data) VALUES (?,?,?,?,?,?) "
                   "ON CONFLICT(month) DO UPDATE SET body_md=excluded.body_md,generated_at=excluded.generated_at,"
-                  "generated_by=excluded.generated_by,problems=excluded.problems",
-                  (month, body, store.now_s(), by, json.dumps(problems, ensure_ascii=False) if problems else None))
+                  "generated_by=excluded.generated_by,problems=excluded.problems,data=excluded.data",
+                  (month, body, store.now_s(), by, json.dumps(problems, ensure_ascii=False) if problems else None,
+                   json.dumps(data, ensure_ascii=False, default=str)))
     return {"ok": True, "month": month, "problems": problems}
 
 
@@ -185,4 +251,8 @@ def listing() -> list[dict]:
 
 def get(month: str) -> dict | None:
     r = store.one("SELECT * FROM monthly_report WHERE month=?", (month,))
-    return dict(r) if r else None
+    if r is None:
+        return None
+    d = dict(r)
+    d["data"] = json.loads(d["data"]) if d.get("data") else None      # 図にするデータ（無い古いレポートは文だけ）
+    return d
