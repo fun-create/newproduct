@@ -511,3 +511,9 @@ details.np-analysis > summary { cursor: pointer; font-weight: 700; }
 
 /* 設定は帯ではなく右端（2026-11-09）。開いているときは帯と同じく印を付ける（色だけにしない: 下線も） */
 #np-settings[aria-current="page"] { color: var(--fca-bar-ink); background: rgba(255,255,255,.12); text-decoration: underline; text-underline-offset: 3px; }
+
+/* 改善要望の入力欄（2026-11-09）。文が全部見えるように、幅は欄いっぱい・高さは中身に合わせて伸びる */
+.np-improve-form textarea.np-grow { display: block; width: 100%; max-width: 60rem; box-sizing: border-box; resize: vertical; overflow: hidden; font: inherit; line-height: 1.6; }
+.np-improve-form textarea[name="title"] { font-weight: 600; }
+.np-improve-form { display: grid; gap: .5rem; width: 100%; }
+.np-improve-form p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }

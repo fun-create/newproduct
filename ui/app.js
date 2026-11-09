@@ -1464,11 +1464,12 @@
       }
       function form(r, onSave) {
         r = r || {};
-        var f = el("form", { "class": "np-inline np-improve-form" });
+        var f = el("form", { "class": "np-improve-form" });       // 縦に並べる（横並びだと入力欄が細くなる）
         var ff = {
-          title: el("input", { name: "title", size: "40", value: r.title || "", placeholder: "何を直すか（必須）", "aria-label": "要望" }),
-          detail: el("textarea", { name: "detail", rows: "2", cols: "60", placeholder: "くわしく・決めたこと", "aria-label": "くわしく" }),
-          source: el("input", { name: "source", size: "14", value: r.source || "", placeholder: "例 外部署から", "aria-label": "受付元" }),
+          // 文が全部見える大きさにする（2026-11-09 十文字さん「入力欄が小さい」）。幅は画面いっぱい、高さは中身に合わせて伸びる
+          title: el("textarea", { name: "title", rows: "1", "class": "np-grow", placeholder: "何を直すか（必須）", "aria-label": "要望" }),
+          detail: el("textarea", { name: "detail", rows: "3", "class": "np-grow", placeholder: "くわしく・決めたこと", "aria-label": "くわしく" }),
+          source: el("input", { name: "source", size: "28", value: r.source || "", placeholder: "例 外部署から", "aria-label": "受付元" }),
           received_on: el("input", { name: "received_on", type: "date", value: r.received_on || "", "aria-label": "受付日" }),
           project_id: sel("project_id", projects.map(function (p) { return [p.id, p.name || p.id]; }), r.project_id || proj, "（商品なし）"),
           priority: sel("priority", d.priorities.map(function (x) { return [x, x]; }), r.priority || "未設定"),
@@ -1477,7 +1478,15 @@
           assignee: sel("assignee", users.map(function (u) { return [u.user_id, u.name || u.user_id]; }), r.assignee, "（担当者なし）"),
           due_on: el("input", { name: "due_on", type: "date", value: r.due_on || "", "aria-label": "期限" })
         };
+        ff.title.value = r.title || "";
         ff.detail.value = r.detail || "";
+        ff.title.addEventListener("keydown", function (ev) { if (ev.key === "Enter") ev.preventDefault(); });   // 要望は1行（改行させない）
+        [ff.title, ff.detail].forEach(function (t) {
+          function fit() { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
+          t.addEventListener("input", fit);
+          setTimeout(fit, 0);
+          f.addEventListener("np-shown", fit);
+        });
         f.appendChild(el("p", null, [ff.title]));
         f.appendChild(el("p", null, [ff.detail]));
         f.appendChild(el("p", null, [txt("商品 "), ff.project_id, txt(" 受付元 "), ff.source, txt(" 受付日 "), ff.received_on]));
@@ -1510,7 +1519,13 @@
         var editRow = el("tr", { hidden: "hidden" }, [el("td", { colspan: "8" }, [form(r, function (o) { return post("/api/improve/" + r.id, o); })])]);
         var actions = el("td", { "class": "np-nowrap" });
         var eb = el("button", { type: "button", text: "直す" });
-        eb.addEventListener("click", function () { if (editRow.hasAttribute("hidden")) editRow.removeAttribute("hidden"); else editRow.setAttribute("hidden", "hidden"); });
+        eb.addEventListener("click", function () {
+          if (editRow.hasAttribute("hidden")) {
+            editRow.removeAttribute("hidden");
+            // 隠れているあいだは高さを測れないので、開いたときに合わせ直す
+            var fm = editRow.querySelector("form"); if (fm) fm.dispatchEvent(new Event("np-shown"));
+          } else editRow.setAttribute("hidden", "hidden");
+        });
         actions.appendChild(eb);
         if (r.work_item_id) {
           actions.appendChild(txt(" "));
