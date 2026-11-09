@@ -138,22 +138,27 @@ class TestVersions(Base):
         with self.assertRaises(ValueError):
             self.slot(month="2026-06")
 
-    def test_revise_copies_slots_but_not_the_conversion(self):
-        """改訂版は枠ごと写すが、**変換済みの案件は写さない**（二重に作らない）。"""
+    def test_revise_carries_links_without_new_projects(self):
+        """改訂版は枠ごと写し、**案件との結び付きも写す**（修正依頼書 R02・ADR-129）。案件は作り直さない。
+        以前は写さず、改訂版を承認すると結んだ案件が全部「結ばれていない」に戻っていた"""
         from app import store
         a = self.slot(month="2026-05", launch_date="2026-05-20")
         self.slot(month="2026-06")
-        self.m.convert(a, "tester")
+        pid = self.m.convert(a, "tester")["project_id"]
         self.m.approve(self.vid, "tester")
+        n_proj = store.val("SELECT COUNT(*) FROM project", (), 0)
         new = self.m.revise(self.vid, "tester")
         self.assertEqual(new["slots_copied"], 2)
         self.assertEqual(new["state"], "策定中")
-        self.assertEqual(
-            store.val("SELECT COUNT(*) FROM plan_slot WHERE version_id=? "
-                      "AND project_id IS NOT NULL", (new["id"],)), 0)
+        b = store.one("SELECT * FROM plan_slot WHERE version_id=? AND project_id IS NOT NULL", (new["id"],))
+        self.assertEqual((b["project_id"], b["link_kind"], b["copied_from"]), (pid, "convert", a))
+        with self.assertRaises(ValueError):
+            self.m.convert(b["id"], "tester")              # 写した枠からもう一度案件を作らない
+        self.m.approve(new["id"], "tester")
+        self.assertEqual(store.val("SELECT COUNT(*) FROM project", (), 0), n_proj)
+        self.assertNotIn(pid, [p["id"] for p in self.m.unlinked_projects()])
         self.assertEqual(store.val("SELECT based_on FROM plan_version WHERE id=?",
                                    (new["id"],)), self.vid)
-
 
 # ══════════════════════════════════════════════════════════
 class TestRules(Base):

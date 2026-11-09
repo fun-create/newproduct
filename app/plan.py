@@ -180,14 +180,17 @@ def revise(version_id: str, user_id: str, label: str = "") -> dict:
             c.execute(
                 "INSERT INTO plan_slot (id,version_id,launch_month,launch_date,"
                 "product_kind,flow_type,area,effort_point,effort_src,owner,"
-                "idea_id,occasion,note,product,created_at,created_by,updated_at,updated_by) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "idea_id,occasion,note,product,created_at,created_by,updated_at,updated_by,"
+                "project_id,link_kind,converted_at,converted_by,copied_from) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid, new["id"], s["launch_month"], s["launch_date"],
                  s["product_kind"], s["flow_type"], s["area"], s["effort_point"],
                  s["effort_src"], s["owner"], s["idea_id"], s["occasion"], s["note"], s["product"],
-                 store.now_s(), user_id, store.now_s(), user_id))
+                 store.now_s(), user_id, store.now_s(), user_id,
+                 s["project_id"], s["link_kind"], s["converted_at"], s["converted_by"], s["id"]))
             n += 1
-    # **変換済み（project_id）は写さない。**案件は既に在るので、二重に作らせない
+    # 案件との結び付きも写す（2026-11-09 修正依頼書 R02・ADR-129）。以前は写さず、改訂版を承認すると
+    # 結んだ案件が全部「結ばれていない」に戻っていた。**案件は作り直さない**（結び付きを写すだけ）
     new["slots_copied"] = n
     return new
 
@@ -265,9 +268,11 @@ def link_slot(slot_id: str, project_id: str, user_id: str) -> dict:
         raise LookupError("その案件がありません")
     if p["stage"] == "中止":
         raise ValueError("中止した案件は結べません")
-    other = store.one("SELECT id, launch_month FROM plan_slot WHERE project_id=?", (project_id,))
+    # 版の中で1つの枠（ADR-129）。改訂版と承認版の両方に同じ案件が結ばれているのは正しい
+    other = store.one("SELECT id, launch_month FROM plan_slot WHERE project_id=? AND version_id=?",
+                      (project_id, s["version_id"]))
     if other:
-        raise ValueError(f"この案件はもう別の枠（{other['launch_month']}）と結ばれています")
+        raise ValueError(f"この案件はもう同じ版の別の枠（{other['launch_month']}）と結ばれています")
     now = store.now_s()
     with store.tx() as c:
         c.execute("UPDATE plan_slot SET project_id=?, converted_at=?, converted_by=?, link_kind='link', updated_at=?, updated_by=? WHERE id=?",
@@ -301,7 +306,8 @@ def unlinked_projects() -> list[dict]:
     """どの枠とも結ばれていない案件（中止を除く）。発売予定日の順。"""
     return store.rows(store.q(
         "SELECT p.id, p.internal_name, p.stage, p.launch_date FROM project p "
-        "WHERE p.stage <> '中止' AND NOT EXISTS (SELECT 1 FROM plan_slot s WHERE s.project_id=p.id) "
+        "WHERE p.stage <> '中止' AND NOT EXISTS (SELECT 1 FROM plan_slot s JOIN plan_version v ON v.id=s.version_id "
+        "WHERE s.project_id=p.id AND v.state != '失効') "
         "ORDER BY (p.launch_date IS NULL), p.launch_date, p.internal_name"))
 
 
@@ -500,7 +506,7 @@ def update_slot(slot_id: str, user_id: str, **f) -> dict:
         raise ValueError("その枠がありません")
     if s["state"] != "策定中":
         raise ValueError(f"{s['state']}の版は編集できません。改訂版を作ってください")
-    if s["project_id"]:
+    if s["project_id"] and s["link_kind"] != "link":
         raise ValueError("案件に変換済みの枠です。案件の側で直してください")
     sets, p = [], []
     for k in _EDITABLE:
