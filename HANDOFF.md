@@ -333,3 +333,4 @@ Lucky Field×FUN-CREATE 11/2 12:07。十文字さん「全部即実行」。受�
 - **11/9 以降の同期**: 道具は止まっている。R01 の1回だけ `NEWPRODUCT_CUTOVER=2026-11-10` で外した。毎朝の予定タスクは不要（削除してよい）
 - **改善要望（20:10・ADR-132）**: `#/improve`。手書きメモ（外部署から）の10件を本番に入れた（◎の2件は優先度「高」・ほかは未設定。担当・期限は未設定）。優先度・担当・期限は商品開発部が決める
 - **やること（20:50・ADR-133）**: `#/todo`・右上「📌 やること n」・画面の上の「この画面でやること」。判定は app/guide.py だけ。本番の件数: 十文字さん 18・石原さん 21・増地さん 21・山下さん 1。朝の便（ChatWork・AI ASSISTANT）への知らせはまだ
+- **朝の便（20:55）**: `GET /api/guide/todo`（docs/contracts/guide_v1.md）を本番に。鍵は config/secretary_guide_token。AI ASSISTANT に組み込みを依頼済み（HUB tasks/to-ai-assistant.md・セッションに通知）。返事は tasks/to-newproduct.md に来る
