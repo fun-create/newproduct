@@ -335,4 +335,4 @@ Lucky Field×FUN-CREATE 11/2 12:07。十文字さん「全部即実行」。受�
 - **やること（20:50・ADR-133）**: `#/todo`・右上「📌 やること n」・画面の上の「この画面でやること」。判定は app/guide.py だけ。本番の件数: 十文字さん 18・石原さん 21・増地さん 21・山下さん 1。朝の便（ChatWork・AI ASSISTANT）への知らせはまだ
 - **朝の便（20:55）**: `GET /api/guide/todo`（docs/contracts/guide_v1.md）を本番に。鍵は config/secretary_guide_token。AI ASSISTANT に組み込みを依頼済み（HUB tasks/to-ai-assistant.md・セッションに通知）。返事は tasks/to-newproduct.md に来る
 - **朝の便（21:00 確認）**: AI ASSISTANT が載せた（ADR-059・BA の段の後ろに「■ NEW PRODUCT のやること」・鍵 /opt/secretary/.config/newproduct_guide.token）。次の朝の便から
-- **ChatWork で頼む（21:40・ADR-135・FR-243）**: ゲート・年間プラン・タスク・案件外の仕事・改善要望のそばのボタンから「FUN 商品開発」(407742634) へ TO 付きで送る。押す前に文面と TO を出す。送り主 FUN-CREATE BOT・本文に依頼した人。本番で文面づくりまで確かめた（**まだ1通も送っていない**）。宛先が合うのは11人（高橋さん・吉田さんは部屋にいない）
+- **ChatWork で頼む（21:16・ADR-135・FR-243）**: ゲート・年間プラン・タスク・案件外の仕事・改善要望のそばのボタンから「FUN 商品開発」(407742634) へ TO 付きで送る。押す前に文面と TO を出す。送り主 FUN-CREATE BOT・本文に依頼した人。本番で文面づくりまで確かめた（**まだ1通も送っていない**）。宛先が合うのは11人（高橋さん・吉田さんは部屋にいない）
