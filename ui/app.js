@@ -1628,6 +1628,10 @@
           });
           actions.appendChild(txt(" ")); actions.appendChild(tb); actions.appendChild(ts);
         }
+        if (["受付", "検討中", "対応中"].indexOf(r.status) >= 0) {   // 担当へ ChatWork で頼む（ADR-135）
+          actions.appendChild(txt(" "));
+          actions.appendChild(askBtn("improve", r.id, "", "ChatWork で依頼", "依頼", true));
+        }
         var dataRow = el("tr", { "data-tone": late ? "alert" : null }, [
           el("td", null, [tag(r.priority, tone[r.priority] || null)]),
           el("td", { "class": "np-what" }, [txt(r.title), r.detail ? el("div", { "class": "np-sub", text: r.detail }) : null]),
@@ -2245,6 +2249,10 @@
       c.appendChild(form);
     });
     c.appendChild(bt);
+    if (t.status !== "完了" && t.status !== "対象外") {          // 担当者へ ChatWork で頼む・催促する（ADR-135）
+      c.appendChild(txt(" "));
+      c.appendChild(askBtn(kind === "task" ? "task" : "work", t.id, "", "ChatWork で依頼", "依頼", true));
+    }
     return c;
   }
   function taskAddForm(pid, meta, tasks) {
@@ -2988,6 +2996,78 @@
     return f;
   }
 
+  // ══════════════════════════════════════════════════════
+  // ChatWork で頼む（2026-11-09 十文字さん・ADR-135）。「FUN 商品開発」へ TO 付きで承認・確認・依頼・催促を送る。
+  // **押す前に、送る文面と TO の相手をそのまま見せる**（ChatWork は取り消せない・ADR-034）。送るのは「この文面で送る」を押したときだけ
+  // ══════════════════════════════════════════════════════
+  function askBtn(kind, id, gate, label, purpose, small) {
+    var bt = el("button", { type: "button", "class": "np-btn-cw" + (small ? " np-btn-sm" : ""), text: label });
+    bt.addEventListener("click", function () { openAsk(kind, id, gate || "", purpose, label); });
+    return bt;
+  }
+  function openAsk(kind, id, gate, purpose, label) {
+    var dlg = el("dialog", { "class": "np-ask", "aria-label": label });
+    var area = el("div", { "class": "np-edit-area" });
+    dlg.appendChild(area);
+    area.appendChild(el("h3", { text: label + "（ChatWork「FUN 商品開発」へ）" }));
+    var sel = el("select", { "aria-label": "何を頼むか" });
+    var opts = (kind === "gate" || kind === "plan") ? ["承認", "確認", "催促"] : ["依頼", "確認", "催促"];
+    var word = { "承認": "承認のお願い", "確認": "確認のお願い", "依頼": "お願い（タスクの依頼）", "催促": "催促" };
+    opts.forEach(function (x) { var o = el("option", { value: x, text: word[x] }); if (x === purpose) o.setAttribute("selected", "selected"); sel.appendChild(o); });
+    var note = el("textarea", { rows: "2", placeholder: "ひとこと（なくても送れます）", "aria-label": "ひとこと" });
+    var toP = el("p");
+    var pre = el("pre", { "class": "np-ask-text", "aria-label": "送る文面" });
+    var blk = el("div");
+    var lastP = el("p", { "class": "np-sub" });
+    var st = el("span", { "class": "np-status", role: "status" });
+    var send = el("button", { type: "button", "class": "np-btn-primary", text: "この文面で ChatWork に送る" });
+    var close = el("button", { type: "button", text: "閉じる" });
+    area.appendChild(el("label", { text: "何を頼むか" })); area.appendChild(sel);
+    area.appendChild(el("label", { text: "ひとこと" })); area.appendChild(note);
+    area.appendChild(toP);
+    area.appendChild(el("label", { text: "送る文面（このまま送ります）" })); area.appendChild(pre);
+    area.appendChild(blk); area.appendChild(lastP);
+    area.appendChild(el("p", { "class": "np-note", text: "ChatWork は取り消せません。文面と TO の相手を確かめてから送ってください。送り主は FUN-CREATE BOT で、本文に「依頼した人」としてあなたの名前が入ります。" }));
+    area.appendChild(el("p", { "class": "np-btnrow" }, [send, txt(" "), close, txt(" "), st]));
+    function q() {
+      return "kind=" + encodeURIComponent(kind) + "&id=" + encodeURIComponent(id) + "&gate=" + encodeURIComponent(gate)
+        + "&purpose=" + encodeURIComponent(sel.value) + "&note=" + encodeURIComponent(note.value);
+    }
+    var first = true, seq = 0;
+    function refresh() {
+      var my = ++seq;
+      send.disabled = true;
+      api("/api/ask?" + q()).then(function (c) {
+        if (my !== seq) return;
+        if (first && (c.last.length || c.default_purpose === "催促") && sel.value !== "催促") {   // 前に送ってある・期限切れなら催促から
+          first = false; sel.value = "催促"; return refresh();
+        }
+        first = false;
+        toP.textContent = "TO: " + (c.to.length ? c.to.map(function (x) { return x.name + (x.account_id ? "" : "（宛先不明）"); }).join("・") : "なし");
+        pre.textContent = c.text;
+        while (blk.firstChild) blk.removeChild(blk.firstChild);
+        c.blockers.forEach(function (b) { blk.appendChild(el("p", { "class": "np-warn", text: "送れません: " + b })); });
+        lastP.textContent = c.last.length ? "前に送ったもの: " + c.last.map(function (x) {
+          return x.sent_at.slice(0, 16) + " " + x.purpose + "（" + x.sent_by + " → " + x.to.join("・") + "）"; }).join(" ／ ") : "まだ送っていません。";
+        send.disabled = !c.ready;
+      }).catch(function (e) { if (my === seq) pre.textContent = "文面を作れませんでした: " + e.message; });
+    }
+    var tm = null;
+    sel.addEventListener("change", refresh);
+    note.addEventListener("input", function () { clearTimeout(tm); tm = setTimeout(refresh, 400); });
+    close.addEventListener("click", function () { dlg.close(); });
+    dlg.addEventListener("close", function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+    send.addEventListener("click", function () {
+      send.disabled = true; st.textContent = "送っています…";
+      post("/api/ask/send", { kind: kind, id: id, gate: gate, purpose: sel.value, note: note.value })
+        .then(function (r) { st.textContent = "送りました（TO: " + r.to.join("・") + "）"; close.textContent = "閉じる"; setTimeout(function () { dlg.close(); }, 1800); })
+        .catch(function (e) { st.textContent = e.message; send.disabled = false; });
+    });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    refresh();
+  }
+
   /** ゲートの判定。**理由は選択式**（F-6-5・B-14）。 */
   function gateForm(d, ng, meta) {
     var can = d.can_approve && d.can_approve[ng.gate];
@@ -3001,6 +3081,9 @@
     if (!can) {
       w.appendChild(el("p", { "class": "np-warn",
         text: "あなたはこのゲートを判定できません。承認資格はアプリ権限（admin/user）ではなく業務ロールで決まります。" }));
+      // 判定できる人へ ChatWork で頼む（ADR-135）
+      w.appendChild(btnRow([askBtn("gate", d.id, ng.gate, "ChatWork で承認依頼する", "承認"), txt(" "),
+        askBtn("gate", d.id, ng.gate, "確認依頼をする", "確認")]));
       return w;
     }
     var f = el("form", { "class": "np-inline" });
@@ -5032,6 +5115,8 @@
       var acts = el("p", { "class": "np-actions" });
       if (cur.state === "策定中" && !d.can_approve) {
         acts.appendChild(el("span", { "class": "np-sub", text: "承認は社長の業務ロールの人が行います。" }));
+        acts.appendChild(txt(" "));
+        acts.appendChild(askBtn("plan", cur.id, "", "ChatWork で社長に承認依頼する", "承認"));
       } else if (cur.state === "策定中") {
         var ap = el("button", { type: "button", text: "この版を承認する" });
         ap.addEventListener("click", function () {

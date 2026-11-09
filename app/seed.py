@@ -488,6 +488,8 @@ def run() -> dict:
     plan_m.seed()
     # 自動化依頼の渡し先（F-15-6）。**未設定のまま出荷する**（送り先は人が決める）
     auto_m.seed_settings()
+    from app import ask as ask_m
+    ask_m.seed_settings()
     # AI予算の確認先（FR-146）。**枠の正本は Auto GROWTH**
     ai_budget.seed_settings()
     store.conn().commit()

@@ -1167,6 +1167,20 @@ class H(BaseHTTPRequestHandler):
                 d = self.body()
                 return self.sendj(200, guide.mark(uid, d.get("key", ""), d.get("done") in ("1", "true", "on")))
             return self.sendj(404, {"error": "not found"})
+        # ChatWork「FUN 商品開発」へ TO 付きで承認・確認・依頼・催促を送る（ADR-135）。**押す前に文面を返し、押したときだけ送る**
+        if parts and parts[0] == "ask":
+            from app import ask
+            src = qs if method == "GET" else self.body()
+            args = (src.get("kind") or "", src.get("id") or "", src.get("gate") or "",
+                    src.get("purpose") or "", src.get("note") or "", uid)
+            if parts == ["ask"] and method == "GET":
+                return self.sendj(200, ask.compose(*args))
+            if parts == ["ask", "send"] and method == "POST":
+                try:
+                    return self.sendj(200, ask.send(*args))
+                except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
+                    return self.sendj(502, {"error": f"送れませんでした: {e}"})
+            return self.sendj(404, {"error": "not found"})
         # 発売後の改善要望（ADR-132）。受け付け・直すのは利用者全員。タスクにすると案件外の仕事になり、担当者と期限があればカレンダーへ
         if parts and parts[0] == "improve":
             from app import improve

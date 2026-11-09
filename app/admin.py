@@ -52,6 +52,15 @@ def _room(v, label):
     return v.strip()
 
 
+def _accounts(v, label):
+    from app import ask
+    try:
+        m = ask.parse_accounts(v)
+    except ValueError as e:
+        raise ValueError(f"{label}: {e}") from None
+    return "、".join(f"{k}={a}" for k, a in m.items())
+
+
 def _rooms_by_category(v, label):
     from app import automation
     m = automation.parse_rooms_by_category(v)
@@ -87,6 +96,8 @@ EDITABLE = {
     "automation.chatwork_room_id":  (APP_ADMIN, _room, "接続先"),
     "automation.chatwork_rooms_by_category": (APP_ADMIN, _rooms_by_category, "接続先"),
     "automation.app_base_url":      (APP_ADMIN, _url, "接続先"),
+    "ask.chatwork_room_id":         (APP_ADMIN, _room, "接続先"),
+    "ask.chatwork_accounts":        (APP_ADMIN, _accounts, "接続先"),
     "ai_scoring_enabled":           (APP_ADMIN, _onoff, "接続先"),
 }
 # 変えさせないもの（理由は画面に出す）
@@ -143,6 +154,8 @@ DESC = {
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋（既定）",
     "automation.chatwork_rooms_by_category": "依頼の種類（画像/データ作成・登録作業・調査・書類作成 など）ごとに送り先の部屋を分けるとき。「種類=部屋ID」を 、 で区切る。無い種類は既定の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
+    "ask.chatwork_room_id": "「ChatWork で承認依頼する」などのボタンで送る部屋（既定は FUN 商品開発）。送り主は FUN-CREATE BOT",
+    "ask.chatwork_accounts": "TO にする ChatWork の account_id。部屋のメンバーの名前と利用者の名前が合わない人だけ「user_id=account_id」を 、 で区切って入れる",
     "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",
     "ai_scoring_enabled": "AI に案を出させるか（アイデアの採点・商品名。1=使う・0=使わない）。使うには、サーバで claude にログインしてあることと、AI予算の残りが要ります",
 }
@@ -284,7 +297,8 @@ ACTION_LABEL = {"role.grant": "担当区分を付けた", "role.revoke": "担当
                 "flow.effort_point": "工数ポイント係数を決めた", "ideas.import": "アイデアを一括登録", "ideas.import.undo": "一括登録を取り消した"}
 
 
-CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id", "automation.chatwork_rooms_by_category")
+CONNECTION_KEYS = ("ai.usage_endpoint", "automation.app_base_url", "automation.chatwork_room_id", "automation.chatwork_rooms_by_category",
+                   "ask.chatwork_room_id", "ask.chatwork_accounts")
 
 
 def change_log(limit: int = 50, app_role: str = "") -> list[dict]:
