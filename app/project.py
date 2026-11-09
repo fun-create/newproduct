@@ -276,7 +276,7 @@ def listing(args: dict | None = None) -> dict:
 
 
 def detail(project_id: str, user_id: str = "") -> dict | None:
-    from app import followup
+    from app import followup, newprod
     r = store.one("SELECT * FROM project WHERE id=?", (project_id,))
     if r is None:
         return None
@@ -340,6 +340,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         "stage_options": stage_options(p),
         # 発売後の仕事（案件外・ADR-128）と、生産確認の要否・時期（H07）
         "followups": followup.of_project(project_id),
+        "newprod": newprod.of_project(project_id),       # 新商品の売上（週次レポート・ADR-131）
         "plc": followup.plc_setting(p),
         "variant_states": VARIANT_STATES,
         # B節。**最上段に置くのがこの画面の設計そのもの**（画面設計 3-8）

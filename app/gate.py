@@ -312,7 +312,8 @@ def _launched(proj: dict, user_id: str) -> dict:
             c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                       (proj["id"], store.now_s(), user_id, "ステージ", f"{proj.get('stage')} → 発売済（G5 通過）"))
         moved = True
-    from app import followup
+    from app import followup, newprod
+    newprod.on_launched(proj["id"])                 # 新商品の売上の「登録待ち」へ（H06 段階1・ADR-131）
     return {"stage_moved": moved, "followup": followup.ensure(proj["id"], user_id)}
 
 

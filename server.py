@@ -668,6 +668,28 @@ class H(BaseHTTPRequestHandler):
         # 売上実績（2026-10-01 決定）。**見るだけ。**利用者全員（十文字さん「利用者全員」）
         if parts == ["sales", "new-products"] and method == "GET":
             return self.sendj(200, sales_m.new_product_summary())
+        # 新商品の売上（週次レポートから取り込む・H06 段階1・ADR-131）。見るのは全員、取り込み・登録は商品開発部・管理者・社長
+        if parts == ["sales", "weekly-newprod"] and method == "GET":
+            from app import newprod
+            return self.sendj(200, newprod.view())
+        if len(parts) == 3 and parts[:2] == ["sales", "weekly-newprod"] and method == "POST":
+            from app import gate, newprod
+            if not set(gate.roles_of(uid)) & {"devdept", "admin", "president"}:
+                return self.sendj(403, {"error": "取り込み・登録できるのは、商品開発部・管理者・社長の業務ロールの人です"})
+            if parts[2] == "upload":
+                import base64
+                d = self.body(limit=8 * 1024 * 1024)     # 分析 Excel は 0.5MB ほど（base64 で 4/3 倍）
+                try:
+                    raw = base64.b64decode(d.get("data", ""), validate=True)
+                except ValueError:
+                    return self.sendj(400, {"error": "ファイルを読めませんでした（送り直してください）"})
+                r = newprod.ingest(d.get("name", ""), raw, uid)      # ファイルは保存しない
+                return self.sendj(200, r)
+            if parts[2] == "register":
+                d = self.body()
+                r = newprod.register(d.get("project_id", ""), (d.get("labels") or "").split("\n"), uid)
+                return self.sendj(200, r)
+            return self.sendj(404, {"error": "not found"})
         if parts == ["sales"] and method == "GET":
             return self.sendj(200, sales_m.overview(qs.get("site") or "all",
                                                     qs.get("month") or None))

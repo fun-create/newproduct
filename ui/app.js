@@ -1410,6 +1410,13 @@
       box.appendChild(f);
       box.appendChild(el("p", { "class": "np-sub", text: "「か月後」は暦で数えた日以降の最初の営業日（会社の休業日はカレンダーアプリで判定）。60日後とは同じではありません。" }));
     }
+    // 新商品の売上（週次レポート・H06 段階1）
+    var np = d.newprod || {};
+    if (np.state) box.appendChild(el("p", { "class": "np-sub", text: "新商品の売上: " + np.state
+      + (np.labels && np.labels.length ? "（週次レポートの商品ラベル: " + np.labels.join("、") + "）" : "")
+      + (np.period ? "。" + np.source + " の売上 " + yen(np.period.sales) + "・期間目標 " + yen(np.period.target_sales, "—")
+        + (np.period.rate === null ? "" : "・達成率 " + Math.round(np.period.rate * 100) + "%") + "・今年の累計 " + yen(np.cumulative_sales) : "")
+      + (np.state === "登録待ち" ? "。新商品マスタに足したら「売上・原価」の「新商品の売上（週次レポート）」で登録済みにします" : "") }));
     if ((d.followups || []).length) {
       box.appendChild(table(["仕事", "担当区分", "期限", "進捗"], d.followups.map(function (w) {
         return el("tr", null, [el("td", null, [el("a", { href: "#/tasks?when=all&tab=work&focus=work_item-" + w.id, text: w.title })]),
@@ -6100,6 +6107,88 @@
     return n;
   }
 
+  /** 新商品の売上（週次レポートから取り込む・2026-11-09 修正依頼書 H06 段階1・ADR-131）。
+   *  集計の正は週次レポート（社内の Windows・毎週月曜）。分析 Excel の「新商品」シートの集計だけを読む（明細は読まない・ファイルは保存しない） */
+  function weeklyNewprodCard() {
+    var c = el("div", { "class": "np-card" });
+    c.appendChild(el("h2", { text: "新商品の売上（週次レポート）" }));
+    var body = el("div");
+    c.appendChild(body);
+    function load() {
+      body.textContent = "";
+      api("/api/sales/weekly-newprod").then(function (v) {
+        var s = v.snapshot;
+        body.appendChild(el("p", { "class": "np-sub", text: s
+          ? "出どころ: 週次レポート " + s.period_from + "〜" + s.period_to + "（" + s.file_name + "・取り込み " + s.received_at + "）。発売から1年以内の案件を出しています"
+          : "まだ取り込んでいません。月曜の「週次売上分析_….xlsx」を下で選んで取り込みます" }));
+        if (s && s.total) body.appendChild(kpiRow([
+          kpi("期間の売上（新商品の合計）", yen(s.total.sales), "週次レポートの合計行", null, null),
+          kpi("期間の目標", yen(s.total.target_sales), null, null, null),
+          kpi("達成率", s.total.target_sales ? Math.round(s.total.sales / s.total.target_sales * 100) + "%" : "—", null, null, null),
+          kpi("登録待ち", String(v.pending.length), "新商品マスタに足して登録する案件", null, null, { unit: "件", tone: v.pending.length ? "info" : null })]));
+        if (v.rows.length) body.appendChild(table(["商品（案件）", "発売日", "経過", "期間の売上", "期間の目標", "達成率", "今年の累計", "商品ラベル"], v.rows.map(function (r) {
+          var p = r.period || {};
+          return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.internal_name || r.id })]),
+            el("td", { "class": "np-nowrap", text: dash(r.launch_date) }), el("td", { "class": "np-num", text: r.elapsed_days === null ? "—" : r.elapsed_days + "日" }),
+            el("td", { "class": "np-num", text: r.period ? yen(p.sales) : "週次に無い" }), el("td", { "class": "np-num", text: r.period ? yen(p.target_sales, "—") : "—" }),
+            el("td", { "class": "np-num", text: p.rate === null || p.rate === undefined ? "—" : Math.round(p.rate * 100) + "%" }),
+            el("td", { "class": "np-num", text: r.monthly ? yen(r.monthly.cumulative_sales) : "—" }), el("td", { text: r.labels.join("、") })]);
+        })));
+        if (v.pending.length) {
+          body.appendChild(el("h3", { text: "登録待ち（G5 を通した・新商品マスタへの登録を待つ）" }));
+          body.appendChild(el("p", { "class": "np-sub", text: "新商品マスタに1行足したら、その商品ラベルを選んで「登録済みにする」を押します（案件の「新商品売上レポートに計上するよう設定」も完了になります）。キーワードは sales.csv の商品名の実表記と照合して決めます" }));
+          v.pending.forEach(function (p) {
+            var f = el("form", { "class": "np-inline" });
+            var sel = el("select", { multiple: "multiple", size: "3", "aria-label": "週次レポートの商品ラベル" });
+            v.all_labels.forEach(function (l) { var o = el("option", { value: l, text: l }); if (p.candidates.indexOf(l) >= 0) o.setAttribute("selected", "selected"); sel.appendChild(o); });
+            var free = el("input", { size: "24", placeholder: "一覧に無ければ商品ラベルを入れる", "aria-label": "商品ラベル（手入力）" });
+            var st = el("span", { "class": "np-status", role: "status" });
+            var pr = p.proposal || {};
+            f.appendChild(el("p", null, [el("a", { href: "#/projects/" + encodeURIComponent(p.id), text: p.internal_name || p.id }),
+              txt("（発売日 " + dash(p.launch_date) + "）　マスタの1行の案: 商品ラベル「" + pr.label + "」・発売日 " + dash(pr.launch_date)
+                + "・月の目標売上 " + (pr.monthly_target_sales ? yen(pr.monthly_target_sales) : "未設定（年間目標なし）"))]));
+            f.appendChild(sel); f.appendChild(txt(" ")); f.appendChild(free);
+            f.appendChild(el("button", { type: "submit", text: "登録済みにする" })); f.appendChild(txt(" ")); f.appendChild(st);
+            f.addEventListener("submit", function (ev) {
+              ev.preventDefault();
+              var ls = Array.prototype.filter.call(sel.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
+              if (free.value.trim()) ls.push(free.value.trim());
+              st.textContent = "保存中…";
+              post("/api/sales/weekly-newprod/register", { project_id: p.id, labels: ls.join("\n") })
+                .then(function () { load(); }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+            });
+            body.appendChild(f);
+          });
+        }
+        if (v.unlinked_labels.length) body.appendChild(el("p", { "class": "np-sub", text: "案件と結んでいない商品ラベル " + v.unlinked_labels.length
+          + " 件（移行前からの新商品・LOVOT など）: " + v.unlinked_labels.map(function (r) { return r.label; }).join("、") }));
+        // 取り込み
+        var uf = el("form", { "class": "np-inline" });
+        var file = el("input", { type: "file", accept: ".xlsx", "aria-label": "週次売上分析の Excel" });
+        var ust = el("span", { "class": "np-status", role: "status" });
+        uf.appendChild(txt("取り込む: ")); uf.appendChild(file); uf.appendChild(el("button", { type: "submit", text: "取り込む" })); uf.appendChild(txt(" ")); uf.appendChild(ust);
+        uf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var fl = file.files && file.files[0];
+          if (!fl) { ust.textContent = "ファイルを選んでください"; return; }
+          var rd = new FileReader();
+          rd.onload = function () {
+            var b64 = String(rd.result).split(",")[1] || "";
+            ust.textContent = "取り込み中…";
+            post("/api/sales/weekly-newprod/upload", { name: fl.name, data: b64 })
+              .then(function (r) { ust.textContent = r.period_from + "〜" + r.period_to + " を取り込みました（" + r.labels + " 商品）"; load(); })
+              .catch(function (e) { ust.textContent = "できませんでした: " + e.message; });
+          };
+          rd.readAsDataURL(fl);
+        });
+        body.appendChild(uf);
+        body.appendChild(el("p", { "class": "np-sub", text: "「週次売上分析_YYYYMMDD-YYYYMMDD.xlsx」（月曜に ChatWork に届くもの）を選びます。読むのは「新商品」シートの集計だけで、明細とファイルは残しません" }));
+      }).catch(function (e) { body.appendChild(el("p", { "class": "np-err", text: e.message })); });
+    }
+    load();
+    return c;
+  }
+
   function viewSales() {
     loading();
     var q = hashQuery();
@@ -6257,6 +6346,8 @@
             })));
           }).catch(function (e) { nc2.appendChild(el("p", { "class": "np-err", text: e.message })); });
         }
+
+        if (d.site === "all") b.appendChild(weeklyNewprodCard());
 
         // 4段目: 商品別
         var pc = el("div", { "class": "np-card" });
