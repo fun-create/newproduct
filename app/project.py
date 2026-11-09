@@ -341,6 +341,8 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         # 発売後の仕事（案件外・ADR-128）と、生産確認の要否・時期（H07）
         "followups": followup.of_project(project_id),
         "newprod": newprod.of_project(project_id),       # 新商品の売上（週次レポート・ADR-131）
+        "improve_open": store.val("SELECT COUNT(*) FROM improve_request WHERE project_id=? "
+                                  "AND status IN ('受付','検討中','対応中')", (project_id,), 0),   # 改善要望（ADR-132）
         "plc": followup.plc_setting(p),
         "variant_states": VARIANT_STATES,
         # B節。**最上段に置くのがこの画面の設計そのもの**（画面設計 3-8）

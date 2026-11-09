@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/improve": "#/projects" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -155,7 +155,7 @@
   var SUBNAV = [
     [["#/", "ダッシュボード"], ["#/reports", "月次レポート"]],
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
-    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"]],
+    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/improve", "改善要望"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
     [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"]],
     [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]
@@ -1410,6 +1410,8 @@
       box.appendChild(f);
       box.appendChild(el("p", { "class": "np-sub", text: "「か月後」は暦で数えた日以降の最初の営業日（会社の休業日はカレンダーアプリで判定）。60日後とは同じではありません。" }));
     }
+    box.appendChild(el("p", { "class": "np-sub" }, [txt("この商品の改善要望（未完了）: " + (d.improve_open || 0) + " 件　"),
+      el("a", { href: "#/improve?project=" + encodeURIComponent(d.id), text: "改善要望を見る・受け付ける" })]));
     // 新商品の売上（週次レポート・H06 段階1）
     var np = d.newprod || {};
     if (np.state) box.appendChild(el("p", { "class": "np-sub", text: "新商品の売上: " + np.state
@@ -1426,6 +1428,112 @@
       box.appendChild(el("p", { "class": "np-note", text: "まだ作っていません（G5 を通すと作ります）。" }));
     }
     return box;
+  }
+
+  /** 発売後の改善要望（2026-11-09 十文字さん・ADR-132）。受け付け → 優先度・担当部署・担当者・期限 → タスクにする。
+   *  タスクは案件外の仕事。担当者と期限があればカレンダーに出る。**後から何でも直せる。消さない（見送りにする）** */
+  function viewImprove() {
+    loading();
+    var q = hashQuery();
+    var state = q.get("state") || "open", proj = q.get("project") || "";
+    Promise.all([api("/api/improve?state=" + encodeURIComponent(state) + (proj ? "&project=" + encodeURIComponent(proj) : "")),
+      metaP(), usersP(), api("/api/projects?stage=_all")]).then(function (all) {
+      var d = all[0], meta = all[1], users = all[2], projects = all[3].rows || [];
+      var b = clear();
+      setTitle("改善要望");
+      b.appendChild(el("p", { "class": "np-note", text: "発売した商品の改善要望を受け付けて、優先度・担当部署・担当者・期限を決め、タスクにします。"
+        + "タスクは「案件外の仕事」に入り、担当者と期限が入っていればカレンダーアプリのタスクに出ます。どの項目も後から直せます（消さずに「見送り」にします）。" }));
+      var fl = el("div", { "class": "np-filters" });
+      [["open", "未完了"]].concat(d.statuses.map(function (s) { return [s, s]; })).concat([["all", "すべて"]]).forEach(function (x) {
+        var n = x[0] === "open" ? d.counts["受付"] + d.counts["検討中"] + d.counts["対応中"] : x[0] === "all" ? null : d.counts[x[0]];
+        fl.appendChild(el("a", { href: "#/improve?state=" + x[0] + (proj ? "&project=" + encodeURIComponent(proj) : ""),
+          text: x[1] + (n === null || n === undefined ? "" : " " + n), "aria-current": x[0] === state ? "true" : null }));
+      });
+      if (proj) fl.appendChild(el("a", { href: "#/improve?state=" + state, text: "商品の絞り込みを外す" }));
+      b.appendChild(fl);
+
+      function sel(name, opts, cur, empty) {
+        var s = el("select", { name: name, "aria-label": name });
+        if (empty !== undefined) s.appendChild(el("option", { value: "", text: empty }));
+        opts.forEach(function (o) { var op = el("option", { value: o[0], text: o[1] }); if (o[0] === (cur || "")) op.setAttribute("selected", "selected"); s.appendChild(op); });
+        return s;
+      }
+      function form(r, onSave) {
+        r = r || {};
+        var f = el("form", { "class": "np-inline np-improve-form" });
+        var ff = {
+          title: el("input", { name: "title", size: "40", value: r.title || "", placeholder: "何を直すか（必須）", "aria-label": "要望" }),
+          detail: el("textarea", { name: "detail", rows: "2", cols: "60", placeholder: "くわしく・決めたこと", "aria-label": "くわしく" }),
+          source: el("input", { name: "source", size: "14", value: r.source || "", placeholder: "例 外部署から", "aria-label": "受付元" }),
+          received_on: el("input", { name: "received_on", type: "date", value: r.received_on || "", "aria-label": "受付日" }),
+          project_id: sel("project_id", projects.map(function (p) { return [p.id, p.name || p.id]; }), r.project_id || proj, "（商品なし）"),
+          priority: sel("priority", d.priorities.map(function (x) { return [x, x]; }), r.priority || "未設定"),
+          status: sel("status", d.statuses.map(function (x) { return [x, x]; }), r.status || "受付"),
+          role: sel("role", (meta.roles || []).map(function (x) { return [x.code, x.label]; }), r.role, "（担当部署なし）"),
+          assignee: sel("assignee", users.map(function (u) { return [u.user_id, u.name || u.user_id]; }), r.assignee, "（担当者なし）"),
+          due_on: el("input", { name: "due_on", type: "date", value: r.due_on || "", "aria-label": "期限" })
+        };
+        ff.detail.value = r.detail || "";
+        f.appendChild(el("p", null, [ff.title]));
+        f.appendChild(el("p", null, [ff.detail]));
+        f.appendChild(el("p", null, [txt("商品 "), ff.project_id, txt(" 受付元 "), ff.source, txt(" 受付日 "), ff.received_on]));
+        f.appendChild(el("p", null, [txt("優先度 "), ff.priority, txt(" 状態 "), ff.status, txt(" 担当部署 "), ff.role, txt(" 担当者 "), ff.assignee, txt(" 期限 "), ff.due_on]));
+        var st = el("span", { "class": "np-status", role: "status" });
+        f.appendChild(el("p", null, [el("button", { type: "submit", text: r.id ? "保存" : "受け付ける" }), txt(" "), st]));
+        f.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var o = {}; Object.keys(ff).forEach(function (k) { o[k] = ff[k].value; });
+          st.textContent = "保存中…";
+          onSave(o).then(function () { go(); }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+        });
+        return f;
+      }
+
+      var add = el("details", { "class": "np-fold" });
+      add.appendChild(el("summary", { text: "改善要望を受け付ける" }));
+      add.appendChild(form(null, function (o) { return post("/api/improve", o); }));
+      if (!d.rows.length) add.setAttribute("open", "open");
+      b.appendChild(add);
+
+      if (!d.rows.length) {
+        b.appendChild(el("p", { "class": "np-note", text: "この条件の改善要望はありません。" }));
+        return;
+      }
+      var tone = { "高": "alert", "中": "info" };
+      var rows = [];
+      d.rows.forEach(function (r) {
+        var late = r.due_on && r.due_on < d.today && ["受付", "検討中", "対応中"].indexOf(r.status) >= 0;
+        var editRow = el("tr", { hidden: "hidden" }, [el("td", { colspan: "8" }, [form(r, function (o) { return post("/api/improve/" + r.id, o); })])]);
+        var actions = el("td", { "class": "np-nowrap" });
+        var eb = el("button", { type: "button", text: "直す" });
+        eb.addEventListener("click", function () { if (editRow.hasAttribute("hidden")) editRow.removeAttribute("hidden"); else editRow.setAttribute("hidden", "hidden"); });
+        actions.appendChild(eb);
+        if (r.work_item_id) {
+          actions.appendChild(txt(" "));
+          actions.appendChild(el("a", { href: "#/tasks?when=all&tab=work&focus=work_item-" + r.work_item_id, text: "タスク（" + (r.task_status || "—") + "）" }));
+        } else if (["受付", "検討中", "対応中"].indexOf(r.status) >= 0) {
+          var tb = el("button", { type: "button", text: "タスクにする" });
+          var ts = el("span", { "class": "np-status", role: "status" });
+          tb.addEventListener("click", function () {
+            ts.textContent = "作成中…";
+            post("/api/improve/" + r.id + "/task", {}).then(function (x) { ts.textContent = x.calendar; setTimeout(go, 1200); })
+              .catch(function (e) { ts.textContent = "できませんでした: " + e.message; });
+          });
+          actions.appendChild(txt(" ")); actions.appendChild(tb); actions.appendChild(ts);
+        }
+        rows.push(el("tr", { "data-tone": late ? "alert" : null }, [
+          el("td", null, [tag(r.priority, tone[r.priority] || null)]),
+          el("td", { "class": "np-what" }, [txt(r.title), r.detail ? el("div", { "class": "np-sub", text: r.detail }) : null]),
+          el("td", null, [r.project_id ? el("a", { href: "#/projects/" + encodeURIComponent(r.project_id), text: r.project_name || r.project_id }) : txt("—")]),
+          el("td", { "class": "np-sub", text: (r.source || "—") + "・" + r.received_on }),
+          el("td", { text: (r.role_label || "—") + (r.assignee ? "／" + r.assignee : "") }),
+          el("td", { "class": "np-nowrap" }, [txt(dash(r.due_on)), late ? overdueFlag(r.due_on, d.today) : null]),
+          el("td", { text: r.status }),
+          actions]));
+        rows.push(editRow);
+      });
+      b.appendChild(table(["優先度", "要望", "商品", "受付元・受付日", "担当部署／担当者", "期限", "状態", ""], rows));
+    }).catch(fail);
   }
 
   /** 案件画面の節をたたむ（全体の見直し・2026-10-06 十文字さん選択）。縦に長すぎて目当ての節が探せないため。
@@ -7198,7 +7306,7 @@
   var HELP_SEC = {
     "#/routines": "タスク", "#/tasks/assign": "タスク", "#/trends": "トレンド（FCTR）", "#/ai-score": "アイデア",
     "#/calibration": "採点の校正", "#/devices": "新機種調査", "#/opportunities": "年間プラン", "#/simulate": "年間プラン",
-    "#/gates": "案件", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
+    "#/gates": "案件", "#/improve": "改善要望", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
     "#/settings/templates": "標準タスクのひな形を直すとき", "#/settings/ideas-import": "アイデアをまとめて登録するとき"
   };
   function setHelpLink(path, entry) {
@@ -7295,6 +7403,7 @@
     if (path === "#/routines") return viewRoutines();
     if (path === "#/tasks") return viewTasks();
     if (path === "#/gates") { return viewGates(); }
+    if (path === "#/improve") return viewImprove();
     if (path === "#/sales") return viewSales();
     if (path === "#/cost") return viewCost();
     if (path === "#/abc") return viewAbc();

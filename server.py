@@ -106,7 +106,7 @@ CALFC_CALLBACK_TOKEN_PATH = CONFIG_DIR / "calfc_callback_token"
 def _touches_tasks(path: str) -> bool:
     """タスクの期限・担当・状態が変わり得る書き込み（カレンダーへ送り直す合図）。"""
     p = path[len("/api/"):] if path.startswith("/api/") else path
-    return (p.startswith("tasks/") or p.startswith("work-items") or p == "projects"
+    return (p.startswith("tasks/") or p.startswith("work-items") or p == "projects" or p.startswith("improve")
             or (p.startswith("projects/") and any(x in p for x in ("/schedule", "/reschedule", "/shift", "/launch-date", "/gates", "/review", "/tasks", "/stage"))))
 
 # Caddy を通ると必ず付くヘッダ。1つでもあれば「外から来た」とみなす
@@ -1141,6 +1141,20 @@ class H(BaseHTTPRequestHandler):
             r = task_m.set_assignee(parts[1], int(parts[2]), d.get("assignee", ""), uid)
             store.audit(uid, "task.assignee", f"{parts[1]}:{parts[2]}", r, ip)
             return self.sendj(200, r)
+        # 発売後の改善要望（ADR-132）。受け付け・直すのは利用者全員。タスクにすると案件外の仕事になり、担当者と期限があればカレンダーへ
+        if parts and parts[0] == "improve":
+            from app import improve
+            if parts == ["improve"] and method == "GET":
+                return self.sendj(200, improve.listing(qs.get("state") or "open", qs.get("project") or ""))
+            if parts == ["improve"] and method == "POST":
+                d = self.body()
+                return self.sendj(200, improve.create(d, uid))
+            if len(parts) == 2 and parts[1].isdigit() and method == "POST":
+                d = self.body()
+                return self.sendj(200, improve.update(int(parts[1]), d, uid))
+            if len(parts) == 3 and parts[1].isdigit() and parts[2] == "task" and method == "POST":
+                return self.sendj(200, improve.to_task(int(parts[1]), uid))
+            return self.sendj(404, {"error": "not found"})
         # 繰り返しの仕事（ADR-108）
         if parts == ["routines"] and method == "GET":
             from app import routine
