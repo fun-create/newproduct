@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
-                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/improve": "#/projects" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -84,13 +84,15 @@
     return new URLSearchParams(i < 0 ? "" : location.hash.slice(i + 1));
   }
 
+  // 設定は帯ではなく右端に置く（2026-11-09。帯は7つまで）。現在地とタイトルのために、ここでは帯の仲間として数える
+  var NAV_ALL = NAV.concat([{ view: "settings", hash: "#/settings", label: "設定" }]);
   function match(path) {
     var p = ALIAS[path] || path;
-    var best = NAV[0], bestLen = -1;
-    for (var i = 0; i < NAV.length; i++) {
-      var h = NAV[i].hash;
+    var best = NAV_ALL[0], bestLen = -1;
+    for (var i = 0; i < NAV_ALL.length; i++) {
+      var h = NAV_ALL[i].hash;
       var hit = (p === h) || (h !== "#/" && p.indexOf(h + "/") === 0);
-      if (hit && h.length > bestLen) { best = NAV[i]; bestLen = h.length; }
+      if (hit && h.length > bestLen) { best = NAV_ALL[i]; bestLen = h.length; }
     }
     return best;
   }
@@ -101,6 +103,8 @@
       if (a.getAttribute("data-view") === view) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    var sg = document.getElementById("np-settings");
+    if (sg) { if (view === "settings") sg.setAttribute("aria-current", "page"); else sg.removeAttribute("aria-current"); }
   }
 
   function api(path) {
@@ -155,7 +159,7 @@
   var SUBNAV = [
     [["#/", "ダッシュボード"], ["#/reports", "月次レポート"]],
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
-    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/improve", "改善要望"]],
+    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
     [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"]],
     [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]

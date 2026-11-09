@@ -508,3 +508,6 @@ details.np-analysis > summary { cursor: pointer; font-weight: 700; }
 .np-dates .np-status, .np-dates .np-err { display: block; white-space: normal; max-width: 16em; font-size: .82rem; }
 /* まとめてずらす（追補依頼書 8-3） */
 .np-shift tr[data-tone="muted"] td { color: var(--fca-muted); }
+
+/* 設定は帯ではなく右端（2026-11-09）。開いているときは帯と同じく印を付ける（色だけにしない: 下線も） */
+#np-settings[aria-current="page"] { color: var(--fca-bar-ink); background: rgba(255,255,255,.12); text-decoration: underline; text-underline-offset: 3px; }
