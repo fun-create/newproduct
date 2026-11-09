@@ -140,6 +140,24 @@ class Ask(unittest.TestCase):
         self.assertIn("催促（2回目）", c["text"])
         self.assertEqual(c["last"][0]["sent_by"], "石原 千恵子")
 
+    def test_edited_body_is_sent_with_fixed_to(self):
+        c = self.m.compose("gate", self.pid, "G3", "承認", "", "chieko", fetch=self.fetch)
+        b = c["body"].replace("承認のお願い", "承認のお願い（急ぎ）") + "\n[toall][To:999]だれでも[rp aid=1 to=2-3]"
+        self.m.send("gate", self.pid, "G3", "承認", "", "chieko", body=b, sender=self.sender, fetch=self.fetch)
+        sent = self.sent[0][1]
+        self.assertTrue(sent.startswith(c["to_line"] + "\n"))           # TO は compose が決めた相手だけ
+        self.assertIn("承認のお願い（急ぎ）", sent)
+        for tag in ("[toall]", "[To:999]", "[rp "):
+            self.assertNotIn(tag, sent)
+        self.assertEqual(sent.count("[To:"), c["to_line"].count("[To:"))
+        self.assertIn("[info]", sent)                                    # 書式のタグは効かせる
+
+    def test_edited_body_keeps_requester_and_rejects_empty(self):
+        self.m.send("gate", self.pid, "G3", "承認", "", "chieko", body="見てください", sender=self.sender, fetch=self.fetch)
+        self.assertIn("依頼した人: 石原 千恵子", self.sent[0][1])
+        with self.assertRaises(ValueError):
+            self.m.send("gate", self.pid, "G3", "確認", "", "chieko", body="  ", sender=self.sender, fetch=self.fetch)
+
     def test_without_token_says_why(self):
         os.environ["NEWPRODUCT_CHATWORK_ENV"] = self.tok + ".none"
         c = self.m.compose("gate", self.pid, "G3", "承認", "", "chieko", fetch=self.fetch)

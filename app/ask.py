@@ -251,6 +251,7 @@ def compose(kind: str, target: str, gate: str, purpose: str, note: str, user_id:
         lines.append("開く: " + _base() + s["url"])
     lines.append("[/info]")
     return {"ready": not blockers, "blockers": blockers, "room": room, "to": to, "text": "\n".join(lines),
+            "to_line": lines[0], "body": "\n".join(lines[1:]), "requester": names.get(user_id, user_id),
             "purpose": purpose, "default_purpose": s["default_purpose"], "purposes": PURPOSES,
             "last": [{"purpose": r["purpose"], "sent_at": r["sent_at"],
                       "sent_by": names.get(r["sent_by"], r["sent_by"]),
@@ -258,11 +259,36 @@ def compose(kind: str, target: str, gate: str, purpose: str, note: str, user_id:
             "note": "ChatWork は取り消せません。上の文面と TO の相手を確かめてから送ってください（送り主は FUN-CREATE BOT）"}
 
 
-def send(kind: str, target: str, gate: str, purpose: str, note: str, user_id: str, *, sender=None, fetch=None) -> dict:
-    """人が押したときだけ呼ぶ"""
+_DANGER = re.compile(r"\[(?=\s*(toall|to:|rp[\s\]]|picon|piconname|download|preview|task|qt))", re.I)
+BODY_MAX = 6000
+
+
+def clean_body(body: str) -> str:
+    """画面で直した本文（2026-11-09 十文字さん「送るメッセージを画面上で修正できるように」）。
+    [info]・[title]・[hr] はそのまま効かせる。**宛先を変えるタグ（[toall]・[To:]・[rp]）と添付・引用のタグは効かせない**。
+    TO は本文の外（compose が決めた相手）でだけ付ける"""
+    b = (body or "").replace("\r\n", "\n").strip()
+    if not b:
+        raise ValueError("本文が空です")
+    if len(b) > BODY_MAX:
+        raise ValueError(f"本文が長すぎます（{len(b)}字・{BODY_MAX}字まで）")
+    return _DANGER.sub("［", b)
+
+
+def send(kind: str, target: str, gate: str, purpose: str, note: str, user_id: str, *, body: str | None = None,
+         sender=None, fetch=None) -> dict:
+    """人が押したときだけ呼ぶ。`body` があれば、画面で直した本文を送る（TO の行はこちらで付ける）"""
     c = compose(kind, target, gate, purpose, note, user_id, fetch=fetch)
     if not c["ready"]:
         raise ValueError("送れません: " + " ／ ".join(x for x in c["blockers"] if x))
+    edited = False
+    if body is not None:
+        b = clean_body(body)
+        if b != c["body"]:
+            edited = True
+            if c["requester"] not in b:                 # BOT から出るので、誰が頼んだかは消させない
+                b += f"\n（依頼した人: {c['requester']}）"
+            c["text"] = c["to_line"] + "\n" + b
     last = store.one("SELECT sent_at FROM ask_log WHERE kind=? AND target=? AND COALESCE(gate,'')=? AND purpose=? "
                      "AND sent_by=? ORDER BY id DESC LIMIT 1", (kind, str(target), gate or "", purpose, user_id))
     if last:
@@ -281,5 +307,6 @@ def send(kind: str, target: str, gate: str, purpose: str, note: str, user_id: st
                           c["room"], str(res.get("message_id") or ""), (note or "")[:1000], user_id,
                           store.now_s())).lastrowid
     store.audit(user_id, "ask.send", f"{kind}:{target}{(':' + gate) if gate else ''}",
-                {"purpose": purpose, "to": [x["user_id"] for x in c["to"]], "message_id": res.get("message_id"), "log": aid})
+                {"purpose": purpose, "to": [x["user_id"] for x in c["to"]], "message_id": res.get("message_id"), "log": aid,
+                 "edited": edited})
     return {"ok": True, "message_id": res.get("message_id"), "to": [x["name"] for x in c["to"]], "room": c["room"]}

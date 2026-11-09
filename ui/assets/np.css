@@ -565,6 +565,8 @@ dialog.np-ask::backdrop { background: rgba(0,0,0,.4); }
 dialog.np-ask .np-edit-area { margin: 0; overflow: auto; max-height: calc(100vh - 40px); }
 dialog.np-ask label { display: block; margin: .4rem 0 .2rem; font-weight: 600; }
 dialog.np-ask textarea { width: 100%; box-sizing: border-box; min-height: 3.2em; font: inherit; }
+dialog.np-ask textarea.np-ask-text { min-height: 12em; resize: vertical; }
+.np-ask-to { margin: .2rem 0 0; padding: .3rem .8rem; background: var(--fca-bg); border: 1px dashed var(--fca-line); border-radius: 6px; font-size: .9rem; }
 .np-ask-text { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: .9rem; background: var(--fca-bg);
   border: 1px solid var(--fca-line); border-radius: 6px; padding: .6rem .8rem; max-height: 38vh; overflow: auto; margin: .2rem 0 .5rem; }
 button.np-btn-cw { white-space: nowrap; }

@@ -1177,7 +1177,7 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(200, ask.compose(*args))
             if parts == ["ask", "send"] and method == "POST":
                 try:
-                    return self.sendj(200, ask.send(*args))
+                    return self.sendj(200, ask.send(*args, body=src.get("body")))
                 except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
                     return self.sendj(502, {"error": f"送れませんでした: {e}"})
             return self.sendj(404, {"error": "not found"})

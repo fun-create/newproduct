@@ -3016,7 +3016,12 @@
     opts.forEach(function (x) { var o = el("option", { value: x, text: word[x] }); if (x === purpose) o.setAttribute("selected", "selected"); sel.appendChild(o); });
     var note = el("textarea", { rows: "2", placeholder: "ひとこと（なくても送れます）", "aria-label": "ひとこと" });
     var toP = el("p");
-    var pre = el("pre", { "class": "np-ask-text", "aria-label": "送る文面" });
+    // 文面は画面で直せる（2026-11-09 十文字さん）。TO の行だけは直せない（宛先はアプリが決める）
+    var toLine = el("p", { "class": "np-ask-to" });
+    var pre = el("textarea", { "class": "np-ask-text", rows: "12", "aria-label": "送る文面（直せます）" });
+    var edited = false, ready = false;
+    var redo = el("button", { type: "button", "class": "np-btn-sm", text: "文面を作り直す（直したところは消えます）", hidden: "hidden" });
+    function grow() { pre.style.height = "auto"; pre.style.height = Math.min(pre.scrollHeight + 4, window.innerHeight * 0.45) + "px"; }
     var blk = el("div");
     var lastP = el("p", { "class": "np-sub" });
     var st = el("span", { "class": "np-status", role: "status" });
@@ -3025,7 +3030,8 @@
     area.appendChild(el("label", { text: "何を頼むか" })); area.appendChild(sel);
     area.appendChild(el("label", { text: "ひとこと" })); area.appendChild(note);
     area.appendChild(toP);
-    area.appendChild(el("label", { text: "送る文面（このまま送ります）" })); area.appendChild(pre);
+    area.appendChild(el("label", { text: "送る文面（直せます。直した文面をそのまま送ります）" })); area.appendChild(toLine); area.appendChild(pre);
+    area.appendChild(el("p", { "class": "np-sub" }, [txt("先頭の TO の行は直せません。[toall]・[To:]・[rp] は効かないように変えて送ります。 "), redo]));
     area.appendChild(blk); area.appendChild(lastP);
     area.appendChild(el("p", { "class": "np-note", text: "ChatWork は取り消せません。文面と TO の相手を確かめてから送ってください。送り主は FUN-CREATE BOT で、本文に「依頼した人」としてあなたの名前が入ります。" }));
     area.appendChild(el("p", { "class": "np-btnrow" }, [send, txt(" "), close, txt(" "), st]));
@@ -3044,22 +3050,29 @@
         }
         first = false;
         toP.textContent = "TO: " + (c.to.length ? c.to.map(function (x) { return x.name + (x.account_id ? "" : "（宛先不明）"); }).join("・") : "なし");
-        pre.textContent = c.text;
+        toLine.textContent = c.to_line;
+        if (!edited) { pre.value = c.body; grow(); }
+        else redo.removeAttribute("hidden");
         while (blk.firstChild) blk.removeChild(blk.firstChild);
         c.blockers.forEach(function (b) { blk.appendChild(el("p", { "class": "np-warn", text: "送れません: " + b })); });
         lastP.textContent = c.last.length ? "前に送ったもの: " + c.last.map(function (x) {
           return x.sent_at.slice(0, 16) + " " + x.purpose + "（" + x.sent_by + " → " + x.to.join("・") + "）"; }).join(" ／ ") : "まだ送っていません。";
-        send.disabled = !c.ready;
-      }).catch(function (e) { if (my === seq) pre.textContent = "文面を作れませんでした: " + e.message; });
+        ready = c.ready;
+        send.disabled = !(ready && pre.value.trim());
+      }).catch(function (e) { if (my === seq) { toLine.textContent = "文面を作れませんでした: " + e.message; send.disabled = true; } });
     }
     var tm = null;
+    pre.addEventListener("input", function () { edited = true; grow(); send.disabled = !(ready && pre.value.trim()); });
+    redo.addEventListener("click", function () { edited = false; redo.setAttribute("hidden", "hidden"); refresh(); });
     sel.addEventListener("change", refresh);
     note.addEventListener("input", function () { clearTimeout(tm); tm = setTimeout(refresh, 400); });
     close.addEventListener("click", function () { dlg.close(); });
     dlg.addEventListener("close", function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
     send.addEventListener("click", function () {
       send.disabled = true; st.textContent = "送っています…";
-      post("/api/ask/send", { kind: kind, id: id, gate: gate, purpose: sel.value, note: note.value })
+      var o = { kind: kind, id: id, gate: gate, purpose: sel.value, note: note.value };
+      if (edited) o.body = pre.value;
+      post("/api/ask/send", o)
         .then(function (r) { st.textContent = "送りました（TO: " + r.to.join("・") + "）"; close.textContent = "閉じる"; setTimeout(function () { dlg.close(); }, 1800); })
         .catch(function (e) { st.textContent = e.message; send.disabled = false; });
     });
