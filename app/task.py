@@ -476,16 +476,18 @@ def _launch_outlook() -> dict:
                        "converted_n": m["converted_n"] if m else 0, "slots": m["n"] if m else 0,
                        "effort": m["effort"] if m else None})
     # 目標の本数は、その版を判定する値にそろえる（承認済みなら承認時の値・ADR-069）。年間プランの画面と食い違わないように
-    tgt = None
+    tgt, basis = None, "今の設定"
     if v is not None:
         b = _plan._basis(v["id"])
         if b.get("snapshot") and b["snapshot"].get("plan.monthly_launch_slots") not in (None, ""):
-            tgt = float(b["snapshot"]["plan.monthly_launch_slots"])
+            tgt, basis = float(b["snapshot"]["plan.monthly_launch_slots"]), "承認時点"
+    cur = _plan._num("plan.monthly_launch_slots")
     if tgt is None:
-        tgt = _plan._num("plan.monthly_launch_slots")
+        tgt = cur
+    # 承認時点の値と今の設定が違うときは両方を出す（2026-11-09 修正依頼書 R03。どちらかを誤りとは決めない）
     dated = store.val("SELECT COUNT(*) FROM project WHERE launch_date IS NOT NULL AND stage NOT IN ('中止')", (), 0)
     undated = store.val("SELECT COUNT(*) FROM project WHERE launch_date IS NULL AND stage NOT IN ('中止')", (), 0)
-    return {"fy": fy, "months": months, "target_per_month": tgt,
+    return {"fy": fy, "months": months, "target_per_month": tgt, "target_basis": basis, "target_current": cur,
             "version": v["label"] if v else None, "state": v["state"] if v else None,
             "projects_dated": dated, "projects_undated": undated,
             "concept_stock": _idea.concept_stock(), "today_month": store.today().strftime("%Y-%m"),

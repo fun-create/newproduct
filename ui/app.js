@@ -764,10 +764,14 @@
         return { x: m.month, y: m.launch_n, partial: m.month === lo.today_month,
           note: m.slots === 0 ? "枠なし" : (m.other_n ? "他" + m.other_n : null) };
       });
+      // 目標の出どころ（R03）: 承認済みの版は承認時点の値で判定する。今の設定と違えば両方を書く
+      var tgtTxt = lo.target_basis === "承認時点" && lo.target_current !== null && lo.target_current !== lo.target_per_month
+        ? "承認時点の目標は月 " + lo.target_per_month + " 本（今の設定は月 " + lo.target_current + " 本。新しい版を承認すると今の設定で判定します）"
+        : "目標は月 " + lo.target_per_month + " 本（" + (lo.target_basis || "今の設定") + "）";
       oc.appendChild(chartCard("月ごとの発売本数（年間プランの枠・" + lo.fy + "年度）", columns(lm, {
-        unit: "本", title: "月ごとの発売本数", desc: "年間プランの枠を月ごとに数えた発売本数。目標は月 " + lo.target_per_month + " 本",
+        unit: "本", title: "月ごとの発売本数", desc: "年間プランの枠を月ごとに数えた発売本数。" + tgtTxt,
         target: lo.target_per_month ? { y: lo.target_per_month, label: "目標 " + lo.target_per_month + " 本" } : null }), {
-        source: lo.source, note: "白抜きの棒は今月。棒の下の「他n」はページリニューアル等の本数に数えない枠、「枠なし」は枠が無い月です。",
+        source: lo.source, note: tgtTxt + "。白抜きの棒は今月。棒の下の「他n」はページリニューアル等の本数に数えない枠、「枠なし」は枠が無い月です。",
         headers: ["月", "発売本数", "数えない枠", "案件化"], rows: (lo.months || []).map(function (m) {
           return [m.month, m.launch_n + " 本", m.other_n + " 本", m.converted_n + " / " + m.slots]; }) }));
       b.appendChild(oc);

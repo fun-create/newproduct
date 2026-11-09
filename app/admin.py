@@ -133,7 +133,7 @@ DESC = {
     "concept_stock_floor": "コンセプト在庫月数がこれを下回ると、ダッシュボードに「不足」と出す",
     "plan.effort_min": "年間プランの1か月の工数ポイント合計の下限（下回ると警告）",
     "plan.effort_max": "年間プランの1か月の工数ポイント合計の上限（超えると警告）",
-    "plan.monthly_launch_slots": "1か月に置く発売枠の数（月3商品のルール）",
+    "plan.monthly_launch_slots": "1か月に置く発売枠の数（月の発売目標）。承認済みの版は承認した時点の値で判定する",
     "plan.ratio_original_to_uchiwa": "年間プランの「うちわ以外：うちわ」の枠の比率",
     "plan.ratio_tolerance_slots": "比率のずれを何枠まで警告しないか",
     "plan.task_setup_lead_months": "枠を案件にしたとき、発売の何か月前をタスクを組み終える期限にするか",
