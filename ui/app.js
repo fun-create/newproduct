@@ -1508,7 +1508,7 @@
       }
 
       // 受け付けの入口は目立つボタン（2026-11-09 十文字さん）。押すと下に欄が開く
-      var addBox = el("div", { "class": "np-card", hidden: "hidden" });
+      var addBox = el("div", { "class": "np-card np-edit-area", hidden: "hidden" });
       var addBtn = el("button", { type: "button", "class": "np-btn np-btn-primary np-btn-lg", text: "＋ 改善要望を受け付ける" });
       function setAdd(open) {
         if (open) { addBox.removeAttribute("hidden"); addBtn.textContent = "受付の欄を畳む"; var t = addBox.querySelector("textarea"); if (t) t.focus(); }
@@ -1533,12 +1533,15 @@
         function setEdit(open) {
           if (open) {
             editRow.removeAttribute("hidden"); eb.textContent = "畳む";
+            dataRow.setAttribute("data-editing", "1");
             // 隠れているあいだは高さを測れないので、開いたときに合わせ直す
             var fm = editRow.querySelector("form"); if (fm) fm.dispatchEvent(new Event("np-shown"));
-          } else { editRow.setAttribute("hidden", "hidden"); eb.textContent = "直す"; }
+          } else { editRow.setAttribute("hidden", "hidden"); eb.textContent = "直す"; dataRow.removeAttribute("data-editing"); }
         }
-        var editRow = el("tr", { hidden: "hidden" }, [el("td", { colspan: "8" },
-          [form(r, function (o) { return post("/api/improve/" + r.id, o); }, function () { setEdit(false); })])]);
+        // 入力する範囲が分かるように枠で囲み、見出しを付ける（2026-11-09 十文字さん）
+        var editRow = el("tr", { hidden: "hidden", "class": "np-edit-row" }, [el("td", { colspan: "8" }, [el("div", { "class": "np-edit-area" }, [
+          el("h3", { text: "この要望を直す" }),
+          form(r, function (o) { return post("/api/improve/" + r.id, o); }, function () { setEdit(false); })])])]);
         var actions = el("td", { "class": "np-nowrap" });
         eb.addEventListener("click", function () { setEdit(editRow.hasAttribute("hidden")); });
         actions.appendChild(eb);
@@ -1555,7 +1558,7 @@
           });
           actions.appendChild(txt(" ")); actions.appendChild(tb); actions.appendChild(ts);
         }
-        rows.push(el("tr", { "data-tone": late ? "alert" : null }, [
+        var dataRow = el("tr", { "data-tone": late ? "alert" : null }, [
           el("td", null, [tag(r.priority, tone[r.priority] || null)]),
           el("td", { "class": "np-what" }, [txt(r.title), r.detail ? el("div", { "class": "np-sub", text: r.detail }) : null]),
           el("td", null, [r.project_id ? el("a", { href: "#/projects/" + encodeURIComponent(r.project_id), text: r.project_name || r.project_id }) : txt("—")]),
@@ -1563,7 +1566,8 @@
           el("td", { text: (r.role_label || "—") + (r.assignee ? "／" + r.assignee : "") }),
           el("td", { "class": "np-nowrap" }, [txt(dash(r.due_on)), late ? overdueFlag(r.due_on, d.today) : null]),
           el("td", { text: r.status }),
-          actions]));
+          actions]);
+        rows.push(dataRow);
         rows.push(editRow);
       });
       b.appendChild(table(["優先度", "要望", "商品", "受付元・受付日", "担当部署／担当者", "期限", "状態", ""], rows));

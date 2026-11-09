@@ -522,3 +522,10 @@ details.np-analysis > summary { cursor: pointer; font-weight: 700; }
 a.np-btn-primary, button.np-btn-primary { background: var(--fca-navy); color: var(--fca-card); border-color: var(--fca-navy); }
 a.np-btn-primary:hover, button.np-btn-primary:hover { background: var(--fca-navy); color: var(--fca-card); text-decoration: underline; filter: brightness(1.12); }
 .np-btn-lg { font-size: 1rem; padding: .55rem 1.3rem; }
+
+/* 入力する範囲（改善要望の受け付け・直す・2026-11-09 十文字さん）。色だけにしない: 太い枠・左の帯・地の色・見出しで区切る */
+.np-edit-area, #view > .np-card.np-edit-area { border: 2px solid var(--fca-navy); border-left: 8px solid var(--fca-accent); border-radius: 8px;
+  background: var(--fca-card); padding: .8rem 1rem; margin: .4rem 0 .8rem; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.np-edit-area > h2, .np-edit-area > h3 { margin: 0 0 .5rem; font-size: 1rem; }
+tr.np-edit-row > td { padding: .2rem .4rem .6rem; border-top: none; }
+tr[data-editing="1"] > td { background: var(--fca-bg); font-weight: 600; }
