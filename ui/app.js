@@ -1462,7 +1462,7 @@
         opts.forEach(function (o) { var op = el("option", { value: o[0], text: o[1] }); if (o[0] === (cur || "")) op.setAttribute("selected", "selected"); s.appendChild(op); });
         return s;
       }
-      function form(r, onSave) {
+      function form(r, onSave, onFold) {
         r = r || {};
         var f = el("form", { "class": "np-improve-form" });       // 縦に並べる（横並びだと入力欄が細くなる）
         var ff = {
@@ -1489,10 +1489,15 @@
         });
         f.appendChild(el("p", null, [ff.title]));
         f.appendChild(el("p", null, [ff.detail]));
-        f.appendChild(el("p", null, [txt("商品 "), ff.project_id, txt(" 受付元 "), ff.source, txt(" 受付日 "), ff.received_on]));
+        // 受付元は入力した人が自動で入る（新しく受け付けるときは欄を出さない）。直すときは書き換えられる
+        f.appendChild(el("p", null, r.id ? [txt("商品 "), ff.project_id, txt(" 受付元 "), ff.source, txt(" 受付日 "), ff.received_on]
+          : [txt("商品 "), ff.project_id, txt(" 受付日 "), ff.received_on, el("span", { "class": "np-sub", text: "受付元には、あなたの名前が自動で入ります" })]));
+        if (!r.id) delete ff.source;
         f.appendChild(el("p", null, [txt("優先度 "), ff.priority, txt(" 状態 "), ff.status, txt(" 担当部署 "), ff.role, txt(" 担当者 "), ff.assignee, txt(" 期限 "), ff.due_on]));
         var st = el("span", { "class": "np-status", role: "status" });
-        f.appendChild(el("p", null, [el("button", { type: "submit", text: r.id ? "保存" : "受け付ける" }), txt(" "), st]));
+        var foldB = onFold ? el("button", { type: "button", "class": "np-btn np-btn-sm", text: "畳む" }) : null;
+        if (foldB) foldB.addEventListener("click", onFold);
+        f.appendChild(el("p", null, [el("button", { type: "submit", "class": "np-btn np-btn-primary", text: r.id ? "保存" : "受け付ける" }), foldB, st]));
         f.addEventListener("submit", function (ev) {
           ev.preventDefault();
           var o = {}; Object.keys(ff).forEach(function (k) { o[k] = ff[k].value; });
@@ -1502,11 +1507,19 @@
         return f;
       }
 
-      var add = el("details", { "class": "np-fold" });
-      add.appendChild(el("summary", { text: "改善要望を受け付ける" }));
-      add.appendChild(form(null, function (o) { return post("/api/improve", o); }));
-      if (!d.rows.length) add.setAttribute("open", "open");
-      b.appendChild(add);
+      // 受け付けの入口は目立つボタン（2026-11-09 十文字さん）。押すと下に欄が開く
+      var addBox = el("div", { "class": "np-card", hidden: "hidden" });
+      var addBtn = el("button", { type: "button", "class": "np-btn np-btn-primary np-btn-lg", text: "＋ 改善要望を受け付ける" });
+      function setAdd(open) {
+        if (open) { addBox.removeAttribute("hidden"); addBtn.textContent = "受付の欄を畳む"; var t = addBox.querySelector("textarea"); if (t) t.focus(); }
+        else { addBox.setAttribute("hidden", "hidden"); addBtn.textContent = "＋ 改善要望を受け付ける"; }
+      }
+      addBtn.addEventListener("click", function () { setAdd(addBox.hasAttribute("hidden")); });
+      addBox.appendChild(el("h2", { text: "改善要望を受け付ける" }));
+      addBox.appendChild(form(null, function (o) { return post("/api/improve", o); }, function () { setAdd(false); }));
+      b.appendChild(btnRow([addBtn]));
+      b.appendChild(addBox);
+      if (!d.rows.length) setAdd(true);
 
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note", text: "この条件の改善要望はありません。" }));
@@ -1516,16 +1529,18 @@
       var rows = [];
       d.rows.forEach(function (r) {
         var late = r.due_on && r.due_on < d.today && ["受付", "検討中", "対応中"].indexOf(r.status) >= 0;
-        var editRow = el("tr", { hidden: "hidden" }, [el("td", { colspan: "8" }, [form(r, function (o) { return post("/api/improve/" + r.id, o); })])]);
-        var actions = el("td", { "class": "np-nowrap" });
         var eb = el("button", { type: "button", text: "直す" });
-        eb.addEventListener("click", function () {
-          if (editRow.hasAttribute("hidden")) {
-            editRow.removeAttribute("hidden");
+        function setEdit(open) {
+          if (open) {
+            editRow.removeAttribute("hidden"); eb.textContent = "畳む";
             // 隠れているあいだは高さを測れないので、開いたときに合わせ直す
             var fm = editRow.querySelector("form"); if (fm) fm.dispatchEvent(new Event("np-shown"));
-          } else editRow.setAttribute("hidden", "hidden");
-        });
+          } else { editRow.setAttribute("hidden", "hidden"); eb.textContent = "直す"; }
+        }
+        var editRow = el("tr", { hidden: "hidden" }, [el("td", { colspan: "8" },
+          [form(r, function (o) { return post("/api/improve/" + r.id, o); }, function () { setEdit(false); })])]);
+        var actions = el("td", { "class": "np-nowrap" });
+        eb.addEventListener("click", function () { setEdit(editRow.hasAttribute("hidden")); });
         actions.appendChild(eb);
         if (r.work_item_id) {
           actions.appendChild(txt(" "));

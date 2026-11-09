@@ -63,8 +63,19 @@ def _clean(f: dict, partial: bool) -> dict:
     return out
 
 
+def _name_of(user_id: str) -> str:
+    try:
+        import auth
+        u = next((x for x in auth.public_users() if x["user_id"] == user_id), None)
+        return (u or {}).get("name") or user_id
+    except Exception:                                   # noqa: BLE001 台帳が読めなくても ID で残す
+        return user_id
+
+
 def create(f: dict, user_id: str) -> dict:
     v = _clean(f, partial=False)
+    # 受付元は入力した人（2026-11-09 十文字さん「入力者が自動で入るように」）。手書きメモの取り込みなど、明示したときだけその値
+    v["source"] = v["source"] or _name_of(user_id)
     with store.tx() as c:
         rid = c.execute(
             "INSERT INTO improve_request (title,detail,source,project_id,priority,status,role,assignee,due_on,"

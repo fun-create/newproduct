@@ -517,3 +517,8 @@ details.np-analysis > summary { cursor: pointer; font-weight: 700; }
 .np-improve-form textarea[name="title"] { font-weight: 600; }
 .np-improve-form { display: grid; gap: .5rem; width: 100%; }
 .np-improve-form p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+
+/* 目立たせる押しボタン（改善要望の受け付けなど・2026-11-09）。色だけにしない: 塗りと太さで見せる */
+a.np-btn-primary, button.np-btn-primary { background: var(--fca-navy); color: var(--fca-card); border-color: var(--fca-navy); }
+a.np-btn-primary:hover, button.np-btn-primary:hover { background: var(--fca-navy); color: var(--fca-card); text-decoration: underline; filter: brightness(1.12); }
+.np-btn-lg { font-size: 1rem; padding: .55rem 1.3rem; }

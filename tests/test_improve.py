@@ -41,6 +41,9 @@ class Improve(unittest.TestCase):
         c = self.m.create({"title": "台座を分ける", "priority": "中", "due_on": "2026-12-01"}, "u")["id"]
         rows = self.m.listing()["rows"]
         self.assertEqual([r["id"] for r in rows], [b, c, a])               # 高 → 中 → 未設定
+        src = {r["id"]: r["source"] for r in rows}
+        self.assertEqual(src[b], "外部署から")                               # 明示したらその値
+        self.assertTrue(src[a])                                             # 入れなければ入力した人（名前か ID）
         self.assertEqual(rows[2]["status"], "受付")
         self.assertEqual(rows[2]["received_on"], self.store.today_s())
         self.m.update(a, {"priority": "低", "detail": "画サイズ拡大に切り替える前に", "status": "検討中"}, "u")
