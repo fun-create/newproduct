@@ -1579,13 +1579,13 @@
 
       // 受け付けの入口は目立つボタン（2026-11-09 十文字さん）。押すと下に欄が開く
       var addBox = el("div", { "class": "np-card np-edit-area", hidden: "hidden" });
-      var addBtn = el("button", { type: "button", "class": "np-btn np-btn-primary np-btn-lg", text: "＋ 改善要望を受け付ける" });
+      var addBtn = el("button", { type: "button", "class": "np-btn np-btn-primary np-btn-lg", text: "＋ 改善要望を伝える" });
       function setAdd(open) {
         if (open) { addBox.removeAttribute("hidden"); addBtn.textContent = "受付の欄を畳む"; var t = addBox.querySelector("textarea"); if (t) t.focus(); }
-        else { addBox.setAttribute("hidden", "hidden"); addBtn.textContent = "＋ 改善要望を受け付ける"; }
+        else { addBox.setAttribute("hidden", "hidden"); addBtn.textContent = "＋ 改善要望を伝える"; }
       }
       addBtn.addEventListener("click", function () { setAdd(addBox.hasAttribute("hidden")); });
-      addBox.appendChild(el("h2", { text: "改善要望を受け付ける" }));
+      addBox.appendChild(el("h2", { text: "改善要望を伝える" }));
       addBox.appendChild(form(null, function (o) { return post("/api/improve", o); }, function () { setAdd(false); }));
       b.appendChild(btnRow([addBtn]));
       b.appendChild(addBox);
