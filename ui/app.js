@@ -5994,6 +5994,11 @@
       return c;
     }
     var S = D.sales || {}, N = D.newprod || {}, V = D.dev || {}, P = D.plan || {}, T = D.trends || {};
+    // 店の商品名は【】や［］の飾りが長い。図では外して短くする（全文は「文章で見る」にある）
+    function shortName(s) {
+      var t = String(s || "").replace(/【[^】]*】|\[[^\]]*\]|［[^］]*］|＜[^＞]*＞/g, " ").replace(/\s+/g, " ").trim();
+      return t.length > 22 ? t.slice(0, 22) + "…" : (t || String(s || "").slice(0, 22));
+    }
     // ── 要点 ──
     var tt = S.total || {};
     var tg = yoyTag(tt.yoy);
@@ -6016,8 +6021,10 @@
       note: "前年の売上フィードが無い月は線を引いていません。",
       headers: ["月", "今年", "前年同月"], rows: S.trend.map(function (x) { return [x.month, yen(x.cur), yen(x.prev, "—")]; }) }));
     if ((S.sites || []).length) g1.appendChild(chartCard(D.month + " の店ごとの売上", hbars(S.sites.map(function (x) {
-      return { label: x.label, value: x.cur, valueText: fmtShort(x.cur, "円"), tag: yoyTag(x.yoy), note: x.prev ? "（前年 " + fmtShort(x.prev, "円") + "）" : "" };
-    }), { unit: "円" }), { sub: "右の札は前年同月比" }));
+      return { label: x.label, value: x.cur, valueText: fmtShort(x.cur, "円"), tag: yoyTag(x.yoy) };
+    }), { unit: "円" }), { sub: "右の札は前年同月比",
+      headers: ["店", "今月", "前年同月", "前年比"], rows: S.sites.map(function (x) {
+        return [x.label, yen(x.cur), yen(x.prev, "—"), x.yoy === null ? "—" : (x.yoy > 0 ? "+" : "") + x.yoy + "%"]; }) }));
     s1.appendChild(g1);
 
     // ── 2. 商品ABC ──
@@ -6039,7 +6046,7 @@
       box.appendChild(stack);
       box.appendChild(el("p", { "class": "np-sub", text: "商品数: " + "ABC".split("").map(function (k) { return k + " " + ((a.classes[k] || {}).count || 0); }).join("・") }));
       if ((a.top || []).length) box.appendChild(chartCard("A の上位5", hbars(a.top.map(function (x) {
-        return { label: x.name || x.key, value: x.revenue, valueText: fmtShort(x.revenue, "円") };
+        return { label: shortName(x.name || x.key), value: x.revenue, valueText: fmtShort(x.revenue, "円") };
       }), { unit: "円" })));
       if (a.changes) {
         var ch = a.changes;
@@ -6050,7 +6057,10 @@
         })));
         ["増加", "減少"].forEach(function (k) {
           var xs = (a.movers || {})[k] || [];
-          if (xs.length) box.appendChild(el("p", { "class": "np-sub", text: k + "の大きい3: " + xs.map(function (x) { return (x.name || "") + "（" + (x.diff > 0 ? "+" : "") + fmtShort(x.diff, "円") + "）"; }).join("、") }));
+          if (xs.length) box.appendChild(chartCard(k + "の大きい3（前年同月との差）", hbars(xs.map(function (x) {
+            return { label: shortName(x.name), value: Math.abs(x.diff), alt: k === "減少",
+              valueText: (x.diff > 0 ? "+" : "−") + fmtShort(Math.abs(x.diff), "円") };
+          }), { unit: "円" })));
         });
       } else if (a.why) box.appendChild(el("p", { "class": "np-sub", text: a.why }));
       g2.appendChild(box);
@@ -6096,7 +6106,7 @@
     var c5 = P.consumption || {};
     if (isNum(c5.slots) && c5.slots > 0) {
       s5.appendChild(chartCard((c5.month || "") + " の枠の消化（案件にした枠）", meter(c5.converted, c5.slots, { label: "枠の消化", valueText: c5.value, unit: "本" }),
-        { note: c5.why || "この月の枠はすべて案件になっています。" }));
+        { lead: (c5.value || "") + "（" + (c5.state || "") + "）", note: c5.why || "この月の枠はすべて案件になっています。" }));
     } else s5.appendChild(el("p", { "class": "np-note", text: "枠の消化: " + (c5.value || c5.state || "—") + (c5.why ? "。" + c5.why : "") }));
     if ((P.versions || []).length) s5.appendChild(el("p", { "class": "np-sub", text: "版: " + P.versions.map(function (v) { return v.fiscal_year + "年度 " + v.label + "（" + v.state + "）"; }).join("・") }));
 
