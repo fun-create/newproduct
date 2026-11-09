@@ -104,3 +104,31 @@ class Guide(unittest.TestCase):
         hows |= {x["how"] for x in self.g.build("shacho")["now"] + self.g.build("shacho")["prep"]}
         for h in hows:
             self.assertTrue(any(x.startswith(h) for x in heads), h)
+
+
+class Bulletin(Guide):
+    """朝の便（docs/contracts/guide_v1.md）: 期限切れと今やるだけ・7日より先は載せない・並び・URL"""
+
+    def test_bulletin_items(self):
+        later = (self.store.today() + dt.timedelta(days=20)).isoformat()
+        p2 = __import__("app.project", fromlist=["x"]).create("u", expand=False, internal_name="先の商品", flow_type="freecut",
+                                                             launch_date=later)["id"]
+        self.store.ex("UPDATE project SET stage='開発中' WHERE id=?", (p2,))
+        self.store.conn().commit()
+        soon = (self.store.today() + dt.timedelta(days=5)).isoformat()
+        p3 = __import__("app.project", fromlist=["x"]).create("u", expand=False, internal_name="近い商品", flow_type="freecut",
+                                                             launch_date=soon)["id"]
+        self.store.ex("UPDATE project SET stage='開発中' WHERE id=?", (p3,))
+        self.store.conn().commit()
+        d = self.g.todo_for_bulletin("kanri", "https://np.example/")
+        keys = [i["key"] for i in d["items"]]
+        self.assertIn(f"cip_{p3}", keys)                          # 期限（発売日）が7日以内 → 載せる
+        self.assertNotIn(f"cip_{self.pid}", keys)                 # 10日先 → まだ載せない（やること一覧には出る）
+        self.assertIn("gate_mine", keys) if "gate_mine" in [x["key"] for x in self.g.build("kanri")["now"]] else None
+        self.assertNotIn(f"target_{p2}", keys)                    # 20日先は「これから」なので載せない
+        self.assertTrue(all(i["state"] in ("late", "todo") for i in d["items"]))
+        self.assertTrue(all(i["url"].startswith("https://np.example/#/") for i in d["items"]))
+        self.assertEqual(d["todo_url"], "https://np.example/#/todo")
+        st = [i["state"] for i in d["items"]]
+        self.assertEqual(st, sorted(st, key=lambda s: s != "late"))
+        self.assertNotIn("¥", str(d))

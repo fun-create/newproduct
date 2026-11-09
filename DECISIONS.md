@@ -2269,4 +2269,4 @@ Business Analysis の ADR-051（`app/guide.py`）と同じ組み立てにした�
 - 事前の準備（修正依頼書 O01〜O05 と H06）: 開発タイプ・2週間以内のタスクの担当者・ルーティン・発売済み案件の残り・新商品の売上の登録。アプリで確かめられない「正本の切り替えの周知」だけ「済にする」（社長・商品開発部管理者・`guide_done`）
 - 操作マニュアルの見出し「ゲート（G0〜G6）と発売済み」を G0〜G5 に（G6 廃止に合わせた）。「やること」の節を足した
 - 検査: tests/test_guide.py（見る人で出し分け・週次の取り込みの期限・事前の準備の自動の済と「済にする」の資格・1つ落ちても他は出る・やり方の節が実在）。壊して確かめた（誰にでも全部見せる／やり方の節が欠ける）
-- **まだやらないこと**: ChatWork・AI ASSISTANT の朝の便への知らせ（Business Analysis は `/api/guide/todo` で出している。要るなら同じ形で足す）
+- **朝の便（11/9 十文字さん「朝の便にも」）**: `GET /api/guide/todo`（取り決め `docs/contracts/guide_v1.md`・Business Analysis の guide_v1 と同じ形）。相手ごとの鍵 `config/secretary_guide_token`・`X-User`・NEW PRODUCT の利用者だけ。期限切れと今やる（7日以内か期限なし）だけ。朝の便への組み込みは AI ASSISTANT 担当（HUB tasks/to-ai-assistant.md で依頼）

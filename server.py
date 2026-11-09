@@ -101,6 +101,8 @@ STARTED_AT = time.strftime("%Y-%m-%d %H:%M:%S")
 SVC_TOKEN_PATH = CONFIG_DIR / "svc_token"
 # カレンダー → NEW PRODUCT の完了・未完了だけを通す鍵（FR-121）。svc_token を配らない（道ごとに鍵を分ける）
 CALFC_CALLBACK_TOKEN_PATH = CONFIG_DIR / "calfc_callback_token"
+# AI ASSISTANT の朝の便 → やること（docs/contracts/guide_v1.md・ADR-133）。相手ごとの鍵（svc_token は配らない）
+SECRETARY_GUIDE_TOKEN_PATH = CONFIG_DIR / "secretary_guide_token"
 
 
 def _touches_tasks(path: str) -> bool:
@@ -371,6 +373,16 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/health":
             # 監視用。**外からは Caddy が /api/* を落とす。**
             return self.sendj(200, health())
+        if path == "/api/guide/todo":
+            # AI ASSISTANT の朝の便（guide_v1）。loopback ＋ 転送ヘッダ無し ＋ 相手ごとの鍵。本人は X-User
+            if not self.svc_ok(SECRETARY_GUIDE_TOKEN_PATH) or method != "GET":
+                return self.sendj(403, {"error": "forbidden", "code": "forbidden"})
+            who = (self.headers.get("X-User") or "").strip()
+            rec = auth.get(who) if who else None
+            if not rec or not rec.get("active", True):
+                return self.sendj(403, {"error": "NEW PRODUCT の利用者ではありません", "code": "not_user"})
+            from app import guide
+            return self.sendj(200, guide.todo_for_bulletin(who, PUBLIC_URL))
         if path == "/api/svc/task/done":
             # カレンダーからの完了・未完了（FR-121・ADR-100）。**専用の鍵**（config/calfc_callback_token）だけを通す
             if not self.svc_ok(CALFC_CALLBACK_TOKEN_PATH) or method != "POST":

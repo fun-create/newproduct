@@ -16,6 +16,7 @@ Business Analysis の ADR-051（`app/guide.py`）と同じ組み立て:
 from __future__ import annotations
 
 import datetime as dt
+import urllib.parse
 
 from app import store
 
@@ -297,3 +298,26 @@ def mark(uid: str, key: str, done: bool) -> dict:
             c.execute("DELETE FROM guide_done WHERE key=?", (key,))
     store.audit(uid, "guide.mark", key, {"done": done})
     return {"ok": True}
+
+
+# ── AI ASSISTANT の朝の便（docs/contracts/guide_v1.md・2026-11-09 十文字さん「朝の便にも」）──────
+def todo_for_bulletin(uid: str, public_url: str) -> dict:
+    """朝の便に載せる分。**期限切れ（late）と今やる（todo）だけ**。今やるは期限が7日以内か、期限の無いもの
+    （ゲートの判定・年間プランの承認など。期限が無いと載らないため・Business Analysis との違い）。
+    並びはここで決める（期限切れ → 期限の近い順 → 期限なし）。金額・点は元から持っていない"""
+    b = build(uid)
+    base = public_url.rstrip("/")
+    lim = (store.today() + dt.timedelta(days=7)).isoformat()
+    items = []
+    for x in b["now"]:
+        if x["state"] == "期限切れ":
+            st = "late"
+        elif x["state"] == "今やる" and (not x.get("due") or x["due"] <= lim):
+            st = "todo"
+        else:
+            continue
+        items.append({"key": x["key"], "title": x["title"], "state": st, "due": x.get("due"), "group": "いま",
+                      "url": base + "/" + (x.get("href") or "#/todo"),
+                      "help_url": base + "/#/manual?sec=" + urllib.parse.quote(x.get("how") or "")})
+    items.sort(key=lambda i: (i["state"] != "late", i["due"] is None, i["due"] or ""))
+    return {"user_id": uid, "as_of": b["today"], "count_all": b["count"], "todo_url": base + "/#/todo", "items": items}
