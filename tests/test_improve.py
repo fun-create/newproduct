@@ -85,3 +85,29 @@ class Improve(unittest.TestCase):
         wid = self.m.to_task(rid, "u")["id"]
         self.m.update(rid, {"status": "見送り"}, "u")
         self.assertEqual(self.store.val("SELECT status FROM work_item WHERE id=?", (wid,)), "対象外")
+
+
+class NoLingeringLock(Improve):
+    """一覧を開いても書き込みを確定せずに残さない（2026-11-09 本番で、一覧を開いたあと別の書き込みが「使用中」で止まった）"""
+
+    def _other_can_write(self):
+        import sqlite3
+        o = sqlite3.connect(self.dbfile, timeout=0.3)
+        try:
+            o.execute("INSERT INTO audit (at, user_id, action) VALUES ('x','x','x')")
+            o.commit()
+        finally:
+            o.close()
+
+    def test_listing_releases_the_write_lock(self):
+        rid = self.m.create({"title": "台座を分ける", "role": "admin"}, "u")["id"]
+        wid = self.m.to_task(rid, "u")["id"]
+        with self.store.tx() as c:
+            c.execute("UPDATE work_item SET status='完了' WHERE id=?", (wid,))
+        self.m.listing()                         # ここで要望を完了にそろえる書き込みが走る
+        self._other_can_write()                  # 確定されていなければ database is locked
+
+    def test_newprod_pending_releases_the_write_lock(self):
+        from app import newprod
+        newprod.on_launched(self.pid)
+        self._other_can_write()

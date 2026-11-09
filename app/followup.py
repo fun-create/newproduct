@@ -124,11 +124,13 @@ def set_plc(pid: str, value: str, user_id: str) -> dict:
     if w is not None and w["status"] not in ("完了", "対象外"):
         s = plc_setting(p)
         if not s["need"]:
-            store.ex("UPDATE work_item SET status='対象外' WHERE id=?", (w["id"],))
+            with store.tx() as c:
+                c.execute("UPDATE work_item SET status='対象外' WHERE id=?", (w["id"],))
             store.audit(user_id, "followup.retire", str(w["id"]), {"project": pid, "origin": "plc", "why": "不要に変えた"})
         elif p.get("launch_date"):
             due, _note = due_for(s["rule"], p["launch_date"])
-            store.ex("UPDATE work_item SET due_on=? WHERE id=?", (due, w["id"]))
+            with store.tx() as c:
+                c.execute("UPDATE work_item SET due_on=? WHERE id=?", (due, w["id"]))
     return {"ok": True, "changed": True, "setting": plc_setting(p)}
 
 
@@ -214,7 +216,8 @@ def on_launch_date_change(pid: str, user_id: str) -> int:
             continue
         due, _note = due_for(rule, p["launch_date"])
         if due != w["due_on"]:
-            store.ex("UPDATE work_item SET due_on=? WHERE id=?", (due, w["id"]))
+            with store.tx() as c:
+                c.execute("UPDATE work_item SET due_on=? WHERE id=?", (due, w["id"]))
             store.audit(user_id, "followup.redue", str(w["id"]), {"project": pid, "from": w["due_on"], "to": due})
             n += 1
     return n

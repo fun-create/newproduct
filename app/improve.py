@@ -149,8 +149,10 @@ def to_task(rid: int, user_id: str) -> dict:
 
 def _close_done_tasks() -> None:
     """タスクを完了にした要望は「完了」に（画面で見るたびにそろえる）"""
-    store.ex("UPDATE improve_request SET status='完了', updated_at=? WHERE status IN ('受付','検討中','対応中') "
-             "AND work_item_id IN (SELECT id FROM work_item WHERE status='完了')", (store.now_s(),))
+    # **tx で確定する。**store.ex だけだと書き込みが確定されずに残り、ほかの書き込みを止める（2026-11-09 本番で起きた）
+    with store.tx() as c:
+        c.execute("UPDATE improve_request SET status='完了', updated_at=? WHERE status IN ('受付','検討中','対応中') "
+                  "AND work_item_id IN (SELECT id FROM work_item WHERE status='完了')", (store.now_s(),))
 
 
 def listing(state: str = "open", project_id: str = "") -> dict:

@@ -132,8 +132,9 @@ def latest() -> dict | None:
 # ── 登録 ──────────────────────────────────────────────
 def on_launched(pid: str) -> None:
     """G5 を通したら登録待ちに入れる（何度呼んでも1つ）。"""
-    store.ex("INSERT OR IGNORE INTO newprod_reg (project_id,state,created_at) VALUES (?,?,?)",
-             (pid, PENDING, store.now_s()))
+    with store.tx() as c:                            # 確定する（store.ex だけだと書き込みが残る）
+        c.execute("INSERT OR IGNORE INTO newprod_reg (project_id,state,created_at) VALUES (?,?,?)",
+                  (pid, PENDING, store.now_s()))
 
 
 def proposal(p: dict) -> dict:
