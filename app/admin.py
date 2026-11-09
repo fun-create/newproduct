@@ -97,7 +97,7 @@ LOCKED = {
     "ai.usage_endpoint": "書き換えると別のものにつながるため、画面からは変えません",
 }
 GROUP_ORDER = ("原価・価格", "競合の推計", "在庫と目標", "年間プランの挿入ルール", "接続先", "変えないもの")
-ROLE_LABEL = {"admin": "管理者", "president": "社長", "devdept": "商品開発部", "prod": "生産部"}
+ROLE_LABEL = {"admin": "商品開発部管理者", "president": "社長", "devdept": "商品開発部", "prod": "生産部"}
 
 
 def _biz(user_id: str) -> set:

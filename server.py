@@ -1059,6 +1059,11 @@ class H(BaseHTTPRequestHandler):
                 r = project_m.set_launch_date(pid, d.get("launch_date", ""), d.get("reason", ""), uid)
                 store.audit(uid, "project.launch_date", pid, {k: d.get(k) for k in ("launch_date", "reason")}, ip)
                 return self.sendj(200, r)
+            if what == "plc":
+                from app import followup
+                r = followup.set_plc(pid, d.get("value", ""), uid)
+                store.audit(uid, "project.plc", pid, {"value": d.get("value")}, ip)
+                return self.sendj(200, r)
             if what == "revenue":
                 r = project_m.set_revenue(pid, d.get("counted") in ("1", "true", "on"), d.get("basis", ""), uid)
                 store.audit(uid, "project.revenue", pid, {"counted": d.get("counted"), "basis": d.get("basis")}, ip)
@@ -1096,11 +1101,10 @@ class H(BaseHTTPRequestHandler):
 
         # /api/tasks
         if parts == ["tasks"] and method == "GET":
-            # 既定は、業務ロールのある人は「自分の分」（点検 M-2: 帯から入ると毎回「自分の分だけ」を押していた）。mine=0 で全員の分
+            # 既定は全員の分（2026-11-09 修正依頼書 H08）。「自分の分だけ」は mine=1 で選ぶ。ダッシュボードの「自分のやること」から来るリンクは mine=1 を付ける
             mq = qs.get("mine")
             if mq not in ("0", "1"):
-                from app import gate
-                mq = "1" if gate.task_roles_of(uid) else "0"
+                mq = "0"
             return self.sendj(200, task_m.listing(
                 qs.get("when", task_m.DEFAULT_WHEN), qs.get("tab", "project"),
                 qs.get("role", ""), qs.get("assignee", ""),
@@ -1479,7 +1483,7 @@ class H(BaseHTTPRequestHandler):
 
         # /api/gates
         if parts == ["gates"] and method == "GET":
-            return self.sendj(200, gates_board(uid))
+            return self.sendj(200, gates_board(uid, launched=qs.get("launched") == "1"))
         if len(parts) == 3 and parts[0] == "gates" and method == "POST":
             d = self.body()
             r = gate_m.review(parts[1], parts[2], d.get("result", ""), uid,
@@ -1505,8 +1509,10 @@ class H(BaseHTTPRequestHandler):
         return self.sendj(404, {"error": "not found"})
 
 
-def gates_board(user_id: str) -> dict:
-    """ゲート盤（画面設計 3-9）。**自分が判断者のものを先に出す。**"""
+def gates_board(user_id: str, launched: bool = False) -> dict:
+    """ゲート盤（画面設計 3-9）。**自分が判断者のものを先に出す。**
+
+    発売済み（発売済・追跡中・評価完了）は既定で出さない（2026-11-09 修正依頼書 H04）。launched=True で出す"""
     gds = gate_m.defs()
     mine = set(gate_m.roles_of(user_id))
     role_label = {r["code"]: r["label"] for r in
@@ -1517,9 +1523,13 @@ def gates_board(user_id: str) -> dict:
     for r in store.q("SELECT role_code, user_id FROM role_member UNION SELECT role_code, user_id FROM approval_member"):
         approvers.setdefault(r["role_code"], []).append(names.get(r["user_id"], r["user_id"]))
     rows = []
+    launched_n = 0
     for r in store.q("SELECT * FROM project ORDER BY (launch_date IS NULL), "
                      "launch_date, id"):
         p = dict(r)
+        if p["stage"] in gate_m.LAUNCHED and not launched:
+            launched_n += 1
+            continue
         b = gate_m.board(p)
         nx = next((g for g in b if g["state"] in ("判定待ち", "差戻し", "保留")), None)
         # 発売済・追跡中・保留は判定待ちに見せない（2026-10-09 点検 1-4・2026-10-20 点検 M-1）
@@ -1546,11 +1556,12 @@ def gates_board(user_id: str) -> dict:
     return {
         "gates": [{"gate": g["gate"], "name": g["name"]} for g in gds],
         "rows": rows,
+        "launched_hidden": launched_n, "launched_shown": launched,
         "my_roles": sorted(mine),
         "my_role_labels": [role_label.get(x, x) for x in sorted(mine)],
         # **何も動いていないのか、全部通ったのかを区別する**（画面設計 3-9）
         "passed_30d": store.val(
-            "SELECT COUNT(*) FROM gate_review WHERE result='通過' "
+            "SELECT COUNT(*) FROM gate_review WHERE result='通過' AND kind='review' "   # 移行補正は人の判定ではない（ADR-128）
             "AND approved_at >= ?", (since,), 0),
     }
 

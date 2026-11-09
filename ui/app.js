@@ -711,7 +711,7 @@
         kpi("期限切れタスク（全員）", fmtNum(c.overdue), "案件タスク＋案件外の仕事", "#/tasks?when=overdue", null,
           { unit: "件", tone: c.overdue > 0 ? "alert" : null, tag: "要対応" }),
         kpi("今日が期限（全員）", fmtNum(c.today), null, "#/tasks?when=today", null, { unit: "件", tone: c.today > 0 ? "info" : null, tag: "今日" }),
-        kpi("次のゲートを待つ案件", fmtNum(waitN), pr.launched_no_gate ? "発売済で記録が途中・なしの " + pr.launched_no_gate + " 件（移行分）と保留中は数えていません" : "保留中は数えていません", "#/gates", null, { unit: "件" }),
+        kpi("次のゲートを待つ案件", fmtNum(waitN), "発売済み・保留中は数えていません", "#/gates", null, { unit: "件" }),
         kpi("期限なしのタスク", fmtNum(c.none), "入れないままだと詰まりが見えません", "#/tasks?when=none", null, { unit: "件" })]));
       var hill = [{ x: "期限切れ", y: c.overdue, tone: "alert" }, { x: "今日", y: c.today }];
       ["+1", "+2", "+3", "+4", "+5", "+6"].forEach(function (k) { hill.push({ x: k.replace("+", "") + "日後", y: c[k] }); });
@@ -731,7 +731,7 @@
         { label: "アイデア", n: (pl.ideas || {}).total, sub: "採点済 " + (ib["採点済"] || 0) + "・起票 " + (ib["起票"] || 0) + "・候補 " + (ib["候補"] || 0), href: "#/ideas" },
         { label: "年間プランの枠（" + sl.fy + "年度）", n: sl.n === null ? "版なし" : sl.n, sub: sl.state ? sl.state + "・案件化 " + sl.converted : "版がまだありません", href: "#/plan" },
         { label: "開発中の案件", n: pr.active, sub: "全 " + pr.total + " 件（発売済・中止を含む）", href: "#/projects" },
-        { label: "発売済", n: pr.launched, sub: pr.launched_no_gate ? "うちゲートの記録が途中・なし " + pr.launched_no_gate + "（移行分）" : null }]));
+        { label: "発売済", n: pr.launched, sub: null }]));
       pc.appendChild(el("p", { "class": "np-sub", text: "つながりの記録: アイデアから起こした案件 " + ln.from_idea + " / " + ln.projects
         + "・枠から起こした案件 " + (ln.slot_converted === null ? "—" : ln.slot_converted) + " / " + (ln.slots === null ? "—" : ln.slots)
         + "。記録が無いあいだは、段から段へ進んだ割合は出しません（0% と誤って読めるため）。" }));
@@ -826,10 +826,13 @@
     loading();
     var q = hashQuery();
     var qs = [];
-    ["stage", "flow", "owner", "launch_month", "source_of_truth"].forEach(function (k) {
+    // 既定は未発売の案件だけ（2026-11-09 修正依頼書 H04）。発売済みは「ステージ」で選ぶと出る
+    var stageQ = q.get("stage") || "_active";
+    qs.push("stage=" + encodeURIComponent(stageQ));
+    ["flow", "owner", "launch_month", "source_of_truth"].forEach(function (k) {
       if (q.get(k)) qs.push(k + "=" + encodeURIComponent(q.get(k)));
     });
-    api("/api/projects" + (qs.length ? "?" + qs.join("&") : "")).then(function (d) {
+    api("/api/projects?" + qs.join("&")).then(function (d) {
       var b = clear();
 
       // 絞り込み
@@ -846,7 +849,10 @@
         });
         return s;
       }
-      f.appendChild(sel("stage", "ステージ", d.filters.stage, q.get("stage")));
+      var ss = sel("stage", "ステージ", [{ code: "_launched", label: "発売済み（発売済・追跡中・評価完了）" }, { code: "_all", label: "すべての案件" }]
+        .concat(d.filters.stage), stageQ);
+      ss.firstChild.textContent = "未発売の案件（既定）";
+      f.appendChild(ss);
       f.appendChild(sel("flow", "フロー", d.filters.flow, q.get("flow")));
       f.appendChild(sel("owner", "担当", d.filters.owner, q.get("owner")));
       f.appendChild(sel("launch_month", "発売月", d.filters.launch_month, q.get("launch_month")));
@@ -861,7 +867,10 @@
       });
       b.appendChild(f);
 
-      if (!d.rows.length) {
+      if (stageQ === "_active") b.appendChild(el("p", { "class": "np-sub", text: "発売済みの案件は出していません。見るときは「ステージ」で「発売済み」か「すべての案件」を選びます。" }));
+      if (!d.rows.length && stageQ !== "_active") {
+        b.appendChild(el("p", { "class": "np-note", text: "この条件の案件はありません。" }));
+      } else if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
           text: "案件がまだありません。" }));
         b.appendChild(el("p", { "class": "np-note", text: "本来は年間プランの枠から「案件にする」で起こします（発売の2か月前のタスク設定期限が出ます）。"
@@ -1347,6 +1356,7 @@
         var g = el("div", { "class": "np-card", id: "np-sec-G" });
         g.appendChild(el("h2", { text: ng ? "G. ゲートの判定（" + ng.gate + " " + ng.name + "）と履歴" : "G. 履歴 — 誰がいつ何を決めたか" }));
         if (ng) g.appendChild(gateForm(d, ng, meta));
+        g.appendChild(followupBox(d, h.editable));
         if (h.editable) g.appendChild(memoForm(d.id));
         g.appendChild(table(["日時", "誰が", "何を"], d.revisions.map(function (x) {
           return el("tr", null, [el("td", { "class": "np-nowrap", text: x.changed_at }),
@@ -1365,6 +1375,46 @@
     function row(k, v) {
       return el("tr", null, [el("th", { text: k }), el("td", { text: v })]);
     }
+  }
+
+  /** 発売後の仕事（2026-11-09 修正依頼書 H05・H07・ADR-128）。新商品の案件のタスクは発売まで。
+   *  G5 を通すと、生産確認・モール出品・FBA化の検討が案件外の仕事として1件ずつ作られる。ここでは生産確認の要否と時期を決める */
+  function followupBox(d, editable) {
+    var box = el("div", { "class": "np-box" });
+    box.appendChild(el("h3", { text: "発売後の仕事（案件外の仕事として作る）" }));
+    var s = d.plc || {};
+    box.appendChild(el("p", { "class": "np-sub", text: "発売後の生産確認: " + (s.need ? "要" : "不要") + "（" + s.label + "・" + s.source + "）。"
+      + "G5 を通すと、要なら生産部の仕事を1件作ります。発売日が空のときは作りません。" }));
+    if (editable) {
+      var f = el("form", { "class": "np-inline" });
+      var sel = el("select", { name: "kind", "aria-label": "発売後の生産確認" });
+      [["", "既定（開発タイプで決まる・2か月後）"], ["months", "か月後を指定"], ["days", "日後を指定"], ["date", "期限日を指定"], ["none", "不要"]]
+        .forEach(function (o) { sel.appendChild(el("option", { value: o[0], text: o[1] })); });
+      var num = el("input", { name: "n", size: "4", inputmode: "numeric", "aria-label": "か月・日数", placeholder: "2" });
+      var dt = el("input", { name: "date", type: "date", "aria-label": "期限日" });
+      var st = el("span", { "class": "np-status", role: "status" });
+      f.appendChild(sel); f.appendChild(txt(" ")); f.appendChild(num); f.appendChild(txt(" ")); f.appendChild(dt);
+      f.appendChild(el("button", { type: "submit", text: "保存" })); f.appendChild(txt(" ")); f.appendChild(st);
+      f.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var k = sel.value, v = k === "" ? "" : k === "none" ? "none" : k === "date" ? "date:" + dt.value : k + ":" + num.value;
+        st.textContent = "保存中…";
+        post("/api/projects/" + d.id + "/plc", { value: v })
+          .then(function () { st.textContent = "保存しました"; go(); })
+          .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+      });
+      box.appendChild(f);
+      box.appendChild(el("p", { "class": "np-sub", text: "「か月後」は暦で数えた日以降の最初の営業日（会社の休業日はカレンダーアプリで判定）。60日後とは同じではありません。" }));
+    }
+    if ((d.followups || []).length) {
+      box.appendChild(table(["仕事", "担当区分", "期限", "進捗"], d.followups.map(function (w) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/tasks?when=all&tab=work&focus=work_item-" + w.id, text: w.title })]),
+          el("td", { text: w.role_label || "—" }), el("td", { "class": "np-nowrap", text: dash(w.due_on) }), el("td", { text: w.status })]);
+      })));
+    } else {
+      box.appendChild(el("p", { "class": "np-note", text: "まだ作っていません（G5 を通すと作ります）。" }));
+    }
+    return box;
   }
 
   /** 案件画面の節をたたむ（全体の見直し・2026-10-06 十文字さん選択）。縦に長すぎて目当ての節が探せないため。
@@ -1997,6 +2047,37 @@
   function usersP() {
     if (!USERS) USERS = api("/api/users").then(function (r) { return r.rows; }, function (e) { USERS = null; throw e; });
     return USERS;
+  }
+  var META = null;                                 // /api/meta の約束（画面を開いている間は1回）
+  function metaP() {
+    if (!META) META = api("/api/meta").then(function (r) { return r; }, function (e) { META = null; throw e; });
+    return META;
+  }
+  /** ロールをその場で選び直す欄（2026-11-09 修正依頼書 H08）。保存した値を出し、ひな形で上書きしない。
+   *  **個人の担当は消さない。**区分と担当が食い違うときは知らせて、割り振りの画面へ案内する */
+  function roleEditCell(kind, t) {
+    var c = el("td", { "class": "np-nowrap" });
+    var st = el("span", { "class": "np-status", role: "status" });
+    metaP().then(function (m) {
+      var sel = roleSelect(m, t.role);
+      if (!t.role) sel.firstChild.textContent = "（要確認・ロールなし）";
+      sel.addEventListener("change", function () {
+        st.textContent = "保存中…";
+        post("/api/tasks/" + kind + "/" + t.id + "/edit", { role: sel.value })
+          .then(function () {
+            t.role = sel.value;
+            if (!t.assignee) { st.textContent = "保存しました"; return; }
+            return usersP().then(function (rows) {
+              var u = rows.filter(function (x) { return x.user_id === t.assignee; })[0];
+              var fits = !sel.value || (u && (u.roles || []).indexOf(sel.value) >= 0);
+              st.textContent = fits ? "保存しました" : "保存しました。個人の担当（" + t.assignee + "）はこの区分に入っていません。担当はそのまま残しています";
+            });
+          }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+      });
+      c.insertBefore(sel, st);
+    }).catch(function () { c.insertBefore(txt(t.role_label || "—"), st); });
+    c.appendChild(txt(" ")); c.appendChild(st);
+    return c;
   }
   /** 担当を選ぶ欄（利用者台帳から）。**手で打たせない**（点検 H-5: 綴り違いで誰の「自分のやること」にも出ない仕事ができた） */
   function userSelect(name, cur, emptyLabel) {
@@ -2943,16 +3024,8 @@
         });
         b.appendChild(tabs);
 
-        // 期間は「期限の山」の棒を押して選ぶ（2026-10-09 点検 §6 タスク。13個のボタンが 375px で4行に折り返していた）。
-        // **「期限なし」は斜線の別の棒で常に出す**。件数は全員分（自分の分だけのときも全員分の山を出し、そう書く）
-        var hk = ["overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6", "none"];
-        var hill = hk.map(function (k) {
-          return { x: k === "overdue" ? "期限切れ" : k === "today" ? "今日" : k === "none" ? "期限なし" : k.replace("+", "") + "日後", tone: k === "overdue" ? "alert" : null,
-            y: d.counts[k], alt: k === "none", current: k === when, href: "#/tasks?when=" + encodeURIComponent(k) + "&tab=" + tab + mq };
-        });
-        b.appendChild(chartCard("期限ごとの件数（全員の分）— 棒を押すとその期間に絞れます", columns(hill, { unit: "件", height: 170,
-          title: "期限ごとのタスクの件数", xfmt: function (x) { return x; } }), {
-          sub: "いま見ている期間: " + (WHEN_LABEL[when] || when) + "。斜線は期限なし（別の扱い）。" }));
+        // 「期限ごとの件数」のグラフは外した（2026-11-09 修正依頼書 H08: 件数では仕事量が分からない。時間に直す定義が
+        // 複雑になるので削除を優先）。期間は下の絞り込みで選ぶ
         var fl = el("div", { "class": "np-filters" });
         ["overdue+today", "week", "next7", "none", "all"].forEach(function (k) {    // 期限なし: 手順書「期限なしを選ぶ」（2026-10-18）
           var n = mine ? undefined : d.counts[k];
@@ -2979,7 +3052,7 @@
         b.appendChild(mf);
         b.appendChild(el("p", { "class": "np-note",
           text: "きょうは " + d.today + " です。期限切れ " + d.overdue_total
-            + " 件／期限なし " + d.no_due_total + " 件。" }));
+            + " 件／期限なし " + d.no_due_total + " 件。ロールはその場で選び直せます。個人の担当は「担当をまとめて割り振る」で入れます（カレンダーに送るのは担当と期限のあるタスク）。" }));
 
         if (!d.rows.length) {
           b.appendChild(el("p", { "class": "np-note",
@@ -2991,7 +3064,7 @@
             if (!t.due_on && !sepDone) {
               sepDone = true;
               rows.push(el("tr", { "class": "np-sep" }, [
-                el("td", { colspan: "8", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
+                el("td", { colspan: "7", text: "ここから下は期限なし（" + d.no_due_total + "件）" })]));
             }
             // 期限切れ（未完）の行に左の帯と「！期限切れ n日」（FR-195 第2段）
             var late = !!(t.due_on && t.due_on < d.today && t.status !== "完了" && t.status !== "対象外");
@@ -3004,17 +3077,17 @@
                 : dateEditCell(t.project_id ? "task" : "work", t, { after: late ? overdueFlag(t.due_on, d.today) : null }),
               el("td", null, [t.project_id
                 ? el("a", { href: "#/projects/" + t.project_id, text: t.project })
+                : t.origin_project_id ? el("a", { href: "#/projects/" + t.origin_project_id, text: "元の案件へ" })
                 : txt("—")]),
               el("td", { "class": "np-what", text: t.title }),
-              el("td", { text: t.role_label + (t.role_external ? "（他部署）" : "") }),
-              assigneeCell(t.project_id ? "task" : "work", t),
+              roleEditCell(t.project_id ? "task" : "work", t),
               el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
               // 「AI適用」「削減見込」はひな形の性質なので一覧から外した（点検 M-4）。量は下の見通しの表「AI削減可能h」で見る
               taskEditCell(t.project_id ? "task" : "work", t, null, t.project_id)
             ]));
           });
           b.appendChild(table(["進捗", "開始・期限", "案件", "タスク名", "ロール",
-            "担当", "時間（h）", ""], rows));
+            "時間（h）", ""], rows));
           // ダッシュボードから来たときは、その行へ移って印を付ける（点検 H-2）
           var fr = focus && b.querySelector('tr[data-focus="1"]');
           if (fr) setTimeout(function () { fr.scrollIntoView({ block: "center" }); }, 0);
@@ -3221,9 +3294,14 @@
   // ══════════════════════════════════════════════════════
   function viewGates() {
     loading();
-    api("/api/gates").then(function (d) {
+    var showL = hashQuery().get("launched") === "1";
+    api("/api/gates" + (showL ? "?launched=1" : "")).then(function (d) {
       var b = clear();
       setTitle("ゲート盤");
+      // 発売済みの案件は既定で出さない（2026-11-09 修正依頼書 H04）
+      b.appendChild(el("p", { "class": "np-sub" }, showL
+        ? [txt("発売済みの案件も出しています。 "), el("a", { href: "#/gates", text: "未発売だけにする" })]
+        : [txt("発売済みの案件 " + (d.launched_hidden || 0) + " 件は出していません。 "), el("a", { href: "#/gates?launched=1", text: "発売済みの案件も出す" })]));
       b.appendChild(el("p", { "class": "np-note",
         text: "あなたの業務ロール: " + (d.my_role_labels.length ? d.my_role_labels.join("／")
           : "なし（承認資格は業務ロールで決まります。アプリ権限 admin では通せません）") }));
@@ -3243,7 +3321,7 @@
         d.rows.forEach(function (r) { cntg[r.next_gate] = (cntg[r.next_gate] || 0) + 1; });
         b.appendChild(chartCard("次の判定がどのゲートか", hbars(Object.keys(cntg).sort().map(function (k) {
           return { label: k, value: cntg[k] };
-        }), { unit: "件" }), { sub: "発売済でゲートの記録が無い案件（移行分）は「—」などとして別の行に出ます。" }));
+        }), { unit: "件" }), { sub: "発売済みの案件は数えていません。" }));
       }
       if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
@@ -6461,7 +6539,7 @@
       }
       roleMatrix("担当区分（誰の業務か）", "他部署パートさんはログインが無いので、ここには出ません（タスクの担当区分としてだけ使います）。",
         R.roles.filter(function (r) { return r.code !== "part"; }), R.members, "task");
-      roleMatrix("承認できる人（ゲート・年間プラン）", "G1・G5・G6 は商品開発部管理者、G2 は商品開発部管理者か社長、G3 と年間プランの承認は社長、G4 は生産部の資格で承認します。",
+      roleMatrix("承認できる人（ゲート・年間プラン）", "G1・G5・G6 は商品開発部管理者、G2 は商品開発部管理者か社長、G3 と年間プランの承認は社長、G4 は生産部か商品開発部管理者の資格で承認します。",
         R.approval_roles || [], R.approvals || {}, "approval");
       b.appendChild(rc);
 

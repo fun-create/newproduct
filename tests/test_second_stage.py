@@ -105,7 +105,7 @@ class TestSeedCounts(Base):
 
     def test_masters(self):
         self.assertEqual(self.counts["flow_type"], 7)
-        self.assertEqual(self.counts["role"], 8)          # SE部を足した（ADR-123）
+        self.assertEqual(self.counts["role"], 9)          # SE部（ADR-123）・CS部（修正依頼書 H01・ADR-128）を足した
         self.assertEqual(self.counts["gate_def"], 7)
         self.assertEqual(self.counts["hold_reason"], 6)   # 6つ目は sheet_removed（ADR-105）
         self.assertEqual(self.counts["abort_reason"], 4)
@@ -296,8 +296,9 @@ class TestSimpleFlow(Base):
         from app import gate, store
         p = dict(store.one("SELECT * FROM project WHERE id=?", (self.me["id"],)))
         st = {g["gate"]: g["state"] for g in gate.board(p)}
-        for g in ("G0", "G1", "G2", "G3", "G4", "G5", "G6"):
+        for g in ("G0", "G1", "G2", "G3", "G4", "G5"):
             self.assertNotEqual(st[g], "対象外", g)
+        self.assertEqual(st["G6"], "対象外")       # G6 は廃止（修正依頼書 H05・ADR-128）
 
     def test_taigai_is_a_state_not_a_blank(self):
         from app import gate
@@ -397,10 +398,13 @@ class TestPermissions(Base):
         with self.assertRaises(PermissionError):
             gate.review(self.p["id"], "G3", "通過", "kanri")
 
-    def test_manager_cannot_pass_g4_which_is_production(self):
+    def test_g4_is_production_or_dev_manager(self):
+        """G4 は生産部 または 商品開発部管理者の資格（修正依頼書 H02・ADR-128）。社長だけの人は通せない"""
         from app import gate
-        self.assertFalse(gate.can_approve("kanri", "G4"))
+        self.assertTrue(gate.can_approve("kanri", "G4"))
         self.assertTrue(gate.can_approve("seisan", "G4"))
+        self.assertFalse(gate.can_approve("shacho", "G4"))
+        self.assertFalse(gate.can_approve("nobody", "G4"))
 
     def test_user_without_business_role_cannot_pass_anything(self):
         from app import gate
@@ -621,16 +625,18 @@ class TestDashboard(Base):
         from app import gate, project, store, task
         pid = project.create("tester", expand=False, internal_name="発売後", flow_type="meire",
                              launch_date="2026-08-01")["id"]
-        gate._post_launch_tasks(dict(store.one("SELECT * FROM project WHERE id=?", (pid,))), "tester")
+        from app import followup
+        followup.ensure(pid, "tester")              # G5 通過で作る発売後の仕事（案件外・ADR-128）
         m = task.post_launch_pending()
         # NEWPRODUCT_TODAY 次第で期限到来の数が変わる。**期限が来ていて未完了のものだけ**を数える
-        due = store.val("SELECT COUNT(*) FROM task WHERE project_id=? AND due_on <= ?", (pid, store.today_s()), 0)
+        due = store.val("SELECT COUNT(*) FROM work_item WHERE project_id=? AND due_on <= ?", (pid, store.today_s()), 0)
         self.assertEqual(m["count"], due)
-        store.ex("UPDATE task SET status='完了' WHERE project_id=?", (pid,)); store.conn().commit()
+        store.ex("UPDATE work_item SET status='完了' WHERE project_id=?", (pid,)); store.conn().commit()
         self.assertEqual(task.post_launch_pending()["count"], 0)
         self.assertEqual(task.post_launch_pending()["state"], "なし")
         # 後の検査（同じDBを使う）に残さない
         with store.tx() as c:
+            c.execute("DELETE FROM work_item WHERE project_id=?", (pid,))
             c.execute("DELETE FROM project WHERE id=?", (pid,))
         self.assertEqual(task.post_launch_pending()["state"], "対象なし")
 

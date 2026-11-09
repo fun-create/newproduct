@@ -111,7 +111,7 @@ def build(month: str) -> tuple[str, list[str]]:
         st = store.q("SELECT stage, COUNT(*) n FROM project GROUP BY stage ORDER BY COUNT(*) DESC")
         L.append("- ステージ別: " + "・".join(f"{r['stage']} {r['n']}" for r in st))
         lo, hi = month + "-01", _add_month(month) + "-01"
-        gr = store.q("SELECT gate, result, COUNT(*) n FROM gate_review WHERE approved_at >= ? AND approved_at < ? "
+        gr = store.q("SELECT gate, result, COUNT(*) n FROM gate_review WHERE approved_at >= ? AND approved_at < ? AND kind='review' "
                      "GROUP BY gate, result ORDER BY gate", (lo, hi))
         L.append("- この月の関門の判定: " + ("・".join(f"{r['gate']} {r['result']} {r['n']}" for r in gr) if gr else "なし"))
         up = store.q("SELECT id, internal_name, launch_date FROM project WHERE launch_date >= ? AND launch_date < ? "

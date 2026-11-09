@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""年間目標（FR-109/110）と発売後タスク（FR-104/105）。"""
+"""年間目標（FR-109/110）。"""
 from __future__ import annotations
 
 import datetime as dt
@@ -64,19 +64,7 @@ class Target(unittest.TestCase):
         self.assertEqual(p["rate"], 16.7)
         self.assertEqual(p["pace_rate"], 100.0)            # 365000×61/365 = 61000
         self.assertIsNone(self.m.progress(self.pid, "2026-08-01", None)["rate"])
-
-    def test_g5_pass_creates_post_launch_tasks_once(self):
-        from app import gate, store
-        with store.tx() as c:
-            c.execute("INSERT INTO role_member (role_code,user_id,granted_at) VALUES ('admin','k',?)",
-                      (store.now_s(),))
-        gate._post_launch_tasks(dict(store.one("SELECT * FROM project WHERE id=?", (self.pid,))), "k")
-        gate._post_launch_tasks(dict(store.one("SELECT * FROM project WHERE id=?", (self.pid,))), "k")
-        rows = store.rows(store.q("SELECT title,role,due_on FROM task WHERE project_id=? ORDER BY seq",
-                                  (self.pid,)))
-        self.assertEqual([(r["title"], r["role"], r["due_on"]) for r in rows],
-                         [("売上集計（発売+2週）", "devdept", "2026-08-15"),
-                          ("生産問題点確認（発売+2か月）", "prod", "2026-09-30")])
+    # G5 通過の発売後の仕事は tests/test_followup.py（案件外に作る・ADR-128）
 
 
 if __name__ == "__main__":

@@ -53,7 +53,11 @@ def defs() -> list[dict]:
 
 
 def applies(gd: dict, flow_type: str | None) -> bool:
-    """**flow が一覧に無ければ `対象外`。**未達ではない。"""
+    """**flow が一覧に無ければ `対象外`。**未達ではない。
+
+    適用する開発タイプが1つも無いゲートは廃止したゲート（G6・2026-11-09 修正依頼書 H05）。どの案件でも対象外"""
+    if not gd["applies_to_flow_types"]:
+        return False
     if not flow_type:
         return True          # 開発タイプ未設定の段階では、まだ外せない
     return flow_type in gd["applies_to_flow_types"]
@@ -143,15 +147,17 @@ def state_of(project_id: str, gate: str) -> tuple[str, dict | None]:
     return r["result"], dict(r)
 
 
+LAUNCHED = ("発売済", "追跡中", "評価完了")
+
+
 def out_of_turn(proj: dict) -> str | None:
     """判定待ちに数えない理由（点検 M-1・ADR-119）。数えるなら None。
 
     - 発売済・追跡中: もう出ている。移行した案件は G0〜G3 を「通過」にしたので次が G4 の判定待ちに見えるが、手の打ちようがない
     - 保留: 止めている間は誰の番でもない
     """
-    if proj.get("stage") in ("発売済", "追跡中"):
-        n = store.val("SELECT COUNT(*) FROM gate_review WHERE project_id=?", (proj["id"],), 0)
-        return "発売済・ゲートの記録なし（移行分）" if not n else "発売済・ゲートが途中（移行分）"
+    if proj.get("stage") in LAUNCHED:
+        return "発売済"
     if proj.get("stage") == "保留":
         return "保留中"
     return None
@@ -288,35 +294,26 @@ def review(project_id: str, gate: str, result: str, user_id: str,
                   "what,detail) VALUES (?,?,?,?,?)",
                   (project_id, store.now_s(), user_id, f"{gate} {result}",
                    comment or None))
+    out = {"gate": gate, "result": result, "missing_at_review": [m["key"] for m in miss]}
     if gate == "G5" and result == "通過":
-        _post_launch_tasks(proj, user_id)
-    return {"gate": gate, "result": result,
-            "missing_at_review": [m["key"] for m in miss]}
+        out["launched"] = _launched(proj, user_id)
+    return out
 
 
-# 発売後の確認タスク（F-10-1／F-10-2・FR-104/105）。**G5 通過で起票する**（期限は発売日から）。
-# 担当ロール: 売上集計＝商品開発部・生産問題点＝生産部（2026-10-02 十文字さん確定）
-POST_LAUNCH_TASKS = (("売上集計（発売+2週）", 14, "devdept"),
-                     ("生産問題点確認（発売+2か月）", 60, "prod"))
-
-
-def _post_launch_tasks(proj: dict, user_id: str) -> int:
-    import datetime as _dt
-    n = 0
-    with store.tx() as c:
-        seq = c.execute("SELECT COALESCE(MAX(seq),0) FROM task WHERE project_id=?",
-                        (proj["id"],)).fetchone()[0]
-        for title, days, role in POST_LAUNCH_TASKS:
-            if c.execute("SELECT 1 FROM task WHERE project_id=? AND title=?",
-                         (proj["id"], title)).fetchone():
-                continue                     # 二度通しても増やさない
-            due = ((_dt.date.fromisoformat(proj["launch_date"]) + _dt.timedelta(days=days)).isoformat()
-                   if proj.get("launch_date") else None)
-            seq += 1
-            c.execute("INSERT INTO task (project_id,seq,title,role,due_on,status,created_at) "
-                      "VALUES (?,?,?,?,?,'未着手',?)", (proj["id"], seq, title, role, due, store.now_s()))
-            n += 1
-    return n
+# G5 を通したら発売済（2026-11-09 修正依頼書 H04・H05・ADR-128）。
+# 以前は G5 通過で「売上集計（発売+2週）」「生産問題点確認（発売+2か月）」を案件の中に足していたが、
+# 新商品の案件のタスクは発売までにした。発売後の仕事は案件外の仕事として作る（app/followup.py）
+def _launched(proj: dict, user_id: str) -> dict:
+    moved = False
+    if proj.get("stage") not in LAUNCHED + ("中止", "保留"):
+        with store.tx() as c:
+            c.execute("UPDATE project SET stage='発売済', updated_at=?, updated_by=? WHERE id=?",
+                      (store.now_s(), user_id, proj["id"]))
+            c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                      (proj["id"], store.now_s(), user_id, "ステージ", f"{proj.get('stage')} → 発売済（G5 通過）"))
+        moved = True
+    from app import followup
+    return {"stage_moved": moved, "followup": followup.ensure(proj["id"], user_id)}
 
 
 def reasons() -> dict:

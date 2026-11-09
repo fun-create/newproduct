@@ -200,8 +200,14 @@ def expand_tasks(project_id: str, user_id: str) -> int:
 # ── 読む ──────────────────────────────────────────────
 def _filters(args: dict):
     where, params = ["1=1"], []
-    if args.get("stage"):
-        where.append("stage=?"); params.append(args["stage"])
+    # 案件一覧の既定は未発売（2026-11-09 修正依頼書 H04）。画面は _active を送る。発売済みは _launched、全件は _all
+    st = args.get("stage")
+    if st == "_active":
+        where.append("stage NOT IN ('発売済','追跡中','評価完了')")
+    elif st == "_launched":
+        where.append("stage IN ('発売済','追跡中','評価完了')")
+    elif st and st != "_all":
+        where.append("stage=?"); params.append(st)
     if args.get("flow"):
         where.append("flow_type=?"); params.append(args["flow"])
     if args.get("owner"):
@@ -270,6 +276,7 @@ def listing(args: dict | None = None) -> dict:
 
 
 def detail(project_id: str, user_id: str = "") -> dict | None:
+    from app import followup
     r = store.one("SELECT * FROM project WHERE id=?", (project_id,))
     if r is None:
         return None
@@ -331,6 +338,9 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         # FR-101。**止めずに知らせる**（必須項目にはしない）。G3／G4 の手前で発注の締切を出す
         "warnings": _gate_warnings(p, nx),
         "stage_options": stage_options(p),
+        # 発売後の仕事（案件外・ADR-128）と、生産確認の要否・時期（H07）
+        "followups": followup.of_project(project_id),
+        "plc": followup.plc_setting(p),
         "variant_states": VARIANT_STATES,
         # B節。**最上段に置くのがこの画面の設計そのもの**（画面設計 3-8）
         "missing": (nx["missing"] if nx else []),
@@ -678,7 +688,8 @@ def set_launch_date(pid: str, date: str, reason: str, user_id: str) -> dict:
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                   (pid, store.now_s(), user_id, "発売予定日",
                    f"{p['launch_date'] or '未定'} → {date or '未定'}。理由: {reason}"))
-    from app import schedule
+    from app import followup, schedule
+    followup.on_launch_date_change(pid, user_id)   # 発売後の仕事（未完了）の期限も合わせる（ADR-128）
     sc = None                                   # タスクの無い案件は目安の話をしない
     if store.val("SELECT COUNT(*) FROM task WHERE project_id=?", (pid,), 0):
         try:

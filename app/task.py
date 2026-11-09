@@ -164,6 +164,8 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "id": r["id"], "kind": "work_item", "status": r["status"],
             "due_on": r["due_on"], "start_on": r["start_on"],
             "project_id": None, "project": "—",
+            # 発売後の仕事は元の案件を持つ（ADR-128）。project_id は「案件のタスクか」の印なので別の名前で返す
+            "origin_project_id": r["project_id"], "origin": r["origin"],
             "title": r["title"], "role": r["role"],
             "role_label": r["role_label"] or "—",
             "role_external": bool(r["role_external"]),
@@ -829,21 +831,17 @@ def accept_work_item(wid: int, user_id: str) -> dict:
 
 
 def post_launch_pending() -> dict:
-    """FR-63「発売後チェックの未処理」。G5 通過で起票した発売後タスク（FR-104/105）のうち、
+    """FR-63「発売後チェックの未処理」。G5 を通したときに作った発売後の仕事（案件外・app/followup.py・ADR-128）のうち、
     **期限が来たのに完了していない**もの。
 
-    G5 を通した案件がまだ無いなら「対象なし」（0 とは書かない。積み上がっていないのではなく、
-    数える相手がいない）。移行した発売済の案件はアプリで G5 を通していないので数えない。"""
-    from app import gate
-    titles = [t for t, _d, _r in gate.POST_LAUNCH_TASKS]
-    marks = ",".join("?" * len(titles))
-    base = {"label": "発売後チェックの未処理", "link": "#/tasks?when=overdue"}
-    total = store.val(f"SELECT COUNT(*) FROM task WHERE title IN ({marks})", titles, 0)
+    まだ1件も作っていないなら「対象なし」（0 とは書かない。数える相手がいない）。"""
+    base = {"label": "発売後チェックの未処理", "link": "#/tasks?when=overdue&tab=work"}
+    total = store.val("SELECT COUNT(*) FROM work_item WHERE origin IS NOT NULL", (), 0)
     if not total:
         return {**base, "value": None, "state": "対象なし",
-                "why": "アプリで G5（発売可）を通した案件がまだありません。G5 を通すと、発売+2週・+2か月の確認タスクが起票され、ここで数えます"}
+                "why": "G5（発売可）を通すと、発売後の生産確認・モール出品などが案件外の仕事として作られ、ここで数えます"}
     today = store.today_s()
-    n = store.val(f"SELECT COUNT(*) FROM task WHERE title IN ({marks}) AND status NOT IN ('完了','対象外') "
-                  "AND due_on IS NOT NULL AND due_on <= ?", (*titles, today), 0)
+    n = store.val("SELECT COUNT(*) FROM work_item WHERE origin IS NOT NULL AND status NOT IN ('完了','対象外') "
+                  "AND due_on IS NOT NULL AND due_on <= ?", (today,), 0)
     return {**base, "value": f"{n} 件", "count": n, "state": "未処理あり" if n else "なし",
-            "why": f"発売後の確認タスク {total} 件のうち、期限が来て完了していないもの"}
+            "why": f"発売後の仕事（案件外）{total} 件のうち、期限が来て完了していないもの"}
