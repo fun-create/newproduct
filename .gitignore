@@ -48,3 +48,7 @@ _backup_*/
 # 2026-09-20、keiei で本番作業したときに 982行（userID・machineID・機能フラグの
 # キャッシュ）が commit に紛れ込み、GitHub へ出るところだった
 .claude.json
+# 社内の Windows から週次レポートを受け取る口の鍵（2026-11-10・ADR-138・0600）。**絶対に入れない**
+config/weekly_feed_token
+config/calfc_callback_token
+config/secretary_guide_token

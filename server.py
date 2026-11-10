@@ -399,6 +399,28 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(400, {"error": str(e)})
             store.audit("svc:" + actor, "task.done_from_calfc", str(d.get("ext_ref") or ""), r, self.client_address[0])
             return self.sendj(200, r)
+        if path in ("/api/feed/weekly-report", "/api/feed/weekly-report/known"):
+            # 社内の Windows から週次レポートを受け取る（2026-11-10 依頼書 2-5・ADR-138）。**外から届く口**（Caddy 経由）。
+            # 専用の鍵（config/weekly_feed_token）だけを通す。受け取れるのは週次売上分析の Excel だけ
+            from app import weeklyfeed
+            if not weeklyfeed.token_ok((self.headers.get("X-Feed-Token") or "").strip()):
+                return self.sendj(403, {"error": "forbidden"})
+            if path.endswith("/known"):
+                if method != "GET":
+                    return self.sendj(405, {"error": "GET だけ"})
+                return self.sendj(200, {"sha256": weeklyfeed.known()})
+            if method != "POST":
+                return self.sendj(405, {"error": "POST だけ"})
+            from urllib.parse import unquote
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > weeklyfeed.MAX_BYTES:
+                return self.sendj(400, {"error": f"大きさが合いません（{n} バイト）"})
+            data = self.rfile.read(n)
+            try:
+                r = weeklyfeed.receive(unquote(self.headers.get("X-File-Name") or ""), data, "windows", "feed:windows")
+            except ValueError as e:
+                return self.sendj(400, {"error": str(e)})
+            return self.sendj(200, r)
         if path.startswith("/api/svc/"):
             # 既定拒否。3点判定を通ったものだけ
             if not self.svc_ok():
@@ -682,8 +704,8 @@ class H(BaseHTTPRequestHandler):
             return self.sendj(200, sales_m.new_product_summary())
         # 新商品の売上（週次レポートから取り込む・H06 段階1・ADR-131）。見るのは全員、取り込み・登録は商品開発部・管理者・社長
         if parts == ["sales", "weekly-newprod"] and method == "GET":
-            from app import newprod
-            return self.sendj(200, newprod.view())
+            from app import newprod, weeklyfeed
+            return self.sendj(200, {**newprod.view(), "feed": weeklyfeed.status()})
         if len(parts) == 3 and parts[:2] == ["sales", "weekly-newprod"] and method == "POST":
             from app import gate, newprod
             if not set(gate.roles_of(uid)) & {"devdept", "admin", "president"}:
@@ -695,7 +717,8 @@ class H(BaseHTTPRequestHandler):
                     raw = base64.b64decode(d.get("data", ""), validate=True)
                 except ValueError:
                     return self.sendj(400, {"error": "ファイルを読めませんでした（送り直してください）"})
-                r = newprod.ingest(d.get("name", ""), raw, uid)      # ファイルは保存しない
+                from app import weeklyfeed                           # 自動送信と同じ記録・同じ二重防止（ADR-138）
+                r = weeklyfeed.receive(d.get("name", ""), raw, "画面:" + uid, uid)      # ファイルは保存しない
                 return self.sendj(200, r)
             if parts[2] == "register":
                 d = self.body()
@@ -1093,6 +1116,9 @@ class H(BaseHTTPRequestHandler):
                 r = project_m.set_launch_date(pid, d.get("launch_date", ""), d.get("reason", ""), uid)
                 store.audit(uid, "project.launch_date", pid, {k: d.get(k) for k in ("launch_date", "reason")}, ip)
                 return self.sendj(200, r)
+            if what == "launch-link-retry":
+                from app import launchlink
+                return self.sendj(200, launchlink.retry(pid, d.get("kind", ""), uid))
             if what == "plc":
                 from app import followup
                 r = followup.set_plc(pid, d.get("value", ""), uid)

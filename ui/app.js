@@ -837,8 +837,10 @@
     loading();
     var q = hashQuery();
     var qs = [];
-    // 既定は未発売の案件だけ（2026-11-09 修正依頼書 H04）。発売済みは「ステージ」で選ぶと出る
-    var stageQ = q.get("stage") || "_active";
+    // 既定はステージ「開発中」だけ（2026-11-10 追加修正依頼書 4-2。11-09 H04 の「未発売」から変更）。
+    // 「未発売」（保留など開発中以外も含む）・発売済み・すべては「ステージ」で選ぶ。リンクで stage が付いていればそれを守る
+    var STAGE_DEFAULT = "開発中";
+    var stageQ = q.get("stage") || STAGE_DEFAULT;
     qs.push("stage=" + encodeURIComponent(stageQ));
     ["flow", "owner", "launch_month", "source_of_truth"].forEach(function (k) {
       if (q.get(k)) qs.push(k + "=" + encodeURIComponent(q.get(k)));
@@ -860,9 +862,10 @@
         });
         return s;
       }
-      var ss = sel("stage", "ステージ", [{ code: "_launched", label: "発売済み（発売済・追跡中・評価完了）" }, { code: "_all", label: "すべての案件" }]
-        .concat(d.filters.stage), stageQ);
-      ss.firstChild.textContent = "未発売の案件（既定）";
+      var ss = sel("stage", "ステージ", [{ code: "_active", label: "未発売の案件（開発中・保留などすべて）" },
+        { code: "_launched", label: "発売済み（発売済・追跡中・評価完了）" }, { code: "_all", label: "すべての案件" }]
+        .concat(d.filters.stage.filter(function (s) { return (s.code || s) !== STAGE_DEFAULT; })), stageQ === STAGE_DEFAULT ? "" : stageQ);
+      ss.firstChild.textContent = "開発中（既定）";
       f.appendChild(ss);
       f.appendChild(sel("flow", "フロー", d.filters.flow, q.get("flow")));
       f.appendChild(sel("owner", "担当", d.filters.owner, q.get("owner")));
@@ -878,8 +881,9 @@
       });
       b.appendChild(f);
 
-      if (stageQ === "_active") b.appendChild(el("p", { "class": "np-sub", text: "発売済みの案件は出していません。見るときは「ステージ」で「発売済み」か「すべての案件」を選びます。" }));
-      if (!d.rows.length && stageQ !== "_active") {
+      if (stageQ === STAGE_DEFAULT) b.appendChild(el("p", { "class": "np-sub", text: "ステージが「開発中」の案件だけを出しています。保留・発売済みなどは「ステージ」で「未発売の案件」「発売済み」「すべての案件」などを選びます。" }));
+      else if (stageQ === "_active") b.appendChild(el("p", { "class": "np-sub", text: "発売済みの案件は出していません（保留なども含めた未発売の案件）。" }));
+      if (!d.rows.length && stageQ !== STAGE_DEFAULT) {
         b.appendChild(el("p", { "class": "np-note", text: "この条件の案件はありません。" }));
       } else if (!d.rows.length) {
         b.appendChild(el("p", { "class": "np-note",
@@ -1038,7 +1042,6 @@
           row("社内呼称", dash(h.internal_name)),
           row("分類・サイズ", h.product),
           row("開発タイプ", h.flow_label),
-          row("発売予定日", dash(h.launch_date)),
           row("機会（なぜその日か）", dash(h.occasion)),
           row("作成エリア", dash(h.area)),
           row("担当", dash(h.owner)),
@@ -1053,9 +1056,10 @@
         if (h.flow_note) head.appendChild(el("p", { "class": "np-warn", text: h.flow_note }));
         if (h.editable) head.appendChild(headerEdit(d.id, h, meta));
         head.insertBefore(gateStrip(d.gates, true), head.children[1] || null);
+        // 発売予定日は見出しのすぐ下（2026-11-10 追加修正依頼書 4-3）。ここで変えて、そのまま日程の見込みへ
+        head.insertBefore(launchBand(d), head.children[1] || null);
         if (h.editable) head.appendChild(stageControl(d, meta));
         if (h.editable) head.appendChild(revenueControl(d));
-        if (h.editable) head.appendChild(launchControl(d));
         b.appendChild(head);
 
         // B. いま欠けているもの（最上段）
@@ -1426,6 +1430,27 @@
       + (np.period ? "。" + np.source + " の売上 " + yen(np.period.sales) + "・期間目標 " + yen(np.period.target_sales, "—")
         + (np.period.rate === null ? "" : "・達成率 " + Math.round(np.period.rate * 100) + "%") + "・今年の累計 " + yen(np.cumulative_sales) : "")
       + (np.state === "登録待ち" ? "。新商品マスタに足したら「売上・原価」の「新商品の売上（週次レポート）」で登録済みにします" : "") }));
+    // 発売済みにしたときの CIP の確認（4-5・ADR-137）。発売済みのステージとは別。済んでいないものだけもう一度
+    (d.launch_links || []).forEach(function (l) {
+      var lb = el("div", { "class": l.state === "済" ? "np-note" : "np-warn" });
+      lb.appendChild(el("p", null, [txt((l.kind === "cip" ? "CIP の登録の確認" : l.kind) + ": " + l.state + "　" + l.summary
+        + "（" + l.checked_at + "・" + l.tries + " 回目）")]));
+      var items = (l.detail && l.detail.items) || [];
+      if (items.length) lb.appendChild(table(["単位", "共通商品コード", "結果", "理由"], items.map(function (i) {
+        return el("tr", null, [el("td", { text: i.label }), el("td", { text: dash(i.code) }), el("td", { text: i.state }), el("td", { text: dash(i.why) })]);
+      })));
+      if (l.detail && l.detail.note) lb.appendChild(el("p", { "class": "np-sub", text: l.detail.note }));
+      if (l.state !== "済") {
+        var rb = el("button", { type: "button", text: "もう一度確かめる" });
+        rb.addEventListener("click", function () {
+          rb.disabled = true;
+          post("/api/projects/" + encodeURIComponent(d.id) + "/launch-link-retry", { kind: l.kind }).then(function () { go(); })
+            .catch(function (e) { rb.disabled = false; lb.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
+        });
+        lb.appendChild(btnRow([rb]));
+      }
+      box.appendChild(lb);
+    });
     if ((d.followups || []).length) {
       box.appendChild(table(["仕事", "担当区分", "期限", "進捗"], d.followups.map(function (w) {
         return el("tr", null, [el("td", null, [el("a", { href: "#/tasks?when=all&tab=work&focus=work_item-" + w.id, text: w.title })]),
@@ -1734,7 +1759,7 @@
     return w;
   }
 
-  /** 売上計上（F-4-9）。**既定は含めない。**含めるなら全額か増分（同じ商品番号の前年との差） */
+  /** 売上計上（F-4-9）。**既定は「含める（全額）」**（2026-11-10 依頼書 4-1・ページリニューアルだけ既定は含めない）。増分（同じ商品番号の前年との差）にも変えられる */
   function revenueControl(d) {
     var f = el("form", { "class": "np-inline" });
     var sel = el("select", { "aria-label": "売上計上" });
@@ -1876,12 +1901,40 @@
       }
     }).catch(function (e) { while (box.firstChild) box.removeChild(box.firstChild); box.appendChild(el("p", { "class": "np-err", text: e.message })); });
   }
+  /** 案件ページの上の発売予定日（4-3）。大きく出し、同じ場所で変える。別の日付欄は作らない（launch-date の口をそのまま使う） */
+  function launchBand(d) {
+    var h = d.header, w = el("div", { "class": "np-launch", id: "np-launch" });
+    var ld = h.launch_date, big = el("p", { "class": "np-launch-date" });
+    if (ld) {
+      var p = ld.split("-"), dd = new Date(+p[0], +p[1] - 1, +p[2]);
+      var t = (d.today || "").split("-"), td = new Date(+t[0], +t[1] - 1, +t[2]);
+      var n = Math.round((dd - td) / 86400000);
+      big.appendChild(el("span", { "class": "np-launch-label", text: "発売予定日" }));
+      big.appendChild(el("strong", { text: ld + "（" + "日月火水木金土".charAt(dd.getDay()) + "）" }));
+      big.appendChild(el("span", { "class": "np-sub", text: n > 0 ? "あと " + n + " 日" : n === 0 ? "今日" : (-n) + " 日前" }));
+    } else {
+      big.appendChild(el("span", { "class": "np-launch-label", text: "発売予定日" }));
+      big.appendChild(el("strong", { text: "未定" }));
+    }
+    w.appendChild(big);
+    // 年間プランの枠と月がずれたら知らせる（枠は版の約束なので、ここでは書き換えない）
+    (h.plan_slots || []).forEach(function (s) {
+      if (ld && s.launch_month && ld.slice(0, 7) !== s.launch_month)
+        w.appendChild(el("p", { "class": "np-warn", text: "年間プラン（" + s.fiscal_year + "年度・" + s.state + "）の枠は " + s.launch_month
+          + (s.launch_date ? "（" + s.launch_date + "）" : "") + " のままです。枠の月を合わせるときは、年間プランの改訂下書きで直します。" }));
+    });
+    if (h.editable) {
+      w.appendChild(launchControl(d));
+      w.appendChild(el("p", { "class": "np-sub", text: "変えると、発売後の仕事（未完了）の期限も合わせます。続けて、未完了タスクの開始日・期限の変更前後を出します（完了・対象外・日付固定のタスクは動かしません）。" }));
+    }
+    return w;
+  }
   function launchControl(d) {
     var f = el("form", { "class": "np-inline" });
     var di = el("input", { type: "date", name: "launch_date", "aria-label": "発売予定日" });
     if (d.header.launch_date) di.setAttribute("value", d.header.launch_date);
     var ri = el("input", { name: "reason", maxlength: "200", placeholder: "理由（必須）", "aria-label": "発売予定日を変える理由" });
-    [txt("発売予定日: "), di, txt(" "), ri, txt(" "), el("button", { type: "submit", text: d.header.launch_date ? "変える" : "入れる" })]
+    [txt("変える: "), di, txt(" "), ri, txt(" "), el("button", { type: "submit", text: d.header.launch_date ? "発売日を変える" : "発売日を入れる" })]
       .forEach(function (x) { f.appendChild(x); });
     var msg = el("span", { "class": "np-sub", role: "status" });
     f.appendChild(msg);
@@ -1892,6 +1945,13 @@
           // 保存したら、その場でタスクの日程の見込みを出す（FR-225。反映するかは人が決める）
           while (msg.firstChild) msg.removeChild(msg.firstChild);
           msg.appendChild(txt(" 発売予定日を保存しました。"));
+          // 上の大きな日付も新しい日に（4-3。見出しのすぐ下の帯）
+          var bandDate = f.closest && f.closest(".np-launch") && f.closest(".np-launch").querySelector(".np-launch-date strong");
+          if (bandDate) {
+            var q = (di.value || "").split("-");
+            bandDate.textContent = di.value ? di.value + "（" + "日月火水木金土".charAt(new Date(+q[0], +q[1] - 1, +q[2]).getDay()) + "）" : "未定";
+            var ago = bandDate.nextSibling; if (ago) ago.textContent = "保存しました";
+          }
           var box = el("div", { "class": "np-card np-resched", id: "np-resched-after" });
           f.parentNode.insertBefore(box, f.nextSibling);
           reschedulePanel(d.id, box, { from: d.header.launch_date, title: "タスクの日程も、新しい発売予定日に合わせますか？" });
@@ -6583,13 +6643,32 @@
       api("/api/sales/weekly-newprod").then(function (v) {
         var s = v.snapshot;
         body.appendChild(el("p", { "class": "np-sub", text: s
-          ? "出どころ: 週次レポート " + s.period_from + "〜" + s.period_to + "（" + s.file_name + "・取り込み " + s.received_at + "）。発売から1年以内の案件を出しています"
+          ? "出どころ: 週次レポート " + s.period_from + "〜" + s.period_to + "（" + s.file_name + "・取り込み " + s.received_at + "）。発売から1年以内（" + v.since + " より後の発売）の案件を出しています。1年を過ぎた案件は集計から外します（記録は消しません）"
           : "まだ取り込んでいません。月曜の「週次売上分析_….xlsx」を下で選んで取り込みます" }));
+        // 自動送信（社内の Windows から・2026-11-10 依頼書 2-5・ADR-138）。最終成功・まだ直っていない失敗・直近の記録
+        var fd = v.feed || {}, fb = el("details", { "class": "np-fold-plain" });
+        var fl = fd.last_success;
+        fb.appendChild(el("summary", { text: "自動送信（Windows から）: "
+          + (fd.last_windows ? "最後に届いたのは " + fd.last_windows : "まだ届いていません")
+          + (fl ? "・最終成功 " + fl.received_at + "（" + fl.file_name + "）" : "")
+          + (fd.open_errors && fd.open_errors.length ? "・失敗 " + fd.open_errors.length + " 件" : "")
+          + "・取り込んだ期間 " + (fd.periods || 0) + " 本" }));
+        if (!fd.configured) fb.appendChild(el("p", { "class": "np-warn", text: "受け取る口の鍵がまだ置かれていません（サーバの config/weekly_feed_token）。" }));
+        (fd.open_errors || []).forEach(function (e) {
+          fb.appendChild(el("p", { "class": "np-warn", text: e.received_at + "　" + e.file_name + "：" + (e.error || "") + "（Windows の次の実行で送り直します。すぐなら Windows のタスクを「実行する」）" }));
+        });
+        if ((fd.recent || []).length) fb.appendChild(table(["受け取った日時", "ファイル", "期間", "結果", "どこから"], fd.recent.map(function (x) {
+          return el("tr", null, [el("td", { "class": "np-nowrap", text: x.received_at }), el("td", { text: x.file_name }),
+            el("td", { "class": "np-nowrap", text: x.period_from ? x.period_from + "〜" + x.period_to : "—" }),
+            el("td", { text: x.result + (x.error ? "：" + x.error : "") }), el("td", { text: x.source })]);
+        })));
+        fb.appendChild(el("p", { "class": "np-sub", text: "同じファイルは2度取り込みません。同じ期間で中身が違うファイルは訂正版として入れ替えます（足し合わせません）。画面は最新の期間の1本だけを出します。" }));
+        body.appendChild(fb);
         if (s && s.total) body.appendChild(kpiRow([
           kpi("期間の売上（新商品の合計）", yen(s.total.sales), "週次レポートの合計行", null, null),
           kpi("期間の目標", yen(s.total.target_sales), null, null, null),
           kpi("達成率", s.total.target_sales ? Math.round(s.total.sales / s.total.target_sales * 100) + "%" : "—", null, null, null),
-          kpi("登録待ち", String(v.pending.length), "新商品マスタに足して登録する案件", null, null, { unit: "件", tone: v.pending.length ? "info" : null })]));
+          kpi("未紐付け", String(v.pending.length), "商品ラベルと結んでいない案件。売上は 0 ではなく未集計", null, null, { unit: "件", tone: v.pending.length ? "info" : null })]));
         if (v.rows.length) body.appendChild(table(["商品（案件）", "発売日", "経過", "期間の売上", "期間の目標", "達成率", "今年の累計", "商品ラベル"], v.rows.map(function (r) {
           var p = r.period || {};
           return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.internal_name || r.id })]),
@@ -6599,7 +6678,7 @@
             el("td", { "class": "np-num", text: r.monthly ? yen(r.monthly.cumulative_sales) : "—" }), el("td", { text: r.labels.join("、") })]);
         })));
         if (v.pending.length) {
-          body.appendChild(el("h3", { text: "登録待ち（G5 を通した・新商品マスタへの登録を待つ）" }));
+          body.appendChild(el("h3", { text: "未紐付け（週次レポートの商品ラベルと結んでいない案件・売上は 0 ではなく未集計）" }));
           body.appendChild(el("p", { "class": "np-sub", text: "新商品マスタに1行足したら、その商品ラベルを選んで「登録済みにする」を押します（案件の「新商品売上レポートに計上するよう設定」も完了になります）。キーワードは sales.csv の商品名の実表記と照合して決めます" }));
           v.pending.forEach(function (p) {
             var f = el("form", { "class": "np-inline" });
@@ -6624,6 +6703,8 @@
             body.appendChild(f);
           });
         }
+        if ((v.expired || []).length) body.appendChild(el("p", { "class": "np-sub" }, [txt("発売から1年を過ぎて集計から外した案件（記録はカルテで見られます）: ")].concat(
+          v.expired.map(function (p, i) { return el("span", null, [txt(i ? "、" : ""), el("a", { href: "#/projects/" + encodeURIComponent(p.id), text: (p.internal_name || p.id) + "（" + p.launch_date + "）" })]); }))));
         if (v.unlinked_labels.length) body.appendChild(el("p", { "class": "np-sub", text: "案件と結んでいない商品ラベル " + v.unlinked_labels.length
           + " 件（移行前からの新商品・LOVOT など）: " + v.unlinked_labels.map(function (r) { return r.label; }).join("、") }));
         // 取り込み
@@ -6640,7 +6721,7 @@
             var b64 = String(rd.result).split(",")[1] || "";
             ust.textContent = "取り込み中…";
             post("/api/sales/weekly-newprod/upload", { name: fl.name, data: b64 })
-              .then(function (r) { ust.textContent = r.period_from + "〜" + r.period_to + " を取り込みました（" + r.labels + " 商品）"; load(); })
+              .then(function (r) { ust.textContent = r.period_from + "〜" + r.period_to + "：" + r.result + (r.labels !== undefined ? "（" + r.labels + " 商品）" : ""); load(); })
               .catch(function (e) { ust.textContent = "できませんでした: " + e.message; });
           };
           rd.readAsDataURL(fl);

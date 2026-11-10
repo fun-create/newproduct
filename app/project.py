@@ -59,6 +59,7 @@ STAGES = ["起票", "評価済", "候補", "年間プラン採択", "コンセ�
           "開発中", "生産確定", "発売済", "追跡中", "評価完了", "保留", "中止"]
 
 REVENUE_BASIS = ["全額", "増分"]
+REVENUE_OPT_OUT = ("pagerenew",)       # 既定で新商品売上に含めない開発タイプ（ページリニューアル）
 
 
 def product_label(p: dict) -> str:
@@ -106,9 +107,14 @@ def create(user_id: str, expand: bool = True, **f) -> dict:
     if ft and fl is None:
         raise ValueError(f"知らない開発タイプ {ft!r}")
     pid = store.new_id("project")
-    # 既定は false（F-4-9）。ページリニューアルを黙って新商品売上に混ぜない
-    rc = 1 if str(f.get("revenue_counted") or "0") in ("1", "true", "含める") else 0
-    basis = (f.get("revenue_basis") or "").strip() or None
+    # 既定は「含める・全額」（2026-11-10 追加修正依頼書 4-1）。**ページリニューアルだけは含めない**のまま
+    # （F-4-9「黙って新商品売上に混ぜない」・十文字さんの選択 11-10）。送られてきたらそれを守る
+    if f.get("revenue_counted") in (None, ""):
+        rc = 0 if ft in REVENUE_OPT_OUT else 1
+        basis = "全額" if rc else None
+    else:
+        rc = 1 if str(f.get("revenue_counted")) in ("1", "true", "含める") else 0
+        basis = (f.get("revenue_basis") or "").strip() or None
     if rc and basis not in REVENUE_BASIS:
         raise ValueError("売上に含めるなら、計上方式（全額／増分）を選んでください")
     if not rc:
@@ -181,16 +187,18 @@ def expand_tasks(project_id: str, user_id: str) -> int:
     tpl = store.q("SELECT t.* FROM task_template t JOIN flow_type f ON f.code=t.flow_type "
                   "AND t.template_version=f.active_template_version WHERE t.flow_type=? ORDER BY t.seq",
                   (p["flow_type"],))
-    from app import schedule_rules
+    from app import schedule_rules, assign
+    am = assign.mapping()                     # 担当区分ごとの既定の担当者（2026-11-10 依頼書 §2-2）
     with store.tx() as c:
         for t in tpl:
             # 日程の計算ルールを**タスクに持つ**（テンプレートを改訂しても、この案件のルールは変わらない・FR-225）
             r = schedule_rules.rule_for(p["flow_type"], t["title"]) if t["kind"] != "予備" else None
             c.execute(
-                "INSERT INTO task (project_id,template_id,seq,title,role,hours,"
+                "INSERT INTO task (project_id,template_id,seq,title,role,assignee,hours,"
                 "status,ai_category,ai_reduction_rate,created_at,kind,rule_start,rule_due,rule_src) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (project_id, t["id"], t["seq"], t["title"], t["role"],
+                 assign.for_role(t["role"], None, am) if t["kind"] != "予備" else None,
                  t["standard_hours"], "未着手", t["ai_category"],
                  t["ai_reduction_rate"], store.now_s(), t["kind"],
                  r[0] if r else None, r[1] if r else None, r[2] if r else None))
@@ -276,7 +284,7 @@ def listing(args: dict | None = None) -> dict:
 
 
 def detail(project_id: str, user_id: str = "") -> dict | None:
-    from app import followup, newprod
+    from app import followup, launchlink, newprod
     r = store.one("SELECT * FROM project WHERE id=?", (project_id,))
     if r is None:
         return None
@@ -331,6 +339,11 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
                         else f"含める（{p['revenue_basis'] or '方式未選択'}）"),
             "source_of_truth": p["source_of_truth"],
             "editable": p["source_of_truth"] == "app",
+            # 結び付いた年間プランの枠（失効した版は除く）。発売予定日と月がずれたら画面で知らせる（2026-11-10 依頼書 4-3）
+            "plan_slots": store.rows(store.q(
+                "SELECT s.launch_month, s.launch_date, v.state, v.fiscal_year FROM plan_slot s "
+                "JOIN plan_version v ON v.id=s.version_id WHERE s.project_id=? AND v.state!='失効' "
+                "ORDER BY v.fiscal_year, v.state", (p["id"],))),
         },
         "gates": [{**g, "glyph": gate.STATES[g["state"]]["glyph"],
                    "word": gate.STATES[g["state"]]["word"]} for g in b],
@@ -341,6 +354,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
         # 発売後の仕事（案件外・ADR-128）と、生産確認の要否・時期（H07）
         "followups": followup.of_project(project_id),
         "newprod": newprod.of_project(project_id),       # 新商品の売上（週次レポート・ADR-131）
+        "launch_links": launchlink.of_project(project_id),  # 発売済みにしたときの CIP の確認（4-5・ADR-137）
         "improve_open": store.val("SELECT COUNT(*) FROM improve_request WHERE project_id=? "
                                   "AND status IN ('受付','検討中','対応中')", (project_id,), 0),   # 改善要望（ADR-132）
         "plc": followup.plc_setting(p),

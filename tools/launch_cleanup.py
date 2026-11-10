@@ -37,7 +37,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE))
 
-from app import followup, gate, seed, store, templates  # noqa: E402
+from app import assign, followup, gate, seed, store, templates  # noqa: E402
 
 REASON = "修正依頼書（2026-11-09）H05: 新商品の案件のタスクは発売まで。発売後の仕事は案件外の仕事・売上の集計で扱う"
 
@@ -109,10 +109,10 @@ def tasks(apply: bool, by: str) -> int:
             if c.execute("SELECT 1 FROM work_item WHERE project_id=? AND origin=?", (pid, k)).fetchone():
                 continue
             kk = followup.KINDS[k]
-            wid = c.execute("INSERT INTO work_item (kind,title,category,role,due_on,status,created_at,project_id,origin) "
-                            "VALUES ('案件外',?,?,?,?,'未着手',?,?,?)",
+            wid = c.execute("INSERT INTO work_item (kind,title,category,role,assignee,due_on,status,created_at,project_id,origin) "
+                            "VALUES ('案件外',?,?,?,?,?,'未着手',?,?,?)",
                             (kk["title"].format(name=t["internal_name"] or pid), kk["category"], kk["role"],
-                             t["due_on"], now, pid, k)).lastrowid
+                             assign.for_role(kk["role"]), t["due_on"], now, pid, k)).lastrowid
             c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                       (pid, now, by, "発売後の仕事を作った",
                        f"{kk['category']}（案件外の仕事 {wid}・期限 {t['due_on'] or '空'}）。元のタスク {t['id']} から移した"))

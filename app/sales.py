@@ -391,12 +391,12 @@ def _pdate(s: str):
 
 def new_product_summary() -> dict:
     import datetime as _dt
-    from app import project as project_m, salesfeed, store
+    from app import newprod, project as project_m, salesfeed, store
     today = salesfeed._today()
-    since = (today - _dt.timedelta(days=365)).isoformat()
+    since = newprod.window_since(today)                 # 週次レポートの表示と同じ境（4-1）。この日より後の発売
     launched = store.rows(store.q(
         "SELECT p.*, f.label AS flow_label FROM project p LEFT JOIN flow_type f ON f.code=p.flow_type "
-        "WHERE p.launch_date IS NOT NULL AND p.launch_date <= ? AND p.launch_date >= ? "
+        "WHERE p.launch_date IS NOT NULL AND p.launch_date <= ? AND p.launch_date > ? "
         "AND p.stage != '中止' ORDER BY p.launch_date", (today.isoformat(), since)))
     by_flow = {}
     for p in launched:

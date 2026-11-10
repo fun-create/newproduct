@@ -22,7 +22,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 
-from app import calfc, store
+from app import assign, calfc, store
 
 PLC_DEFAULT_FLOWS = ("freecut", "material", "meire", "readymade", "webdeco")
 MALL_FLOWS = ("freecut", "material", "meire", "newmodel", "readymade", "webdeco")
@@ -190,9 +190,10 @@ def ensure(pid: str, user_id: str) -> dict:
         due, note = due_for(rule, p["launch_date"])
         with store.tx() as c:
             wid = c.execute(
-                "INSERT INTO work_item (kind,title,category,role,due_on,status,created_at,project_id,origin) "
-                "VALUES ('案件外',?,?,?,?,'未着手',?,?,?)",
-                (k["title"].format(name=_name(p)), k["category"], k["role"], due, store.now_s(), pid, origin)).lastrowid
+                "INSERT INTO work_item (kind,title,category,role,assignee,due_on,status,created_at,project_id,origin) "
+                "VALUES ('案件外',?,?,?,?,?,'未着手',?,?,?)",
+                (k["title"].format(name=_name(p)), k["category"], k["role"], assign.for_role(k["role"]),
+                 due, store.now_s(), pid, origin)).lastrowid
             c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                       (pid, store.now_s(), user_id, "発売後の仕事を作った",
                        f"{k['category']}（案件外の仕事 {wid}・期限 {due}・{note}）"))

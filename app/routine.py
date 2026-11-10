@@ -18,7 +18,7 @@ import datetime as dt
 import re
 from pathlib import Path
 
-from app import store
+from app import assign, store
 
 CADENCES = {"yearly": "毎年", "monthly": "毎月", "weekly": "毎週", "daily": "毎日"}
 LEAD = {"weekly": 6, "monthly": 14, "yearly": 30}
@@ -103,7 +103,8 @@ def ensure(today: dt.date | None = None) -> int:
                     continue
                 wid = c.execute("INSERT INTO work_item (kind,title,category,role,assignee,due_on,hours,status,created_at) "
                                 "VALUES ('案件外',?,?,?,?,?,?,'未着手',?)",
-                                (r["title"], CATEGORY, r["role"], r["assignee"], d.isoformat(), r["hours"], now)).lastrowid
+                                (r["title"], CATEGORY, r["role"], assign.for_role(r["role"], r["assignee"]),
+                                 d.isoformat(), r["hours"], now)).lastrowid
                 c.execute("INSERT INTO routine_occurrence (routine_id,occurs_on,work_item_id,created_at) VALUES (?,?,?,?)",
                           (r["id"], d.isoformat(), wid, now))
                 n += 1

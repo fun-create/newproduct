@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from app import store
+from app import assign, store
 
 PRIORITIES = ("高", "中", "低", "未設定")
 STATUSES = ("受付", "検討中", "対応中", "完了", "見送り")
@@ -96,7 +96,7 @@ def _sync_task(c, r: dict) -> None:
     st = "完了" if r["status"] == "完了" else "対象外" if r["status"] == "見送り" else w["status"]
     c.execute("UPDATE work_item SET title=?, role=?, assignee=?, due_on=?, status=?, project_id=?, "
               "done_at=CASE WHEN ?='完了' THEN ? ELSE done_at END WHERE id=?",
-              (_task_title(r), r["role"], r["assignee"], r["due_on"], st, r["project_id"], st, store.now_s(),
+              (_task_title(r), r["role"], assign.for_role(r["role"], r["assignee"]), r["due_on"], st, r["project_id"], st, store.now_s(),
                r["work_item_id"]))
 
 
@@ -137,7 +137,8 @@ def to_task(rid: int, user_id: str) -> dict:
         wid = c.execute(
             "INSERT INTO work_item (kind,title,category,role,assignee,due_on,status,created_at,project_id,origin) "
             "VALUES ('案件外',?,?,?,?,?,'未着手',?,?,?)",
-            (_task_title(r), "改善要望", r["role"], r["assignee"], r["due_on"], store.now_s(), r["project_id"],
+            (_task_title(r), "改善要望", r["role"], assign.for_role(r["role"], r["assignee"]), r["due_on"],
+             store.now_s(), r["project_id"],
              f"improve-{rid}")).lastrowid
         c.execute("UPDATE improve_request SET work_item_id=?, status=CASE WHEN status IN ('受付','検討中') THEN '対応中' "
                   "ELSE status END, updated_at=?, updated_by=? WHERE id=?", (wid, store.now_s(), user_id, rid))

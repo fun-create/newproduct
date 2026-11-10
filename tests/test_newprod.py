@@ -149,6 +149,35 @@ class Newprod(unittest.TestCase):
         self.assertEqual((p["period"]["sales"], p["period"]["target_sales"]), (4000, 2000))
         self.assertEqual(p["period"]["rate"], 2.0)
 
+    def test_one_year_boundary_drops_from_count_but_keeps_record(self):
+        import datetime as dt
+        from unittest import mock
+        from app import newprod
+        self.assertEqual(newprod.window_since(dt.date(2026, 11, 10)), "2025-11-10")
+        self.assertEqual(newprod.window_since(dt.date(2028, 2, 29)), "2027-02-28")
+        self.assertTrue(newprod.in_window("2025-11-11", dt.date(2026, 11, 10)))
+        self.assertFalse(newprod.in_window("2025-11-10", dt.date(2026, 11, 10)))    # 1年たった日から外す
+        self.assertFalse(newprod.in_window("2026-11-11", dt.date(2026, 11, 10)))    # 発売前は数えない
+        newprod.ingest("週次売上分析_20261023-20261105.xlsx", xlsx({"新商品": SHEET}), "u")
+        newprod.register(self.pid, ["ウォールステッカー"], "u")
+        with mock.patch.object(self.store, "today", return_value=dt.date(2027, 9, 28)):
+            v = newprod.view()
+            self.assertEqual([r["id"] for r in v["rows"]], [self.pid])
+            self.assertEqual(v["expired"], [])
+        with mock.patch.object(self.store, "today", return_value=dt.date(2027, 9, 29)):
+            v = newprod.view()
+            self.assertEqual(v["rows"], [])
+            self.assertEqual([r["id"] for r in v["expired"]], [self.pid])         # 外しても一覧で見える
+            self.assertEqual(newprod.of_project(self.pid)["period"]["sales"], 81550)  # カルテの記録は残る
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM newprod_weekly", (), 0), 1)  # 取り込んだ数字は消さない
+
+    def test_unlinked_launched_project_is_pending_not_zero(self):
+        from app import newprod
+        newprod.ingest("週次売上分析_20261023-20261105.xlsx", xlsx({"新商品": SHEET}), "u")
+        v = newprod.view()
+        self.assertEqual([p["id"] for p in v["pending"]], [self.pid])            # 結んでいない発売済みは未紐付け
+        self.assertEqual(v["rows"], [])                                          # 0円の行にはしない
+
     def test_g5_puts_project_in_pending(self):
         from app import gate, newprod
         self.store.ex("UPDATE project SET stage='生産確定' WHERE id=?", (self.pid,))

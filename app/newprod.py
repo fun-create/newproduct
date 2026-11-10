@@ -27,6 +27,19 @@ _MONTH_ROWS = {"月間目標売上(円)": "target_sales", "売上金額(円)": "
                "月間目標数量(個)": "target_qty", "販売数量(個)": "qty"}
 
 
+def window_since(today: dt.date) -> str:
+    """新商品として数える期間の境（2026-11-10 追加修正依頼書 4-1）。**この日より後に発売したもの**が対象。
+    発売日の1年後の同じ日から外れる（2025-11-10 発売 → 2026-11-10 から対象外）。NEW PRODUCT の集計はすべてここを使う"""
+    try:
+        return today.replace(year=today.year - 1).isoformat()
+    except ValueError:                                  # 2/29
+        return today.replace(year=today.year - 1, day=28).isoformat()
+
+
+def in_window(launch: str | None, today: dt.date) -> bool:
+    return bool(launch) and window_since(today) < launch <= today.isoformat()
+
+
 def norm(s: str) -> str:
     return re.sub(r"[\s　（）()【】\[\]・/／※]", "", (s or "")).lower()
 
@@ -198,20 +211,21 @@ def _sum_monthly(monthly: dict, labels: list[str]) -> dict | None:
     return out
 
 
-def view(within_days: int = 365) -> dict:
-    """「売上・原価」の新商品の売上。発売から1年以内の案件と、週次レポートの最新の数字。"""
+def view() -> dict:
+    """「売上・原価」の新商品の売上。発売から1年以内の案件と、週次レポートの最新の数字。
+    1年を過ぎた案件は**集計から外すだけ**（商品・取り込んだ週次の数字・カルテの記録は消さない）。外れた案件は別に並べる"""
     snap = latest()
     today = store.today()
-    since = (today - dt.timedelta(days=within_days)).isoformat()
+    since = window_since(today)
     regs = {r["project_id"]: dict(r) for r in store.q("SELECT * FROM newprod_reg")}
     projects = store.rows(store.q(
         "SELECT id, internal_name, launch_date, stage FROM project WHERE stage IN ('発売済','追跡中','評価完了') "
-        "AND launch_date IS NOT NULL AND launch_date >= ? ORDER BY launch_date DESC", (since,)))
+        "AND launch_date IS NOT NULL AND launch_date > ? ORDER BY launch_date DESC", (since,)))
     ids = {p["id"] for p in projects}
     for pid in regs:                                  # G5 を通したが発売日が1年より前、は出さない。発売日の無い登録待ちは出す
         if pid not in ids:
             p = store.one("SELECT id, internal_name, launch_date, stage FROM project WHERE id=?", (pid,))
-            if p is not None and (not p["launch_date"] or p["launch_date"] >= since):
+            if p is not None and (not p["launch_date"] or p["launch_date"] > since):
                 projects.append(dict(p))
     labels_used, rows, pending = set(), [], []
     for p in projects:
@@ -230,11 +244,18 @@ def view(within_days: int = 365) -> dict:
                      "monthly": _sum_monthly(snap["monthly"], labels) if snap else None,
                      "elapsed_days": (today - dt.date.fromisoformat(p["launch_date"])).days if p["launch_date"] else None})
     others = [r for r in (snap["rows"] if snap else []) if r["label"] not in labels_used]
+    expired = []                                       # 発売から1年を過ぎて外れた（登録済みのもの）
+    for pid, g in regs.items():
+        if pid in ids or g["state"] != DONE:
+            continue
+        p = store.one("SELECT id, internal_name, launch_date FROM project WHERE id=?", (pid,))
+        if p is not None and p["launch_date"] and p["launch_date"] <= since:
+            expired.append({**dict(p), "labels": json.loads(g["labels"]) if g["labels"] else []})
     return {"snapshot": ({k: snap[k] for k in ("period_from", "period_to", "file_name", "received_at", "total")}
                          if snap else None),
             "rows": rows, "pending": pending, "unlinked_labels": others,
             "all_labels": [r["label"] for r in (snap["rows"] if snap else [])],
-            "within_days": within_days}
+            "since": since, "expired": expired}
 
 
 def of_project(pid: str) -> dict:

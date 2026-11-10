@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime as _dt
 
 from . import store
+from . import assign
 from . import plan as _plan
 
 STATUSES = ["未着手", "着手", "完了", "保留", "対象外"]
@@ -717,7 +718,7 @@ def add_task(project_id: str, f: dict, user_id: str) -> dict:
             seq = c.execute("SELECT COALESCE(MAX(seq),0)+1 FROM task WHERE project_id=? AND seq<900", (project_id,)).fetchone()[0]
         tid = c.execute("INSERT INTO task (project_id,seq,title,role,assignee,start_on,due_on,hours,status,created_at,kind) "
                         "VALUES (?,?,?,?,?,?,?,?,'未着手',?,'実作業')",
-                        (project_id, seq, v["title"], v.get("role"), (f.get("assignee") or "").strip() or None,
+                        (project_id, seq, v["title"], v.get("role"), assign.for_role(v.get("role"), f.get("assignee")),
                          v.get("start_on"), v.get("due_on"), v.get("hours"), store.now_s())).lastrowid
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what) VALUES (?,?,?,?)",
                   (project_id, store.now_s(), user_id, f"タスクを足した: {seq} {v['title']}"))
@@ -785,7 +786,7 @@ def create_work_item(f: dict, user_id: str) -> dict:
         wid = c.execute("INSERT INTO work_item (kind,title,category,dept,role,assignee,due_on,hours,"
                         "status,created_at) VALUES (?,?,?,?,?,?,?,?,'未着手',?)",
                         (kind, title, (f.get("category") or "").strip()[:60] or None, dept, role,
-                         assignee or None, due, hours,
+                         assign.for_role(role, assignee), due, hours,
                          store.now_s())).lastrowid
     return {"ok": True, "id": wid}
 

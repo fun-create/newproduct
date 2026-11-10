@@ -490,6 +490,8 @@ def run() -> dict:
     auto_m.seed_settings()
     from app import ask as ask_m
     ask_m.seed_settings()
+    from app import assign as assign_m
+    assign_m.seed_settings()
     # AI予算の確認先（FR-146）。**枠の正本は Auto GROWTH**
     ai_budget.seed_settings()
     store.conn().commit()

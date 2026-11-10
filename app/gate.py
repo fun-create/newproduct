@@ -312,9 +312,11 @@ def _launched(proj: dict, user_id: str) -> dict:
             c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                       (proj["id"], store.now_s(), user_id, "ステージ", f"{proj.get('stage')} → 発売済（G5 通過）"))
         moved = True
-    from app import followup, newprod
+    from app import followup, launchlink, newprod
     newprod.on_launched(proj["id"])                 # 新商品の売上の「登録待ち」へ（H06 段階1・ADR-131）
-    return {"stage_moved": moved, "followup": followup.ensure(proj["id"], user_id)}
+    fu = followup.ensure(proj["id"], user_id)
+    # CIP の登録を確かめる（4-5・ADR-137）。**結果が何でも発売済みは戻さない**（連携の状態は別に持つ）
+    return {"stage_moved": moved, "followup": fu, "links": launchlink.on_launched(proj["id"], user_id)}
 
 
 def reasons() -> dict:

@@ -570,3 +570,10 @@ dialog.np-ask textarea.np-ask-text { min-height: 12em; resize: vertical; }
 .np-ask-text { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: .9rem; background: var(--fca-bg);
   border: 1px solid var(--fca-line); border-radius: 6px; padding: .6rem .8rem; max-height: 38vh; overflow: auto; margin: .2rem 0 .5rem; }
 button.np-btn-cw { white-space: nowrap; }
+/* 案件ページの上の発売予定日（2026-11-10 追加修正依頼書 4-3） */
+.np-launch { margin: .4rem 0 .8rem; padding: .6rem .9rem; border: 1px solid var(--fca-line); border-left: 4px solid var(--fca-gold);
+  border-radius: 8px; background: var(--fca-bg); }
+.np-launch-date { margin: 0 0 .3rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; }
+.np-launch-date strong { font-size: 1.35rem; color: var(--fca-navy); }
+.np-launch-label { font-size: .85rem; color: var(--fca-muted); }
+.np-launch form.np-inline { flex-wrap: wrap; }

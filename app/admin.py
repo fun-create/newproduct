@@ -61,6 +61,19 @@ def _accounts(v, label):
     return "、".join(f"{k}={a}" for k, a in m.items())
 
 
+def _default_assignees(v, label):
+    """担当区分=利用者ID（2026-11-10 依頼書 §2-2）。知らない区分・知らない利用者・他部署パートさんは断る"""
+    from app import assign, task
+    roles = {r["code"] for r in store.q("SELECT code FROM role")}
+    try:
+        m = assign.parse(v, roles=roles)
+        for u in m.values():
+            task.check_user(u)
+    except ValueError as e:
+        raise ValueError(f"{label}: {e}") from None
+    return "、".join(f"{k}={u}" for k, u in m.items())
+
+
 def _rooms_by_category(v, label):
     from app import automation
     m = automation.parse_rooms_by_category(v)
@@ -93,6 +106,7 @@ EDITABLE = {
     "plan.ratio_original_to_uchiwa": (BIZ_CORE, _ratio, "年間プランの挿入ルール"),
     "plan.ratio_tolerance_slots":   (BIZ_CORE, _num(0, 50), "年間プランの挿入ルール"),
     "plan.task_setup_lead_months":  (BIZ_DEV, _num(0, 12, integer=True), "年間プランの挿入ルール"),
+    "task.default_assignees":       (BIZ_DEV, _default_assignees, "タスクの担当"),
     "automation.chatwork_room_id":  (APP_ADMIN, _room, "接続先"),
     "automation.chatwork_rooms_by_category": (APP_ADMIN, _rooms_by_category, "接続先"),
     "automation.app_base_url":      (APP_ADMIN, _url, "接続先"),
@@ -107,7 +121,7 @@ LOCKED = {
     "plan.fiscal_year_start_month": "このアプリでは使っていません",
     "ai.usage_endpoint": "書き換えると別のものにつながるため、画面からは変えません",
 }
-GROUP_ORDER = ("原価・価格", "競合の推計", "在庫と目標", "年間プランの挿入ルール", "接続先", "変えないもの")
+GROUP_ORDER = ("原価・価格", "競合の推計", "在庫と目標", "年間プランの挿入ルール", "タスクの担当", "接続先", "変えないもの")
 ROLE_LABEL = {"admin": "商品開発部管理者", "president": "社長", "devdept": "商品開発部", "prod": "生産部"}
 
 
@@ -154,6 +168,9 @@ DESC = {
     "automation.chatwork_room_id": "自動化依頼を渡す ChatWork の部屋（既定）",
     "automation.chatwork_rooms_by_category": "依頼の種類（画像/データ作成・登録作業・調査・書類作成 など）ごとに送り先の部屋を分けるとき。「種類=部屋ID」を 、 で区切る。無い種類は既定の部屋",
     "automation.app_base_url": "自動化依頼を ChatWork に送るとき、本文に載せるこのアプリの URL",
+    "task.default_assignees": ("タスクを作るとき、担当者が空なら担当区分からこの人を入れる。「担当区分=利用者ID」を 、 で区切る"
+                               "（member=商品開発部メンバー・admin=商品開発部管理者・devdept=商品開発部・webmkt=Webマーケ・prod=生産部・se=SE部・cs=CS部）。"
+                               "他部署パートさん（part）と表に無い区分は空のまま。人が選んだ担当は上書きしない"),
     "ask.chatwork_room_id": "「ChatWork で承認依頼する」などのボタンで送る部屋（既定は FUN 商品開発）。送り主は FUN-CREATE BOT",
     "ask.chatwork_accounts": "TO にする ChatWork の account_id。部屋のメンバーの名前と利用者の名前が合わない人だけ「user_id=account_id」を 、 で区切って入れる",
     "ai.usage_endpoint": "AI採点の予算の残りを確かめる先（Auto GROWTH）",

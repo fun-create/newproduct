@@ -262,7 +262,11 @@ class Feed(unittest.TestCase):
             c.execute("INSERT INTO seisan_registration (project_id,state,product_code) VALUES (?,?,?)", (old, "登録済", "P2"))
         n = self.m.new_product_summary()
         self.assertEqual(n["count"], 2)
-        self.assertEqual(n["counted"], 0, "既定は売上に含めない")
+        self.assertEqual(n["counted"], 2, "既定は売上に含める（2026-11-10 依頼書 4-1）")
+        self.assertEqual({r["basis"] for r in n["rows"]}, {"全額"}, "既定の方式は全額")
+        pr = project.create("u", expand=False, internal_name="ページ", flow_type="pagerenew", launch_date="2026-08-02")["id"]
+        self.assertEqual(self.m.new_product_summary()["counted"], 2, "ページリニューアルは既定で含めない")
+        project.set_revenue(old, False, "", "u")
         with self.assertRaises(ValueError):
             project.set_revenue(pid, True, "", "u")                       # 方式が要る
         project.set_revenue(pid, True, "全額", "u")
