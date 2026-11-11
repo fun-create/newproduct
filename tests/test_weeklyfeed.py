@@ -74,6 +74,18 @@ class Feed(unittest.TestCase):
         self.assertEqual(len(self.m.status()["open_errors"]), 1)           # 送り直して直ったものは消える
         self.assertIsNotNone(self.m.status()["last_success"])
 
+    def test_windows_must_send_summary_only_and_dedupes_by_source_hash(self):
+        full = xlsx({"新商品": SHEET, "明細_全件": [["店名", "メッセージ"], ["x", "お客さまの名前入り"]]})
+        with self.assertRaises(ValueError):
+            self.m.receive(N1, full, "windows", "feed")                         # 明細のシートがあれば断る
+        summary = xlsx({"新商品": SHEET[:5]})
+        src = "a" * 64
+        self.assertEqual(self.m.receive(N1, summary, "windows", "feed", source_sha=src)["result"], "取り込み")
+        self.assertIn(src, self.m.known())                                     # 元のファイルの指紋で覚える
+        again = xlsx({"新商品": SHEET[:5]}) + b""                              # 写しは作るたびに変わってよい
+        self.assertEqual(self.m.receive(N1, again, "windows", "feed", source_sha=src)["result"], "取り込み済み（同じ内容）")
+        self.assertIn(self.m.receive(N1, full, "画面:u", "u")["result"], ("取り込み", "訂正版で入れ替え"))  # 画面から手で入れるのは今までどおり
+
     def test_token(self):
         tf = Path(tempfile.mkdtemp()) / "weekly_feed_token"
         with mock.patch.object(self.m, "token_path", return_value=tf):

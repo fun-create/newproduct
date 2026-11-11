@@ -436,7 +436,8 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(400, {"error": f"大きさが合いません（{n} バイト）"})
             data = self.rfile.read(n)
             try:
-                r = weeklyfeed.receive(unquote(self.headers.get("X-File-Name") or ""), data, "windows", "feed:windows")
+                r = weeklyfeed.receive(unquote(self.headers.get("X-File-Name") or ""), data, "windows", "feed:windows",
+                                       source_sha=(self.headers.get("X-Source-Sha256") or "").strip().lower() or None)
             except ValueError as e:
                 return self.sendj(400, {"error": str(e)})
             return self.sendj(200, r)

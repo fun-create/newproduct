@@ -31,11 +31,29 @@ def _log(name, sha, pf, pt, result, error, source):
                                                source[:60], store.now_s()))
 
 
-def receive(name: str, data: bytes, source: str, user_id: str) -> dict:
-    """1ファイル受け取る。結果を必ず記録する。取り込めなければ ValueError（理由つき）"""
+def sheet_names(data: bytes) -> list[str]:
+    """xlsx のシート名（workbook.xml）。壊れていれば ValueError"""
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            x = z.read("xl/workbook.xml").decode("utf-8", "replace")
+    except (zipfile.BadZipFile, KeyError):
+        raise ValueError("Excel（xlsx）として読めません") from None
+    import html
+    return [html.unescape(n) for n in re.findall(r'<sheet\b[^>]*\bname="([^"]*)"', x)]
+
+
+def receive(name: str, data: bytes, source: str, user_id: str, source_sha: str | None = None) -> dict:
+    """1ファイル受け取る。結果を必ず記録する。取り込めなければ ValueError（理由つき）
+
+    Windows は**集計だけの写し**（シート「新商品」だけ・明細の行を消したもの）を送る（2026-11-11 十文字さんの選択）。
+    写しは毎回中身の指紋が変わるので、二重防止は**元のファイルの指紋**（source_sha）で行う。"""
     from app import newprod
     name = (name or "").strip().replace("\\", "/").split("/")[-1]
     sha = hashlib.sha256(data or b"").hexdigest()
+    if source_sha and re.fullmatch(r"[0-9a-f]{64}", source_sha):
+        sha = source_sha
     pf = pt = None
     try:
         if not name.startswith(PREFIX) or not name.lower().endswith(".xlsx") or name.startswith("~$"):
@@ -45,6 +63,9 @@ def receive(name: str, data: bytes, source: str, user_id: str) -> dict:
         if len(data) > MAX_BYTES:
             raise ValueError(f"大きすぎます（{len(data) // 1024} KB）")
         pf, pt = newprod.period_of(name)
+        if source == "windows" and sheet_names(data) != ["新商品"]:
+            raise ValueError("集計だけの写し（シート「新商品」だけ）ではありません。明細を含むファイルは受け取りません"
+                             "（送る側の send_weekly_report.ps1 を新しい版に）")
         if store.one("SELECT 1 FROM weekly_feed_log WHERE sha256=? AND result IN (?,?,?)", (sha, *OK_RESULTS)):
             _log(name, sha, pf, pt, "取り込み済み（同じ内容）", None, source)
             return {"ok": True, "result": "取り込み済み（同じ内容）", "period_from": pf, "period_to": pt}
