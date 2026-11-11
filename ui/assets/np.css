@@ -577,3 +577,5 @@ button.np-btn-cw { white-space: nowrap; }
 .np-launch-date strong { font-size: 1.35rem; color: var(--fca-navy); }
 .np-launch-label { font-size: .85rem; color: var(--fca-muted); }
 .np-launch form.np-inline { flex-wrap: wrap; }
+/* 新商品マスタに載せる欄（ADR-139） */
+label.np-block { display: block; margin: .3rem 0; }

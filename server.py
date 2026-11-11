@@ -399,6 +399,25 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(400, {"error": str(e)})
             store.audit("svc:" + actor, "task.done_from_calfc", str(d.get("ext_ref") or ""), r, self.client_address[0])
             return self.sendj(200, r)
+        if path in ("/api/feed/newprod-master", "/api/feed/newprod-master/result"):
+            # 週次レポートの新商品マスタへ足す行（4-4・ADR-139）。アシロボの PC の sync_newprod_master.ps1 が使う。鍵は週次と同じ
+            from app import newprod_master, weeklyfeed
+            if not weeklyfeed.token_ok((self.headers.get("X-Feed-Token") or "").strip()):
+                return self.sendj(403, {"error": "forbidden"})
+            if path.endswith("/result"):
+                if method != "POST":
+                    return self.sendj(405, {"error": "POST だけ"})
+                d = self.body()
+                items = d.get("items")
+                if isinstance(items, str):
+                    try:
+                        items = json.loads(items)
+                    except ValueError:
+                        return self.sendj(400, {"error": "items が読めません"})
+                return self.sendj(200, newprod_master.apply_results(items or []))
+            if method != "GET":
+                return self.sendj(405, {"error": "GET だけ"})
+            return self.sendj(200, newprod_master.rows_for_feed())
         if path in ("/api/feed/weekly-report", "/api/feed/weekly-report/known"):
             # 社内の Windows から週次レポートを受け取る（2026-11-10 依頼書 2-5・ADR-138）。**外から届く口**（Caddy 経由）。
             # 専用の鍵（config/weekly_feed_token）だけを通す。受け取れるのは週次売上分析の Excel だけ
@@ -724,6 +743,10 @@ class H(BaseHTTPRequestHandler):
                 d = self.body()
                 r = newprod.register(d.get("project_id", ""), (d.get("labels") or "").split("\n"), uid)
                 return self.sendj(200, r)
+            if parts[2] == "master-request":            # 週次レポートの新商品マスタに載せる（4-4・ADR-139）
+                from app import newprod_master
+                d = self.body()
+                return self.sendj(200, newprod_master.request(d.get("project_id", ""), d, uid))
             return self.sendj(404, {"error": "not found"})
         if parts == ["sales"] and method == "GET":
             return self.sendj(200, sales_m.overview(qs.get("site") or "all",

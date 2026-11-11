@@ -236,7 +236,10 @@ def view() -> dict:
             cand = [r["label"] for r in (snap["rows"] if snap else [])
                     if norm(r["label"]) and (norm(r["label"]) in norm(p["internal_name"] or "")
                                              or norm(p["internal_name"] or "") in norm(r["label"]))]
-            pending.append({**p, "proposal": pr, "candidates": cand})
+            from app import newprod_master
+            full = dict(store.one("SELECT * FROM project WHERE id=?", (p["id"],)))
+            pending.append({**p, "proposal": pr, "candidates": cand,
+                            "master": newprod_master.view(p["id"]), "master_proposal": newprod_master.propose(full)})
             continue
         labels_used.update(labels)
         rows.append({**p, "labels": labels,

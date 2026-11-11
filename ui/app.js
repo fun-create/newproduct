@@ -1433,14 +1433,15 @@
     // 発売済みにしたときの CIP の確認（4-5・ADR-137）。発売済みのステージとは別。済んでいないものだけもう一度
     (d.launch_links || []).forEach(function (l) {
       var lb = el("div", { "class": l.state === "済" ? "np-note" : "np-warn" });
-      lb.appendChild(el("p", null, [txt((l.kind === "cip" ? "CIP の登録の確認" : l.kind) + ": " + l.state + "　" + l.summary
+      lb.appendChild(el("p", null, [txt((l.kind === "cip" ? "CIP の登録の確認" : l.kind === "weekly" ? "週次レポートの新商品マスタ" : l.kind) + ": " + l.state + "　" + l.summary
         + "（" + l.checked_at + "・" + l.tries + " 回目）")]));
       var items = (l.detail && l.detail.items) || [];
       if (items.length) lb.appendChild(table(["単位", "共通商品コード", "結果", "理由"], items.map(function (i) {
         return el("tr", null, [el("td", { text: i.label }), el("td", { text: dash(i.code) }), el("td", { text: i.state }), el("td", { text: dash(i.why) })]);
       })));
       if (l.detail && l.detail.note) lb.appendChild(el("p", { "class": "np-sub", text: l.detail.note }));
-      if (l.state !== "済") {
+      if (l.state !== "済" && l.kind === "weekly") lb.appendChild(el("p", { "class": "np-sub" }, [txt("直すときは「売上・原価」の「新商品の売上（週次レポート）」の未紐付けの欄で、キーワードを直してもう一度載せます。")]));
+      if (l.state !== "済" && l.kind === "cip") {
         var rb = el("button", { type: "button", text: "もう一度確かめる" });
         rb.addEventListener("click", function () {
           rb.disabled = true;
@@ -6633,6 +6634,46 @@
 
   /** 新商品の売上（週次レポートから取り込む・2026-11-09 修正依頼書 H06 段階1・ADR-131）。
    *  集計の正は週次レポート（社内の Windows・毎週月曜）。分析 Excel の「新商品」シートの集計だけを読む（明細は読まない・ファイルは保存しない） */
+  /** 週次レポートの新商品マスタ（キーワード方式）へ1行足す（2026-11-10 依頼書 4-4・ADR-139）。
+   *  つなぎ（本来は CIP の共通商品コードで数える）。押すと次の月曜 8:30 にアシロボの PC が sales.csv で当たりを数えてから足す */
+  function masterRowForm(p, reload) {
+    var m = p.master || {}, pr = p.master_proposal || {};
+    var w = el("details", { "class": "np-fold-plain" });
+    var head = "週次レポートの新商品マスタに自動で載せる" + (m.state ? "（" + m.state + "）" : "");
+    w.appendChild(el("summary", { text: head }));
+    if (m.state) w.appendChild(el("p", { "class": m.state === "要確認" || m.state === "失敗" ? "np-warn" : "np-sub",
+      text: m.state + (m.note ? "：" + m.note : "") + (m.matches !== null && m.matches !== undefined ? "（sales.csv で " + m.matches + " 件）" : "")
+        + (m.overlaps && m.overlaps.length ? "。同じ明細に当たる既存の行: " + m.overlaps.join("、") + "（二重に数えるので足していません。除外キーワードで分けてください）" : "")
+        + (m.requested_at ? "。頼んだ: " + m.requested_at + (m.checked_at ? "・最後に確かめた: " + m.checked_at : "") : "") }));
+    var f = el("form", { "class": "np-edit-area" });
+    function fld(name, label, val, hint, size) {
+      var i = el("input", { name: name, size: size || "40", "aria-label": label });
+      if (val !== null && val !== undefined) i.value = String(val);
+      f.appendChild(el("label", { "class": "np-block" }, [txt(label + " "), i, hint ? el("span", { "class": "np-sub", text: " " + hint }) : txt("")]));
+    }
+    fld("label", "商品ラベル", m.label || pr.label, "週次レポートに出る名前");
+    fld("include", "含むキーワード", m.include || pr.include, "sales.csv の商品名に含まれる文言。; で区切ると全部を含む・(A|B) でどれか");
+    fld("exclude", "除外キーワード", m.exclude || pr.exclude, "巻き込みたくない別の商品があれば");
+    fld("month_sales", "月間目標売上（円）", m.month_sales !== null && m.month_sales !== undefined ? m.month_sales : pr.month_sales, "12か月同じ値。空は 0（実績だけ）", "10");
+    fld("month_qty", "月間目標数量（個）", m.month_qty, "空は 0", "10");
+    f.appendChild(el("p", { "class": "np-sub", text: (pr.note || "") + "。押すと、次の月曜 8:30 にアシロボの PC が sales.csv で当たる件数と、既存の行との重なりを確かめてから、新商品マスタに1行足します（重なりがあれば足さずに「要確認」）。" }));
+    var st = el("span", { "class": "np-status", role: "status" });
+    var btn = el("button", { type: "submit", text: m.state === "要確認" || m.state === "失敗" ? "直して、もう一度載せる" : "週次レポートに載せる" });
+    if (m.state === "追加済み") btn.disabled = true;
+    f.appendChild(el("p", { "class": "np-btnrow" }, [btn, txt(" "), st]));
+    f.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var o = { project_id: p.id };
+      ["label", "include", "exclude", "month_sales", "month_qty"].forEach(function (k) { o[k] = f.elements[k].value; });
+      st.textContent = "保存中…";
+      post("/api/sales/weekly-newprod/master-request", o).then(function () { reload(); })
+        .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
+    });
+    w.appendChild(f);
+    if (m.state === "書き込み待ち" || m.state === "要確認" || m.state === "失敗") w.setAttribute("open", "open");
+    return w;
+  }
+
   function weeklyNewprodCard() {
     var c = el("div", { "class": "np-card" });
     c.appendChild(el("h2", { text: "新商品の売上（週次レポート）" }));
@@ -6701,6 +6742,7 @@
                 .then(function () { load(); }).catch(function (e) { st.textContent = "できませんでした: " + e.message; });
             });
             body.appendChild(f);
+            body.appendChild(masterRowForm(p, load));
           });
         }
         if ((v.expired || []).length) body.appendChild(el("p", { "class": "np-sub" }, [txt("発売から1年を過ぎて集計から外した案件（記録はカルテで見られます）: ")].concat(
