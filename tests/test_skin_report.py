@@ -62,7 +62,7 @@ class Viewer(unittest.TestCase):
 
     def test_counts_skip_hidden_and_newest_first(self):
         meta = {"reach": [{"name": "VecRas", "ok": True}, {"name": "ARMobileSkin", "ok": False, "reason": "429"}],
-                "data": {"series": [{"judgment": "BUY"}, {"judgment": "WAIT"}, {"judgment": "WAIT"}],
+                "data": {"series": [{"judgment": "BUY"}, {"judgment": "WAIT"}, {"judgment": "WAIT"}, {"judgment": "UNKNOWN"}],
                          "releases": [{"name": "A", "bucket": "past"}, {"name": "B", "bucket": "future"},
                                       {"name": "C", "bucket": "past"}, {"name": "D", "bucket": "watch"}],
                          "unverified": ["x", " "]},
@@ -73,7 +73,7 @@ class Viewer(unittest.TestCase):
             v = self.m.view()
         self.assertEqual([r["date"] for r in v["reports"]], ["20261109", "20261102"])
         c = v["cur"]
-        self.assertEqual({x["key"]: x["n"] for x in c["counts"]}, {"BUY": 1, "ALT": 0, "REAL": 0, "WAIT": 2})
+        self.assertEqual({x["key"]: x["n"] for x in c["counts"]}, {"BUY": 1, "ALT": 0, "REAL": 0, "WAIT": 2, "UNKNOWN": 1})  # 判定なしも落とさない
         self.assertEqual(c["n_new"], 2)                       # C は伏せた・D は発売ではない
         self.assertEqual((c["unverified"], [r["ok"] for r in c["reach"]]), (1, [True, False]))
         with mock.patch.object(self.m, "timer_enabled", return_value=False):

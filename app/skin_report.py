@@ -23,7 +23,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 HTML_RE = re.compile(r"^スキンシール展開判断レポート_(\d{8})\.html$")
-JUDGMENTS = (("BUY", "即購入"), ("ALT", "代替サイト"), ("REAL", "実機購入"), ("WAIT", "様子見"))
+JUDGMENTS = (("BUY", "即購入"), ("ALT", "代替サイト"), ("REAL", "実機購入"), ("WAIT", "様子見"), ("UNKNOWN", "判定なし"))
 TIMER = "newproduct-skin-report.timer"
 WATCH_HOUR = 12                       # 月曜 8:00 起動。遅れても昼までは待つ（Auto GROWTH FR-68 と同じ）
 
