@@ -179,8 +179,25 @@ def register(pid: str, labels: list[str], user_id: str) -> dict:
                   (pid, now, user_id, "新商品の売上に登録", "週次レポートの商品ラベル: " + "、".join(labels)))
         n = c.execute("UPDATE task SET status='完了', done_at=? WHERE project_id=? AND title=? "
                       "AND status NOT IN ('完了','対象外')", (now, pid, TASK_TITLE)).rowcount
-    store.audit(user_id, "newprod.register", pid, {"labels": labels, "task_done": n})
+        held = _hold_master_request(c, pid, labels)
+    store.audit(user_id, "newprod.register", pid, {"labels": labels, "task_done": n, "master_request": held})
     return {"ok": True, "labels": labels, "task_done": n}
+
+
+def _hold_master_request(c, pid: str, labels: list[str]) -> str | None:
+    """手で既存の商品ラベルと結んだら、書き込み待ちの「週次レポートに載せる」は足さない（2026-11-12）。
+    同じラベルなら既にマスタにある＝追加済み（毎週の数え直しに入る）。違うラベルなら要確認（二重に数えない・
+    結び付けを上書きしない）。"""
+    g = c.execute("SELECT m_state, m_label FROM newprod_reg WHERE project_id=?", (pid,)).fetchone()
+    if g is None or g["m_state"] != "書き込み待ち":
+        return None
+    if g["m_label"] in labels:
+        st, note = "追加済み", "同じ商品ラベルが新商品マスタに既にあります（手で結びました）"
+    else:
+        st, note = "要確認", (f"既存の商品ラベル「{'、'.join(labels)}」と手で結んだので、新商品マスタに"
+                             f"「{g['m_label']}」は足していません。別の行も要るときは管理者へ")
+    c.execute("UPDATE newprod_reg SET m_state=?, m_note=? WHERE project_id=?", (st, note, pid))
+    return st
 
 
 # ── 表示 ──────────────────────────────────────────────

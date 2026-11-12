@@ -119,7 +119,7 @@ def rows_for_feed(today: dt.date | None = None) -> dict:
                      "WHERE g.m_state IS NOT NULL"):
         row = {"project_id": r["project_id"], "label": r["m_label"], "include": r["m_include"],
                "exclude": r["m_exclude"] or "", "release_date": r["launch_date"]}
-        if r["m_state"] == WAIT:
+        if r["m_state"] == WAIT and r["state"] != "登録済み":        # 手で結んだものは足さない（二重に数えない）
             ms, mq = r["m_month_sales"] or 0, r["m_month_qty"] or 0
             add.append({**row, "monthly_sales": [ms] * 12, "monthly_qty": [mq] * 12})
         elif r["m_state"] == ADDED and (r["launch_date"] or "") > since:
@@ -164,8 +164,10 @@ def apply_results(items: list, source: str = "feed:windows") -> dict:
             c.execute("UPDATE newprod_reg SET m_state=?, m_matches=?, m_overlaps=?, m_note=?, m_checked_at=? "
                       "WHERE project_id=?", (res, m, json.dumps(ov, ensure_ascii=False) if ov else None, note, now, pid))
             if res == ADDED:
+                had = json.loads(g["labels"]) if g["labels"] else []       # 手で結んだラベルは消さない（足すだけ）
                 c.execute("UPDATE newprod_reg SET state=?, labels=?, registered_at=?, registered_by=? WHERE project_id=?",
-                          (newprod.DONE, json.dumps([g["m_label"]], ensure_ascii=False), now, source, pid))
+                          (newprod.DONE, json.dumps(had + [g["m_label"]] if g["m_label"] not in had else had,
+                                                    ensure_ascii=False), now, source, pid))
                 c.execute("UPDATE task SET status='完了', done_at=? WHERE project_id=? AND title=? "
                           "AND status NOT IN ('完了','対象外')", (now, pid, newprod.TASK_TITLE))
                 c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",

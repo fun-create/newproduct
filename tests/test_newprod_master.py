@@ -96,6 +96,36 @@ class Master(unittest.TestCase):
             self.m.apply_results([{"project_id": self.pid, "result": "当たり", "matches": 0}])
         self.assertIn("0件", self.m.view(self.pid)["note"])
 
+    def test_linking_by_hand_holds_the_pending_row(self):
+        """2026-11-12 本番: 「載せる」を押した後に既存の商品ラベルと手で結んだ6件。足すと二重・結び付けが上書き"""
+        from app import newprod
+        self._req()
+        newprod.register(self.pid, ["iPhone DUO 既存の行"], "chieko")
+        self.assertEqual(self.m.rows_for_feed(dt.date(2026, 11, 16))["add"], [])           # 足さない
+        v = self.m.view(self.pid)
+        self.assertEqual(v["state"], "要確認")
+        self.assertIn("iPhone DUO 既存の行", v["note"])
+        r = self.m.apply_results([{"project_id": self.pid, "result": "追加済み", "matches": 0}])  # 古い結果が来ても
+        self.assertEqual(r["applied"], 0)
+        self.assertEqual(self.store.val("SELECT labels FROM newprod_reg WHERE project_id=?", (self.pid,)),
+                         '["iPhone DUO 既存の行"]')                                           # 上書きしない
+
+    def test_linking_by_hand_to_the_same_label_counts_it(self):
+        from app import newprod
+        self._req()
+        newprod.register(self.pid, ["Web deco スキンシール【iPhone DUO】"], "chieko")
+        self.assertEqual(self.m.view(self.pid)["state"], "追加済み")
+        rows = self.m.rows_for_feed(dt.date(2026, 11, 16))
+        self.assertEqual((rows["add"], len(rows["check"])), ([], 1))                        # 数え直しには入る
+
+    def test_added_keeps_labels_linked_by_hand(self):
+        self._req()
+        self.store.ex("UPDATE newprod_reg SET labels=? WHERE project_id=?", ('["前からの行"]', self.pid))
+        self.store.conn().commit()
+        self.m.apply_results([{"project_id": self.pid, "result": "追加済み", "matches": 2}])
+        self.assertEqual(self.store.val("SELECT labels FROM newprod_reg WHERE project_id=?", (self.pid,)),
+                         '["前からの行", "Web deco スキンシール【iPhone DUO】"]')
+
     def test_same_label_on_two_projects_is_refused(self):
         from app import project
         self._req()
