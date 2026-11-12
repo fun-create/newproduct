@@ -2919,6 +2919,9 @@
           : "CIP に在るかは未確認です（CIP の登録口ができたら、開いたときに確かめます）。" }));
       w.appendChild(el("p", { "class": "np-sub",
         text: "内容を直すときは CIP の画面で直してください（正は CIP）。" }));
+      if (t.via === "newproduct") w.appendChild(el("p", { "class": "np-warn",
+        text: "CIP の商品の画面で入れてください: 販売価格・作業時間・売場の分類（登録票からは入りません）。材料の内訳は、レシピ複製元を選ばなかったときや、写したものと違うときに直してください。"
+          + "登録前に届いていた注文は自動では決まりません（CIP の「受注の取込」→「商品が未決定の注文」で確定）。" }));
       if (o.can_register && o.editable) {
         var rb = el("button", { type: "button", text: "この記録を取り消す（CIP の商品は消えません）" });
         rb.addEventListener("click", function () {
