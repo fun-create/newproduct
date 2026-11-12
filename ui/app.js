@@ -28,7 +28,7 @@
   // 帯に出さない画面は、どの帯の下に置くかをここで決める（画面設計 2-2）。
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
-                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas",
+                "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas", "#/skin-report": "#/ideas",
                 "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/" };
 
   var links = Array.prototype.slice.call(
@@ -164,7 +164,7 @@
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
     [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
-    [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"]],
+    [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"], ["#/skin-report", "スキンシール判断"]],
     [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]
   ];
   function subnavFor(path) {
@@ -3791,7 +3791,8 @@
       var ai = meta.ai_scoring || {};
       b.appendChild(btnRow([toForm, navBtn("#/trends", "トレンド（FCTR）から選んで起票する"),
         navBtn("#/ai-score", "AI採点の案" + (ai.pending ? "（確認待ち " + ai.pending + " 件）" : "")),
-        navBtn("#/calibration", "採点の校正（発売後の実績と）"), navBtn("#/devices", "新機種調査（スキンシール）")]));
+        navBtn("#/calibration", "採点の校正（発売後の実績と）"), navBtn("#/devices", "新機種調査（スキンシール）"),
+        navBtn("#/skin-report", "スキンシール展開判断レポート（週次）")]));
       b.appendChild(formBox);
 
       // ── 全体の形（絞り込み後の全件で数える。表は上限まで）──
@@ -4689,6 +4690,54 @@
   }
 
   /** 新機種調査（FR-140・ADR-102）。AI がウェブで探した新機種の候補を人が決める。展開の表の正本はここ */
+  // スキンシール展開判断レポート（週次・Auto GROWTH から引き取り・ADR-140・FR-251）。**見るだけ。**配るのは月曜 8:00 のタイマー
+  function viewSkinReport() {
+    loading();
+    var sel = (hashQuery().get("d") || "").replace(/[^0-9]/g, "");
+    api("/api/skin-report" + (sel ? "?d=" + encodeURIComponent(sel) : "")).then(function (d) {
+      var b = clear();
+      setTitle("スキンシール展開判断レポート", d.cur ? d.cur.ja : "");
+      b.appendChild(btnRow([navBtn("#/ideas", "アイデアへ戻る"), navBtn("#/devices", "新機種調査（月次）")]));
+      b.appendChild(el("p", { "class": "np-note", text: "毎週月曜 8:00 に、加熱式たばこ・スマホ・ゲーム機・ペンライトの12シリーズについて「新発売があったか」「カットデータをどこで調達できるか」を AI が調べ、BUY／ALT／REAL／WAIT の4つで判定したレポートです。ChatWork「FUN 商品開発」へ添付で届きます。この画面は届いたものを見るところで、ここから配ることはしません。判定は AI が書いたもので、確かめるのは人です。" }));
+      if (d.timer_enabled === false) b.appendChild(el("p", { "class": "np-sub", text: "いまの配信は Auto GROWTH から届いています（NEW PRODUCT からの配信への切り替え前）。ここには届いたものの写しが並びます。" }));
+      if (d.missing) b.appendChild(el("p", { "class": "np-warn", role: "alert", text: d.missing }));
+      if (d.error) { b.appendChild(el("p", { "class": "np-warn", text: "レポートの置き場を読めません: " + d.error })); return; }
+      if (!d.reports.length) { b.appendChild(el("p", { "class": "np-note", text: "まだ1本もありません。" })); return; }
+      var c = d.cur;
+      if (c.counts) b.appendChild(kpiRow(c.counts.map(function (x) { return kpi(x.label, x.n + " シリーズ"); })
+        .concat([kpi("新発売", c.n_new + " 件", "型の新設が要らないものは数えない")])));
+      else b.appendChild(el("p", { "class": "np-sub", text: c.meta_err ? "根拠の JSON を読めません（" + c.meta_err + "）。本文は下に出しています。" : "この回は根拠の JSON が残っていません（判定の内訳と到達確認は出せません）。" }));
+      if (c.mention_missing) b.appendChild(el("p", { "class": "np-warn", text: "この回は宛先（TO）が付いていません。" }));
+      if (c.unverified) b.appendChild(el("p", { "class": "np-sub", text: "調べたが確定できなかった事項が " + c.unverified + " 件あります（レポート本文の冒頭に一覧）。" }));
+      var card = el("div", { "class": "np-card" });
+      card.appendChild(el("h2", { text: "レポート " + c.ja }));
+      var src = "/api/skin-report/file?d=" + encodeURIComponent(c.date);
+      card.appendChild(el("p", null, [el("a", { href: src, target: "_blank", rel: "noopener", text: "別のタブで開く" })]));
+      // 切り離しはサーバーの応答（CSP sandbox）でかける。iframe の sandbox 属性は付けない（付けると読み込みを止める
+      // ブラウザがあった・2026-11-12 プレビュー。応答の sandbox だけで、この画面のクッキーと API には触れない）
+      card.appendChild(el("iframe", { src: src, title: "スキンシール展開判断レポート " + c.ja, loading: "lazy", "class": "np-skin-frame" }));
+      b.appendChild(card);
+      if (c.reach.length) {
+        var ng = c.reach.filter(function (r) { return !r.ok; }).length;
+        var rc = el("div", { "class": "np-card" });
+        rc.appendChild(el("h2", { text: "調達先6サイトの到達確認（" + (c.reach.length - ng) + "/" + c.reach.length + "）" }));
+        if (ng) rc.appendChild(el("p", { "class": "np-sub", text: "到達できなかった " + ng + " サイトについては判定を作っていません（本文にも書いてあります）。" }));
+        rc.appendChild(el("table", { "class": "np-table" }, [el("tbody", null, c.reach.map(function (r) {
+          return el("tr", null, [el("th", { scope: "row", text: r.name || "" }), el("td", { text: r.ok ? "到達OK" : "確認できず" }), el("td", { "class": "np-sub", text: r.reason || "" })]);
+        }))]));
+        b.appendChild(rc);
+      }
+      var hc = el("div", { "class": "np-card" });
+      hc.appendChild(el("h2", { text: "過去のレポート（" + d.reports.length + " 回）" }));
+      hc.appendChild(el("table", { "class": "np-table" }, [el("tbody", null, d.reports.map(function (r) {
+        return el("tr", null, [el("td", null, [r.date === c.date ? el("span", { text: r.ja + "（表示中）" }) : el("a", { href: "#/skin-report?d=" + r.date, text: r.ja })]),
+          el("td", { "class": "np-sub", text: Math.round(r.size / 1000) + " KB" }),
+          el("td", null, [el("a", { href: "/api/skin-report/file?d=" + r.date, target: "_blank", rel: "noopener", text: "別のタブで開く" })])]);
+      }))]));
+      b.appendChild(hc);
+    }).catch(fail);
+  }
+
   function viewDevices() {
     loading();
     api("/api/devices").then(function (d) {
@@ -7896,6 +7945,7 @@
     if (path === "#/ai-score") return viewAiScore();
     if (path === "#/calibration") return viewCalibration();
     if (path === "#/devices") return viewDevices();
+    if (path === "#/skin-report") return viewSkinReport();
     if (path === "#/manual") return viewManual();
     if (path === "#/settings/events") return viewEvents();
     if (path === "#/settings/templates") return viewTemplates();

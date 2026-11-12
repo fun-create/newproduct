@@ -1,0 +1,133 @@
+# ============================================================
+# 移行元: C:\skin-sticker-report\config/series.yaml（2026-09-24 取り込み）
+# 中身は移行元のまま。**ここを直したら移行元も直すか、移行元を畳むこと。**
+# 読むのは connectors/ec/skin_report.py。コードに直書きしない
+# ============================================================
+# ============================================================
+# 対象シリーズ定義（固定12シリーズ）
+# CLAUDE.md Section 2 準拠
+# ※ プロジェクト開始時から終了まで変更しないこと
+# ============================================================
+
+series:
+  - id: "01"
+    name: "アイコス"
+    category: "heated_tobacco"
+    search_keywords:
+      - "IQOS 新機種"
+      - "アイコス 新型 2026"
+      - "IQOS ILUMA"
+    scope: "IQOS全モデル"
+    notes: "ARMobileSkinに部分掲載あり。VecRas E-Cigaretteも参照"
+
+  - id: "02"
+    name: "プルームテック"
+    category: "heated_tobacco"
+    search_keywords:
+      - "Ploom 新機種"
+      - "プルーム 新型 2026"
+      - "Ploom TECH X AURA CUBE"
+    scope: "Ploomブランド全体（Ploom TECH / X / AURA / CUBE 等を必ず包含）"
+    notes: "Ploomブランド全体を必ず包含すること。ARMobileSkinに掲載なし"
+
+  - id: "03"
+    name: "リルハイブリッド"
+    category: "heated_tobacco"
+    search_keywords:
+      - "lil HYBRID 新機種"
+      - "リルハイブリッド 新型 2026"
+      - "lil SOLID"
+    scope: "lil HYBRID全モデル"
+    notes: "ARMobileSkin掲載なし。Cutout.shopが主要調達先"
+
+  - id: "04"
+    name: "グロー"
+    category: "heated_tobacco"
+    search_keywords:
+      - "glo 新機種"
+      - "グロー 新型 2026"
+      - "glo hyper"
+    scope: "glo全モデル"
+    notes: "ARMobileSkinに旧モデル（GLO G004）のみ掲載"
+
+  - id: "05"
+    name: "エアポッズ"
+    category: "apple"
+    search_keywords:
+      - "AirPods 新型 2026"
+      - "AirPods Pro 4"
+      - "AirPods Max 2"
+    scope: "AirPods全モデル（無印・Pro・Max）"
+    notes: "ARMobileSkin Audioカテゴリに網羅されている"
+
+  - id: "06"
+    name: "プレイステーション"
+    category: "game"
+    search_keywords:
+      - "PS5 新型 2026"
+      - "DualSense 限定版"
+      - "PlayStation 新発売"
+    scope: "PS5系本体・コントローラー含む"
+    notes: "ARMobileSkin PlayStationカテゴリに網羅"
+
+  - id: "07"
+    name: "ニンテンドースイッチ"
+    category: "game"
+    search_keywords:
+      - "Nintendo Switch 新型 2026"
+      - "Switch 2"
+      - "Switch OLED"
+    scope: "Switch / OLED / Switch 2 含む"
+    notes: "ARMobileSkin Nintendoカテゴリに掲載"
+
+  - id: "08"
+    name: "アイフォン"
+    category: "apple"
+    search_keywords:
+      - "iPhone 新型 2026"
+      - "iPhone 18"
+      - "iPhone Fold"
+    scope: "iPhone全モデル"
+    notes: "ARMobileSkin iPhoneカテゴリ網羅"
+
+  - id: "09"
+    name: "アイパッド"
+    category: "apple"
+    search_keywords:
+      - "iPad 新型 2026"
+      - "iPad Pro M5"
+      - "iPad Air"
+    scope: "iPad全モデル"
+    notes: "ARMobileSkin iPadカテゴリ網羅"
+
+  - id: "10"
+    name: "マックブック"
+    category: "apple"
+    search_keywords:
+      - "MacBook 新型 2026"
+      - "MacBook Pro M5"
+      - "MacBook Air M5"
+    scope: "MacBook全モデル"
+    notes: "ARMobileSkin MacBookカテゴリ網羅"
+
+  - id: "11"
+    name: "キングブレード"
+    category: "penlight"
+    search_keywords:
+      - "KING BLADE 新型"
+      - "ルイファン 新製品"
+      - "キングブレード X"
+    scope: "KING BLADE全モデル"
+    notes: "自動REAL判定。カットデータ調査スキップ可。公式: ruifan.co.jp"
+    auto_judgment: "REAL"
+
+  - id: "12"
+    name: "ミックスペンラ"
+    category: "penlight"
+    search_keywords:
+      - "MIX PENLa 新型"
+      - "ターンオン 新製品"
+      - "ミックスペンラ"
+    scope: "MIX PENLa全モデル"
+    notes: "自動REAL判定。カットデータ調査スキップ可。公式: penlight.jp"
+    auto_judgment: "REAL"

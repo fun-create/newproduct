@@ -726,6 +726,25 @@ class H(BaseHTTPRequestHandler):
         if parts == ["sales", "weekly-newprod"] and method == "GET":
             from app import newprod, weeklyfeed
             return self.sendj(200, {**newprod.view(), "feed": weeklyfeed.status()})
+        # スキンシール展開判断レポート（Auto GROWTH から引き取り・ADR-140）。**見るだけ・利用者全員**
+        if parts == ["skin-report"] and method == "GET":
+            from app import skin_report
+            return self.sendj(200, skin_report.view(qs.get("d") or ""))
+        if parts == ["skin-report", "file"] and method == "GET":
+            from app import skin_report
+            b = skin_report.file_bytes(qs.get("d") or "")
+            if b is None:
+                return self.send(404, "レポートが見つかりません".encode(), "text/plain; charset=utf-8")
+            # 自分で作った HTML（外由来の文字は作る側でエスケープ済み）。それでも**このアプリの画面とは切り離す**:
+            # sandbox で別の出どころ扱い（クッキー・API に触れない）。中のタブ切り替えの script と外の字体だけ許す
+            return self.send(200, b, "text/html; charset=utf-8", [
+                ("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; "
+                 "default-src 'none'; script-src 'unsafe-inline'; "
+                 "style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; "
+                 "img-src data: https:"),
+                # frame-ancestors 'self' は付けない: sandbox で出どころが不透明になり、'self' が親の画面と一致せず
+                # 埋め込みが白くなった（2026-11-12 プレビューで確認）
+                ("Cache-Control", "private, max-age=600")])
         if len(parts) == 3 and parts[:2] == ["sales", "weekly-newprod"] and method == "POST":
             from app import gate, newprod
             if not set(gate.roles_of(uid)) & {"devdept", "admin", "president"}:

@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  スキンシール展開判断レポート HTMLテンプレート
+  ------------------------------------------------------------
+  Claude Code はこのテンプレートを読み込み、下記のプレースホルダーを
+  実際の値に置換して output/スキンシール展開判断レポート_YYYYMMDD.html
+  として保存してください。
+
+  プレースホルダー形式：{{ NAME }}
+  ブロック挿入箇所：[INSERT:NAME_START] ～ [INSERT:NAME_END]
+  （マーカー間の HTML を全て新しい内容で置換すること）
+
+  プレースホルダー一覧：
+    {{ REPORT_DATE_JA }}      例: 2026年5月14日（月）
+    {{ REPORT_DATE_ISO }}     例: 2026-05-14
+    {{ REPORT_DATE_YMD }}     例: 20260514
+    {{ PAST_RANGE }}          例: 2026/04/14 〜 05/14
+    {{ FUTURE_RANGE }}        例: 2026/05/14 〜 11/14
+    {{ SUMMARY_TITLE }}       例: 今週の要点タイトル（1行）
+    {{ SUMMARY_PARAGRAPHS }}  <p>...</p> を複数行で挿入
+    {{ KPI_BUY }}             BUY該当シリーズ数（数字のみ）
+    {{ KPI_ALT }}             ALT該当シリーズ数
+    {{ KPI_REAL }}            REAL該当シリーズ数
+    {{ KPI_NEW }}             調査窓にある新発売の件数（過去窓＋未来窓の合計）
+    {{ KPI_NEW_LABEL }}       その件数の見出し（例: 新発売（過去30日／今後180日））
+    {{ TAB_RELEASE_COUNT }}   タブのカウントバッジ表示用（例: 2件+α）
+
+  ブロック挿入マーカー（中身を全て差し替え）：
+    MATRIX_ROWS               12シリーズマトリクスの <tr> を12個
+    RELEASE_PAST_CARDS        過去30日の発売アクションカード群
+    RELEASE_FUTURE_CARDS      未来180日の発売アクションカード群
+    RELEASE_REF_CARDS         参考扱い（窓外）のカード群（空でも可）
+    RELEASE_RUMOR_CARDS       噂レベルWAITカード群（空でも可）
+    CUTDATA_CARDS             カットデータ調達カード群
+
+  Auto GROWTH 移行時に追加した目印（2026-09-24）：
+    UNREACHABLE_NOTICE        巡回できなかったサイトの告知。全て巡回できた週は空
+    SITE_STATUS_ROWS          6サイトの到達確認結果の <tr>（毎週の実測）
+
+  **巡回できなかったサイトについて判定を作らないこと。**
+  「確認できませんでした」と書く（Auto GROWTH の CLAUDE.md 約束4）。
+  差し替えは connectors/ec/skin_report.py が行う。手で書き換えない。
+  ============================================================
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スキンシール展開判断レポート｜{{ REPORT_DATE_JA }}基準</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f1a2c;
+    --ink-soft: #364152;
+    --paper: #fafaf7;
+    --paper-2: #f3f1ea;
+    --rule: #1a2238;
+    --rule-soft: #d6d3ca;
+    --accent: #b8331f;
+    --accent-soft: #f4e4df;
+    --muted: #6b7280;
+    --link: #1a3a6b;
+    --link-hover: #b8331f;
+    --status-ok: #1f5d3c;
+    --status-partial: #856b1c;
+    --status-ng: #b8331f;
+    --action-buy: #1f5d3c;
+    --action-alt: #1a3a6b;
+    --action-real: #856b1c;
+    --action-wait: #6b6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--paper); color: var(--ink);
+    font-family: "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 400; font-size: 15px; line-height: 1.85; letter-spacing: 0.02em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; padding: 56px 48px 80px; background: var(--paper); }
+
+  a { color: var(--link); text-decoration: none; transition: color 0.15s; }
+  a:hover { color: var(--link-hover); text-decoration: underline; }
+  a.external::after { content: " ↗"; font-size: 0.85em; opacity: 0.7; }
+
+  .doc-header { border-bottom: 2px solid var(--rule); padding-bottom: 28px; margin-bottom: 32px; position: relative; }
+  .doc-header::after { content: ""; position: absolute; bottom: -6px; left: 0; width: 80px; height: 2px; background: var(--accent); }
+  .doc-eyebrow { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+  h1.doc-title { font-family: "Noto Serif JP", serif; font-weight: 600; font-size: 28px; line-height: 1.35; margin: 0 0 14px; letter-spacing: 0.01em; color: var(--ink); }
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 20px 28px; font-size: 13px; color: var(--ink-soft); margin-top: 14px; }
+  .doc-meta dt { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+  .doc-meta dd { margin: 0; font-weight: 500; color: var(--ink); }
+
+  .badge-legend { background: var(--paper-2); padding: 14px 18px; margin: 0 0 24px; border-radius: 2px; border: 1px solid var(--rule-soft); }
+  .badge-legend-title { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; }
+  .badge-legend-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .legend-card { background: #fff; padding: 10px 12px; border-radius: 2px; border-left: 3px solid; }
+  .legend-card.buy { border-left-color: var(--action-buy); }
+  .legend-card.alt { border-left-color: var(--action-alt); }
+  .legend-card.real { border-left-color: var(--action-real); }
+  .legend-card.wait { border-left-color: var(--action-wait); }
+  .legend-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .legend-card-name { font-family: "Noto Serif JP", serif; font-weight: 600; font-size: 13px; color: var(--ink); }
+  .legend-card-desc { font-size: 11px; color: var(--ink-soft); line-height: 1.55; }
+
+  .summary { background: var(--paper-2); border-left: 4px solid var(--accent); padding: 22px 26px; margin-bottom: 28px; }
+  .summary-label { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
+  .summary-title { font-family: "Noto Serif JP", serif; font-size: 18px; font-weight: 600; margin: 0 0 12px; color: var(--ink); }
+  .summary p { margin: 0 0 8px; font-size: 14px; line-height: 1.9; color: var(--ink-soft); }
+  .summary p:last-child { margin-bottom: 0; }
+  .summary strong { color: var(--accent); font-weight: 700; }
+
+  .notice { background: #fff; border: 1px solid var(--rule-soft); border-left: 4px solid var(--status-partial); padding: 14px 18px; margin: 0 0 24px; font-size: 13px; line-height: 1.8; color: var(--ink-soft); }
+  .notice-title { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.15em; color: var(--status-partial); text-transform: uppercase; margin-bottom: 6px; }
+  .notice ul { margin: 6px 0 0; padding-left: 18px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 0; }
+  .kpi-card { padding: 14px 16px; background: #fff; border: 1px solid var(--rule-soft); border-radius: 2px; text-align: center; }
+  .kpi-card .num { font-family: "JetBrains Mono", monospace; font-size: 28px; font-weight: 600; margin-bottom: 2px; }
+  .kpi-card .label { font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
+  .kpi-card.ok .num { color: var(--status-ok); }
+  .kpi-card.partial .num { color: var(--status-partial); }
+  .kpi-card.ng .num { color: var(--status-ng); }
+  .kpi-card.new .num { color: var(--accent); }
+
+  .tabs { display: flex; gap: 0; margin: 32px 0 0; border-bottom: 2px solid var(--rule); }
+  .tab-button { background: transparent; border: none; padding: 14px 22px; font-family: "Noto Serif JP", serif; font-size: 15px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+  .tab-button:hover { color: var(--ink); background: var(--paper-2); }
+  .tab-button.active { color: var(--accent); border-bottom-color: var(--accent); background: #fff; }
+  .tab-button .tab-icon { margin-right: 6px; font-size: 13px; }
+  .tab-button .tab-count { margin-left: 6px; font-family: "JetBrains Mono", monospace; font-size: 11px; background: var(--paper-2); color: var(--muted); padding: 1px 7px; border-radius: 10px; font-weight: 500; }
+  .tab-button.active .tab-count { background: var(--accent-soft); color: var(--accent); }
+  .tab-content { display: none; padding: 32px 0 0; animation: fadeIn 0.3s ease; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  h2.section-title { font-family: "Noto Serif JP", serif; font-weight: 600; font-size: 20px; margin: 32px 0 18px; padding-bottom: 10px; border-bottom: 1px solid var(--rule-soft); color: var(--ink); }
+  h2.section-title:first-child { margin-top: 0; }
+  h2.section-title::before { content: "§"; color: var(--accent); margin-right: 10px; font-weight: 400; }
+  h2.section-title .section-period { display: block; font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0.1em; margin-top: 4px; margin-left: 24px; }
+
+  table.matrix { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid var(--rule-soft); margin: 8px 0; }
+  table.matrix thead th { background: var(--rule); color: #fff; font-weight: 500; text-align: left; padding: 10px 12px; font-size: 11px; letter-spacing: 0.1em; vertical-align: middle; }
+  table.matrix tbody td { padding: 12px; border-bottom: 1px solid var(--rule-soft); vertical-align: middle; line-height: 1.6; }
+  table.matrix tbody tr:last-child td { border-bottom: none; }
+  table.matrix tbody tr:hover { background: var(--paper-2); }
+  table.matrix .col-num { width: 4%; font-family: "JetBrains Mono", monospace; color: var(--muted); font-size: 11px; }
+  table.matrix .col-series { width: 15%; font-weight: 600; font-family: "Noto Serif JP", serif; font-size: 14px; }
+  table.matrix .col-arm { width: 13%; text-align: center; }
+  table.matrix .col-armlink { width: 21%; }
+  table.matrix .col-newrelease { width: 22%; }
+  table.matrix .col-judgment { width: 25%; text-align: center; }
+
+  .badge { display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.15em; padding: 4px 10px; text-transform: uppercase; border-radius: 2px; white-space: nowrap; }
+  .badge.ok { background: var(--status-ok); color: #fff; }
+  .badge.partial { background: var(--status-partial); color: #fff; }
+  .badge.ng { background: var(--status-ng); color: #fff; }
+  .badge.none { background: var(--paper-2); color: var(--muted); border: 1px solid var(--rule-soft); }
+
+  .judgment-block { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+  .action-badge { display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.18em; padding: 5px 11px; text-transform: uppercase; border-radius: 2px; white-space: nowrap; }
+  .action-badge.buy { background: var(--action-buy); color: #fff; }
+  .action-badge.alt { background: var(--action-alt); color: #fff; }
+  .action-badge.real { background: var(--action-real); color: #fff; }
+  .action-badge.wait { background: var(--action-wait); color: #fff; }
+  .action-badge.none { background: var(--paper-2); color: var(--muted); border: 1px solid var(--rule-soft); }
+  .judgment-meaning { font-size: 10px; color: var(--ink-soft); line-height: 1.3; }
+
+  .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; background: var(--paper-2); border: 1px solid var(--rule-soft); color: var(--link); font-size: 12px; font-weight: 500; border-radius: 3px; transition: all 0.15s; text-decoration: none; }
+  .link-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .link-btn::after { content: "↗"; font-size: 0.85em; opacity: 0.6; margin-left: 2px; }
+
+  .action-card { margin-bottom: 18px; padding: 20px 24px; background: #fff; border: 1px solid var(--rule-soft); border-left: 4px solid var(--rule-soft); border-radius: 2px; }
+  .action-card.act-buy { border-left-color: var(--action-buy); }
+  .action-card.act-alt { border-left-color: var(--action-alt); }
+  .action-card.act-real { border-left-color: var(--action-real); }
+  .action-card.act-wait { border-left-color: var(--action-wait); }
+  .ac-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ac-title-block { flex: 1; min-width: 0; }
+  .ac-num { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 4px; }
+  .ac-name { font-family: "Noto Serif JP", serif; font-size: 16px; font-weight: 600; color: var(--ink); margin: 0; line-height: 1.4; }
+  .ac-sub { font-size: 12px; color: var(--muted); display: block; margin-top: 4px; }
+  .ac-info { font-size: 13px; color: var(--ink-soft); margin: 6px 0 12px; padding: 10px 14px; background: var(--paper-2); border-radius: 2px; line-height: 1.85; }
+  .ac-info strong { color: var(--ink); }
+
+  table.cutdata { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; background: #fff; border: 1px solid var(--rule-soft); }
+  table.cutdata thead th { background: var(--rule); color: #fff; font-weight: 500; text-align: left; padding: 9px 12px; font-size: 11px; letter-spacing: 0.1em; }
+  table.cutdata tbody td { padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); vertical-align: middle; line-height: 1.5; }
+  table.cutdata tbody tr:last-child td { border-bottom: none; }
+  table.cutdata tbody tr:hover { background: var(--paper-2); }
+  .ok-text { color: var(--status-ok); font-weight: 700; }
+  .ng-text { color: var(--status-ng); font-weight: 700; }
+  .partial-text { color: var(--status-partial); font-weight: 700; }
+
+  .sites-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 14px 0 0; }
+  .site-card { padding: 16px 18px; background: #fff; border: 1px solid var(--rule-soft); border-radius: 2px; font-size: 13px; transition: all 0.2s; }
+  .site-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(184,51,31,0.08); }
+  .site-card h4 { font-family: "Noto Serif JP", serif; font-size: 15px; margin: 0 0 6px; color: var(--ink); }
+  .site-card .site-url-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; background: var(--paper-2); border: 1px solid var(--rule-soft); color: var(--link); font-family: "JetBrains Mono", monospace; font-size: 11px; border-radius: 3px; margin-bottom: 8px; text-decoration: none; transition: all 0.15s; }
+  .site-card .site-url-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .site-card .site-url-btn::after { content: "↗"; opacity: 0.7; margin-left: 2px; }
+  .site-card .site-desc { font-size: 12px; color: var(--ink-soft); line-height: 1.85; }
+  .site-card .site-desc strong { color: var(--ink); }
+
+  .automation { margin-top: 40px; padding: 24px 28px; background: linear-gradient(135deg, #0f1a2c, #1a2238); color: #f0eee5; border-radius: 2px; }
+  .automation h3 { font-family: "Noto Serif JP", serif; font-size: 18px; margin: 0 0 14px; color: #fff; font-weight: 600; }
+  .automation p { font-size: 13px; color: #d6d3ca; margin: 0 0 12px; line-height: 1.85; }
+  .automation strong { color: #f4e4df; }
+  .automation code { background: rgba(255,255,255,0.1); color: #f4e4df; padding: 2px 6px; border-radius: 2px; font-family: "JetBrains Mono", monospace; font-size: 0.9em; }
+  .automation .auto-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; font-size: 11px; }
+  .automation .flow-step { padding: 12px; background: rgba(255,255,255,0.08); border-radius: 2px; border-left: 2px solid var(--accent); }
+  .automation .flow-step .num { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.15em; margin-bottom: 4px; }
+  .automation .flow-step strong { display: block; color: #fff; margin-bottom: 4px; font-size: 12px; }
+
+  .doc-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--rule-soft); display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", monospace; letter-spacing: 0.1em; }
+  .doc-footer .mark { color: var(--accent); font-weight: 500; }
+
+  em.hl { font-style: normal; background: linear-gradient(transparent 60%, var(--accent-soft) 60%); padding: 0 2px; font-weight: 500; }
+
+  @media print {
+    body { background: #fff; }
+    .page { padding: 20px; max-width: 100%; }
+    .tabs { display: none; }
+    .tab-content { display: block !important; page-break-before: always; }
+    .tab-content:first-of-type { page-break-before: auto; }
+    .action-card { break-inside: avoid; }
+  }
+  @media (max-width: 720px) {
+    .page { padding: 28px 18px 48px; }
+    h1.doc-title { font-size: 21px; }
+    .tabs { flex-wrap: wrap; }
+    .tab-button { padding: 10px 14px; font-size: 13px; flex: 1; min-width: 45%; }
+    .tab-button .tab-icon { display: none; }
+    .kpi-grid, .badge-legend-grid { grid-template-columns: 1fr 1fr; }
+    .sites-grid { grid-template-columns: 1fr; }
+    .automation .auto-flow { grid-template-columns: 1fr 1fr; }
+    table.matrix, table.cutdata { font-size: 11px; }
+    table.matrix thead, table.cutdata thead { display: none; }
+    table.matrix tbody tr, table.cutdata tbody tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--rule-soft); }
+    table.matrix tbody td, table.cutdata tbody td { display: block; padding: 4px 12px; border-bottom: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============================================================ -->
+  <!-- ヘッダー -->
+  <!-- ============================================================ -->
+  <header class="doc-header">
+    <div class="doc-eyebrow">Internal Action Report &middot; 12 Series Coverage</div>
+    <h1 class="doc-title">スキンシール展開判断レポート ／ 12シリーズ完全網羅版</h1>
+    <dl class="doc-meta">
+      <div><dt>Report Date</dt><dd>{{ REPORT_DATE_JA }}</dd></div>
+      <div><dt>Past Coverage</dt><dd>{{ PAST_RANGE }}</dd></div>
+      <div><dt>Forward Coverage</dt><dd>{{ FUTURE_RANGE }}</dd></div>
+      <div><dt>Primary Source</dt><dd><a href="https://armobileskin.com/" target="_blank" rel="noopener" class="external">armobileskin.com</a></dd></div>
+    </dl>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- 判定凡例（常時表示・固定） -->
+  <!-- ============================================================ -->
+  <div class="badge-legend">
+    <div class="badge-legend-title">▸ 判定バッジの意味（4種類）</div>
+    <div class="badge-legend-grid">
+      <div class="legend-card buy">
+        <div class="legend-card-header">
+          <span class="action-badge buy">▸ BUY</span>
+          <span class="legend-card-name">即購入</span>
+        </div>
+        <div class="legend-card-desc">ARMobileSkinに掲載あり。既存メインサイトでカットデータ購入し即着手可能</div>
+      </div>
+      <div class="legend-card alt">
+        <div class="legend-card-header">
+          <span class="action-badge alt">▸ ALT</span>
+          <span class="legend-card-name">代替サイト購入</span>
+        </div>
+        <div class="legend-card-desc">ARMobileSkinになし。代替サイト（VecRas等）に掲載あり。そちらで購入推奨</div>
+      </div>
+      <div class="legend-card real">
+        <div class="legend-card-header">
+          <span class="action-badge real">▸ REAL</span>
+          <span class="legend-card-name">実機購入</span>
+        </div>
+        <div class="legend-card-desc">どのサイトにもカットデータなし。実機購入＋自社で型起こしが必要</div>
+      </div>
+      <div class="legend-card wait">
+        <div class="legend-card-header">
+          <span class="action-badge wait">▸ WAIT</span>
+          <span class="legend-card-name">様子見</span>
+        </div>
+        <div class="legend-card-desc">未発売／噂レベルのため判断保留。発売後に再調査・再判定</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- エグゼクティブサマリー -->
+  <!-- ============================================================ -->
+  <section class="summary">
+    <div class="summary-label">Executive Summary</div>
+    <h2 class="summary-title">{{ SUMMARY_TITLE }}</h2>
+    <!-- INSERT:SUMMARY_PARAGRAPHS_START -->
+    <p>（ここに今週のサマリ本文を <code>&lt;p&gt;...&lt;/p&gt;</code> で複数行挿入）</p>
+    <!-- INSERT:SUMMARY_PARAGRAPHS_END -->
+    <div class="kpi-grid">
+      <div class="kpi-card ok"><div class="num">{{ KPI_BUY }}</div><div class="label">カットデータ調達可能</div></div>
+      <div class="kpi-card partial"><div class="num">{{ KPI_ALT }}</div><div class="label">代替サイト調達可能</div></div>
+      <div class="kpi-card ng"><div class="num">{{ KPI_REAL }}</div><div class="label">実機購入必須</div></div>
+      <div class="kpi-card new"><div class="num">{{ KPI_NEW }}</div><div class="label">{{ KPI_NEW_LABEL }}</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 巡回できなかったサイトの告知（全て巡回できた週は空になる） -->
+  <!-- ============================================================ -->
+  <!-- INSERT:UNREACHABLE_NOTICE_START -->
+  <!-- 巡回できたサイトが6/6なら空文字。_unreachable_notice() が生成 -->
+  <!-- INSERT:UNREACHABLE_NOTICE_END -->
+
+  <!-- ============================================================ -->
+  <!-- タブナビ -->
+  <!-- ============================================================ -->
+  <div class="tabs">
+    <button class="tab-button active" onclick="switchTab(event, 'tab-matrix')">
+      <span class="tab-icon">📊</span>12シリーズ一覧<span class="tab-count">12件</span>
+    </button>
+    <button class="tab-button" onclick="switchTab(event, 'tab-release')">
+      <span class="tab-icon">📅</span>新規発売情報<span class="tab-count">{{ TAB_RELEASE_COUNT }}</span>
+    </button>
+    <button class="tab-button" onclick="switchTab(event, 'tab-cutdata')">
+      <span class="tab-icon">📐</span>カットデータ調達<span class="tab-count"></span>
+    </button>
+    <button class="tab-button" onclick="switchTab(event, 'tab-sites')">
+      <span class="tab-icon">🌐</span>調達先サイト<span class="tab-count">6社</span>
+    </button>
+    <button class="tab-button" onclick="switchTab(event, 'tab-ops')">
+      <span class="tab-icon">⚙</span>運用・自動化<span class="tab-count"></span>
+    </button>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 1: 12シリーズ一覧 -->
+  <!-- ============================================================ -->
+  <div id="tab-matrix" class="tab-content active">
+
+    <h2 class="section-title">12シリーズ × ARMobileSkin × 新発売 × 判定</h2>
+    <p style="font-size: 13px; color: var(--ink-soft); margin: 0 0 12px;">
+      対象12シリーズすべてに対し、毎週このマトリクスを更新します。判定バッジの意味はページ上部の凡例を参照。
+    </p>
+
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th class="col-num">#</th>
+          <th class="col-series">対象シリーズ</th>
+          <th class="col-arm">ARMobileSkin</th>
+          <th class="col-armlink">カテゴリ／代替サイト</th>
+          <th class="col-newrelease">新発売（過去30日／未来30日）</th>
+          <th class="col-judgment">判定<br><span style="font-size: 9px; font-weight: 400; color: var(--muted);">（新発売がある場合の方針）</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- INSERT:MATRIX_ROWS_START -->
+        <!--
+          12行の <tr> を必ず出力すること。各 <tr> の構造例：
+
+          <tr>
+            <td class="col-num">01</td>
+            <td>アイコス</td>
+            <td><span class="badge partial">部分対応</span></td>
+            <td>
+              <a href="..." target="_blank" rel="noopener" class="link-btn">ARM: IQOS Iluma One</a><br>
+              <a href="..." target="_blank" rel="noopener" class="link-btn">VecRas E-Cigarette</a>
+            </td>
+            <td>新発売なし</td>
+            <td>
+              <div class="judgment-block">
+                <span class="action-badge alt">▸ ALT</span>
+                <span class="judgment-meaning">代替サイトメイン</span>
+              </div>
+            </td>
+          </tr>
+
+          ARMobileSkin列の <span class="badge"> クラス：
+            - ok      : 掲載あり
+            - partial : 部分対応
+            - ng      : 未掲載 / 該当なし
+            - none    : ―
+
+          action-badge クラス: buy / alt / real / wait / none
+        -->
+        <!-- INSERT:MATRIX_ROWS_END -->
+      </tbody>
+    </table>
+
+    <h2 class="section-title">シリーズ分類サマリー</h2>
+    <div class="sites-grid">
+      <div class="site-card" style="border-left: 4px solid var(--action-buy);">
+        <h4 style="color: var(--action-buy);">▸ BUY ／ ARMobileSkinで即購入可能</h4>
+        <div class="site-desc">
+          エアポッズ ／ プレイステーション ／ ニンテンドースイッチ ／ アイフォン ／ アイパッド ／ マックブック<br>
+          <strong>新発売時はARMobileSkin内で型番確認→即購入</strong>
+        </div>
+      </div>
+      <div class="site-card" style="border-left: 4px solid var(--action-alt);">
+        <h4 style="color: var(--action-alt);">▸ ALT ／ 代替サイトで調達可能</h4>
+        <div class="site-desc">
+          アイコス ／ リルハイブリッド ／ グロー<br>
+          <strong>VecRas（E-Cigarette専用）／Cutout.shop経由で調達。最新型番はカスタムオーダー対応も可</strong>
+        </div>
+      </div>
+      <div class="site-card" style="border-left: 4px solid var(--action-real);">
+        <h4 style="color: var(--action-real);">▸ REAL ／ 実機購入で対応</h4>
+        <div class="site-desc">
+          プルームテック ／ キングブレード ／ ミックスペンラ<br>
+          <strong>カットデータ未調達。新発売時は実機購入＋自社型起こし</strong>
+        </div>
+      </div>
+      <div class="site-card" style="border-left: 4px solid var(--action-wait);">
+        <h4 style="color: var(--action-wait);">▸ WAIT ／ 様子見</h4>
+        <div class="site-desc">
+          噂レベル製品が出てきたタイミングで該当<br>
+          <strong>公式発表（WWDC・Apple発表会・東京ゲームショウ等）後に再判定</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 2: 新規発売情報 -->
+  <!-- ============================================================ -->
+  <div id="tab-release" class="tab-content">
+
+    <h2 class="section-title">
+      直近1か月の発売機種
+      <span class="section-period">{{ PAST_RANGE }}</span>
+    </h2>
+    <!-- INSERT:RELEASE_PAST_CARDS_START -->
+    <!--
+      過去30日の発売を action-card で並べる。各カードの構造例：
+
+      <div class="action-card act-buy">
+        <div class="ac-header">
+          <div class="ac-title-block">
+            <div class="ac-num">PAST-01 ／ プレイステーション</div>
+            <h3 class="ac-name">PS5 デジタル・エディション ダブルパック</h3>
+            <span class="ac-sub">型番：CFIJ-10032 ／ 発売：2026年4月24日 ／ 価格：65,000円</span>
+          </div>
+          <div class="judgment-block">
+            <span class="action-badge buy">▸ BUY</span>
+            <span class="judgment-meaning">即購入</span>
+          </div>
+        </div>
+        <div class="ac-info">補足説明テキスト</div>
+        <a href="..." target="_blank" rel="noopener" class="link-btn">公式リンク</a>
+      </div>
+
+      act-* クラス: act-buy / act-alt / act-real / act-wait
+      発売がない場合は <p>該当なし</p> 1行で可
+    -->
+    <!-- INSERT:RELEASE_PAST_CARDS_END -->
+
+    <h2 class="section-title">
+      未来1か月の発売予定
+      <span class="section-period">{{ FUTURE_RANGE }}</span>
+    </h2>
+    <!-- INSERT:RELEASE_FUTURE_CARDS_START -->
+    <!-- 未来180日の発売をカードで並べる（構造は PAST と同じ） -->
+    <!-- INSERT:RELEASE_FUTURE_CARDS_END -->
+
+    <h2 class="section-title">
+      参考：窓外の先行リリース群
+      <span class="section-period">参考情報</span>
+    </h2>
+    <!-- INSERT:RELEASE_REF_CARDS_START -->
+    <!-- 窓外（過去30日より前）の参考リリースがあれば挿入。なければ <p>該当なし</p> -->
+    <!-- INSERT:RELEASE_REF_CARDS_END -->
+
+    <h2 class="section-title">
+      今後半年（噂レベル）
+      <span class="section-period">{{ FUTURE_RANGE }}</span>
+    </h2>
+    <!-- INSERT:RELEASE_RUMOR_CARDS_START -->
+    <!-- 噂レベル製品を act-wait カードで列挙。なければ <p>該当なし</p> -->
+    <!-- INSERT:RELEASE_RUMOR_CARDS_END -->
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 3: カットデータ調達 -->
+  <!-- ============================================================ -->
+  <div id="tab-cutdata" class="tab-content">
+
+    <!-- INSERT:CUTDATA_CARDS_START -->
+    <!--
+      モデル別にカットデータ調達状況を action-card + cutdata テーブルで表現。
+      Step 1 で検出した新発売機種ごとに1カード。
+      新発売がない場合は、シリーズグループ単位（加熱式たばこ系／ペンライト系）の
+      参考カードのみでも可。
+
+      カード構造例：
+
+      <h2 class="section-title">機種名（過去/未来1か月）</h2>
+      <div class="action-card act-buy">
+        <div class="ac-header">
+          <div class="ac-title-block">
+            <div class="ac-num">PAST-01</div>
+            <h3 class="ac-name">機種名</h3>
+          </div>
+          <div class="judgment-block">
+            <span class="action-badge buy">▸ BUY</span>
+            <span class="judgment-meaning">即購入</span>
+          </div>
+        </div>
+        <div class="ac-info"><strong>判定理由：</strong>...</div>
+        <table class="cutdata">
+          <thead><tr><th>サイト</th><th>該当</th><th>商品ページ</th><th>価格</th></tr></thead>
+          <tbody>
+            <tr><td>ARMobileSkin</td><td><span class="ok-text">あり</span></td><td>...</td><td>$5.20</td></tr>
+          </tbody>
+        </table>
+      </div>
+    -->
+    <!-- INSERT:CUTDATA_CARDS_END -->
+
+    <h2 class="section-title">加熱式たばこ系 ／ 専門調達先一覧（固定参考）</h2>
+    <p style="font-size: 13px; color: var(--ink-soft); margin: 0 0 12px;">
+      ARMobileSkin、VecRas、Cutout.shopの3サイトで主要モデルのカットデータ調達可能。最新型番はVecRasのカスタムオーダーで対応可。
+    </p>
+    <div class="action-card act-alt">
+      <div class="ac-header">
+        <div class="ac-title-block">
+          <div class="ac-num">SPECIAL ／ 加熱式たばこ4種</div>
+          <h3 class="ac-name">アイコス／プルーム／リル／グロー ― 専門調達ルート</h3>
+        </div>
+        <div class="judgment-block">
+          <span class="action-badge alt">▸ ALT</span>
+          <span class="judgment-meaning">代替サイト調達</span>
+        </div>
+      </div>
+      <table class="cutdata">
+        <thead><tr><th>シリーズ</th><th>調達先</th><th>掲載例</th><th style="width: 12%; text-align: center;">状態</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>アイコス</strong></td>
+            <td>ARMobileSkin<br>VecRas E-Cigarette</td>
+            <td>
+              <a href="https://armobileskin.com/product/iqos-iluma-one-skin-template-vector/" target="_blank" rel="noopener" class="link-btn">IQOS Iluma One（ARM）</a>
+              <a href="https://vecras.com/collections/cutfiles-e-cigarettes" target="_blank" rel="noopener" class="link-btn">IQOS 3/3 Multi（VecRas）</a>
+            </td>
+            <td style="text-align: center;"><span class="ok-text">調達可</span></td>
+          </tr>
+          <tr>
+            <td><strong>プルーム</strong></td>
+            <td>VecRas（カスタムオーダー）</td>
+            <td><a href="https://vecras.com/collections/cutfiles-e-cigarettes" target="_blank" rel="noopener" class="link-btn">VecRas E-Cigarette</a><br><span style="font-size: 10px; color: var(--muted);">既製品なし。カスタム依頼可</span></td>
+            <td style="text-align: center;"><span class="partial-text">要相談</span></td>
+          </tr>
+          <tr>
+            <td><strong>リルハイブリッド</strong></td>
+            <td>Cutout.shop</td>
+            <td><a href="https://cutout.shop/products/IQOS-Lil-Solid-2-0-Vector-Skin-Cut-Files-p597843664" target="_blank" rel="noopener" class="link-btn">IQOS Lil Solid 2.0</a></td>
+            <td style="text-align: center;"><span class="ok-text">調達可</span></td>
+          </tr>
+          <tr>
+            <td><strong>グロー</strong></td>
+            <td>ARMobileSkin<br>VecRas E-Cigarette</td>
+            <td>
+              <a href="https://armobileskin.com/product-category/other-template/vape-template/" target="_blank" rel="noopener" class="link-btn">GLO (G004) ARM</a>
+            </td>
+            <td style="text-align: center;"><span class="partial-text">旧モデルのみ</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="section-title">ペンライト系 ／ 実機購入方針（固定）</h2>
+    <div class="action-card act-real">
+      <div class="ac-header">
+        <div class="ac-title-block">
+          <div class="ac-num">SPECIAL ／ ペンライト2種</div>
+          <h3 class="ac-name">キングブレード ／ ミックスペンラ</h3>
+        </div>
+        <div class="judgment-block">
+          <span class="action-badge real">▸ REAL</span>
+          <span class="judgment-meaning">実機購入</span>
+        </div>
+      </div>
+      <div class="ac-info">
+        <strong>判定理由：</strong>調査済みサイト6社いずれもペンライト用カテゴリが存在しない。日本のアイドル文化に特化した特殊カテゴリのため、<em class="hl">新発売時は実機を購入し、自社で型起こしを行う運用</em>とする。<br>
+        <strong>運用フロー：</strong>① ルイファン公式・PENLa公式の新製品発表をウォッチ → ② 実機購入 → ③ 自社で寸法測定・型起こし → ④ スキン展開。
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 4: 調達先サイト（固定） -->
+  <!-- ============================================================ -->
+  <div id="tab-sites" class="tab-content">
+
+    <h2 class="section-title">今週の到達確認（{{ REPORT_DATE_JA }} 実測）</h2>
+    <p style="font-size: 13px; color: var(--ink-soft); margin: 0 0 12px;">
+      レポート生成時に6サイトへ実際にアクセスした結果です。<strong>到達できなかったサイトについては判定を作らず「確認できませんでした」と記載します。</strong>
+    </p>
+    <table class="cutdata">
+      <thead><tr><th style="width: 22%;">サイト</th><th style="width: 26%;">URL</th><th style="width: 12%;">結果</th><th>備考</th></tr></thead>
+      <tbody>
+        <!-- INSERT:SITE_STATUS_ROWS_START -->
+        <!-- <tr> を6行。_site_status_rows() が生成 -->
+        <!-- INSERT:SITE_STATUS_ROWS_END -->
+      </tbody>
+    </table>
+
+    <h2 class="section-title">メインサイト（既存利用）</h2>
+    <div class="sites-grid">
+      <div class="site-card" style="grid-column: 1 / -1;">
+        <h4>ARMobileSkin</h4>
+        <a href="https://armobileskin.com/" target="_blank" rel="noopener" class="site-url-btn">armobileskin.com</a>
+        <div class="site-desc">
+          <strong>御社の既存メインサイト</strong>。Apple系・ゲーム系シリーズを網羅。加熱式たばこは IQOS Iluma One / GLO G004 のみ。<br>
+          <strong>新着確認</strong>：<a href="https://armobileskin.com/update/" target="_blank" rel="noopener">All New Update</a>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">代替サイト ／ 4社</h2>
+    <p style="font-size: 13px; color: var(--ink-soft); margin: 0 0 12px;">
+      Apple系・スマホ・PC・ゲーム機・<strong>加熱式たばこ</strong>の最新モデルを補完。
+    </p>
+
+    <div class="sites-grid">
+      <div class="site-card">
+        <h4>VecRas ★加熱式たばこ対応</h4>
+        <a href="https://vecras.com/" target="_blank" rel="noopener" class="site-url-btn">vecras.com</a>
+        <div class="site-desc">
+          <strong>最大の強み</strong>：最新モデルの追加が最速。E-Cigarette専用カテゴリあり。<em class="hl">カスタムオーダー対応も可</em>。<br>
+          主要：
+          <a href="https://vecras.com/collections/cutfiles-e-cigarettes" target="_blank" rel="noopener">E-Cigarette</a> ／
+          <a href="https://vecras.com/collections/cutfiles-computers" target="_blank" rel="noopener">PC</a> ／
+          <a href="https://vecras.com/collections/cutfiles-macbooks" target="_blank" rel="noopener">MacBook</a> ／
+          <a href="https://vecras.com/collections/cutfiles-phones-apple" target="_blank" rel="noopener">iPhone</a>
+        </div>
+      </div>
+      <div class="site-card">
+        <h4>Cutout.shop ★リル系対応</h4>
+        <a href="https://cutout.shop/" target="_blank" rel="noopener" class="site-url-btn">cutout.shop</a>
+        <div class="site-desc">
+          最新モデルの追加スピード速い。<strong>IQOS Lil Solid 2.0</strong>などリル系を扱う数少ないサイト。<br>
+          主要：<a href="https://cutout.shop/products" target="_blank" rel="noopener">全製品一覧</a>
+        </div>
+      </div>
+      <div class="site-card">
+        <h4>TEMPLAZ</h4>
+        <a href="https://templaz.com/" target="_blank" rel="noopener" class="site-url-btn">templaz.com</a>
+        <div class="site-desc">
+          iPhone／MacBook 専門カテゴリーが整理されており検索容易。SVG・CDR・PDF対応。<br>
+          主要：
+          <a href="https://templaz.com/collections/iphone-skin-templates" target="_blank" rel="noopener">iPhone</a> ／
+          <a href="https://templaz.com/collections/macbook" target="_blank" rel="noopener">MacBook</a>
+        </div>
+      </div>
+      <div class="site-card">
+        <h4>ULTRASkins.Net</h4>
+        <a href="https://ultraskins.net/" target="_blank" rel="noopener" class="site-url-btn">ultraskins.net</a>
+        <div class="site-desc">
+          iPhone専門特化。全Apple iPhoneモデルの取扱明示。<br>
+          主要：<a href="https://ultraskins.net/iphone/" target="_blank" rel="noopener">iPhone Skin Templates</a>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">参考：競合スキン販売サイト</h2>
+    <div class="sites-grid">
+      <div class="site-card" style="grid-column: 1 / -1;">
+        <h4>UltraGuardz</h4>
+        <a href="https://www.ultraguardz.com/" target="_blank" rel="noopener" class="site-url-btn">ultraguardz.com</a>
+        <div class="site-desc">
+          カットデータではなく完成品スキンを販売するUS系競合。御社の<a href="https://fun-create.jp/f/wd_game" target="_blank" rel="noopener">fun-create.jp/f/wd_game</a>と同様の小売モデル。価格設定・展開機種選定の<strong>競合分析リファレンス</strong>。
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">運用方針 ／ ペンライト系の取扱</h2>
+    <div class="sites-grid">
+      <div class="site-card" style="grid-column: 1 / -1; border-left: 4px solid var(--action-real);">
+        <h4 style="color: var(--action-real);">▸ REAL ／ キングブレード・ミックスペンラ</h4>
+        <div class="site-desc">
+          ペンライト用カットデータを扱うサイトは現時点で見当たらず。<strong>新発売時は実機購入＋自社型起こし</strong>で対応。<br>
+          公式ウォッチ先：
+          <a href="https://ruifan.co.jp/" target="_blank" rel="noopener">ルイファン（KING BLADE）</a> ／
+          <a href="https://www.penlight.jp/" target="_blank" rel="noopener">ターンオン（PENLa）</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 5: 運用・自動化（固定） -->
+  <!-- ============================================================ -->
+  <div id="tab-ops" class="tab-content">
+
+    <h2 class="section-title">確定した自動化要件</h2>
+    <div class="site-card" style="margin-bottom: 16px;">
+      <table class="cutdata">
+        <thead><tr><th style="width: 30%;">項目</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td><strong>配信先</strong></td><td>ChatWork「FUN 商品開発」（room_id 407742634）／ 送信者 FUN-CREATE BOT</td></tr>
+          <tr><td><strong>配信形式</strong></td><td>HTMLレポートをファイル添付</td></tr>
+          <tr><td><strong>調査期間</strong></td><td>過去30日＋未来180日（変更可能）</td></tr>
+          <tr><td><strong>実行環境</strong></td><td>VPS（fun-create-vps）の systemd タイマー <code>newproduct-skin-report.timer</code>（2026-09 に翼さんのPCから Auto GROWTH へ、2026-11 に NEW PRODUCT へ移行）</td></tr>
+          <tr><td><strong>生成AI</strong></td><td>VPS上の Claude Code CLI（<code>claude -p</code>）。Anthropic APIキーは使わず従量課金は発生しない</td></tr>
+          <tr><td><strong>承認フロー</strong></td><td>自動配信のみ（人の確認なし）</td></tr>
+          <tr><td><strong>配信タイミング</strong></td><td>毎週月曜日 8:00 JST</td></tr>
+          <tr><td><strong>対象シリーズ</strong></td><td>12シリーズ固定（<code>config/skin_series.yaml</code>）</td></tr>
+          <tr><td><strong>判定ロジック</strong></td><td>BUY / ALT / REAL / WAIT の4段階（確認できなかったものは判定を作らない）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="automation">
+      <h3>▸ システム構成 ／ VPS常駐方式（2026-09 移行）</h3>
+      <p>
+        従来は翼さんのPCのタスクスケジューラで動かしていたため、<strong>PCがスリープ／シャットダウンだと配信されない</strong>という弱点がありました。VPS の systemd タイマーへ移し（2026-09 Auto GROWTH・2026-11 から NEW PRODUCT）、PCの状態に関係なく配信されるようにしています。調査手順・12シリーズ定義・テンプレートは移行元をそのまま引き継いでいます。
+      </p>
+
+      <div class="auto-flow">
+        <div class="flow-step">
+          <div class="num">STEP 1</div>
+          <strong>タイマー起動</strong>
+          月曜 8:00 JST に systemd タイマーが <code>connectors/ec/skin_report.py</code> を起動
+        </div>
+        <div class="flow-step">
+          <div class="num">STEP 2</div>
+          <strong>6サイトの到達確認</strong>
+          実際にアクセスして生死を確認。<strong>届かなかったサイトの判定は作らない</strong>
+        </div>
+        <div class="flow-step">
+          <div class="num">STEP 3</div>
+          <strong>調査・判定とJSON受領</strong>
+          <code>claude -p</code> が Step1〜3（12シリーズ調査・6サイト巡回・BUY/ALT/REAL/WAIT判定）を行いJSONで返す。12シリーズ揃っているか等を検証
+        </div>
+        <div class="flow-step">
+          <div class="num">STEP 4</div>
+          <strong>Chatwork配信</strong>
+          HTMLレポート生成→Chatwork API <code>POST /v2/rooms/{room_id}/files</code> でファイル添付送信（3回までリトライ）
+        </div>
+      </div>
+
+      <p>
+        <strong>止まり方</strong>：検証に落ちた週は<strong>配信しません</strong>。中途半端なレポートを送るより、届かないほうが誤解が少ないためです。失敗は systemd の <code>OnFailure</code> で通知され、生成できなかった週があれば見張り（watchdog）が気づきます。
+      </p>
+      <p>
+        <strong>巡回できなかったサイトの扱い</strong>：そのサイトについては判定を作らず、<em style="color: #f4e4df; font-style: normal;">「確認できませんでした」と明記</em>します。ARMobileSkin は従来どおり直接巡回が 403 で拒否されるため、検索インデックス経由での確認になります。
+      </p>
+    </section>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- フッター -->
+  <!-- ============================================================ -->
+  <footer class="doc-footer">
+    <span><span class="mark">●</span>　Internal Action Report — 12 Series Coverage</span>
+    <span>Generated {{ REPORT_DATE_ISO }}</span>
+  </footer>
+
+</div>
+
+<script>
+  function switchTab(event, tabId) {
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+    window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 20, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>

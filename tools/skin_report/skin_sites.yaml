@@ -1,0 +1,86 @@
+# ============================================================
+# 移行元: C:\skin-sticker-report\config/sites.yaml（2026-09-24 取り込み）
+# 中身は移行元のまま。**ここを直したら移行元も直すか、移行元を畳むこと。**
+# 読むのは connectors/ec/skin_report.py。コードに直書きしない
+# ============================================================
+# ============================================================
+# カットデータ調達先サイト定義（固定6サイト）
+# CLAUDE.md Section 4 準拠
+# ============================================================
+
+sites:
+  - id: "armobileskin"
+    name: "ARMobileSkin"
+    url: "https://armobileskin.com/"
+    role: "primary"
+    priority: 1
+    notes: "メインサイト。最優先で確認。御社の既存利用サイト"
+    category_urls:
+      iqos: "https://armobileskin.com/product/iqos-iluma-one-skin-template-vector/"
+      glo: "https://armobileskin.com/product-category/other-template/vape-template/"
+      airpods: "https://armobileskin.com/audio-template/"
+      playstation: "https://armobileskin.com/product-category/games-skin-template-vector-cut/playstation/"
+      nintendo: "https://armobileskin.com/product-category/games-skin-template-vector-cut/nintendo/"
+      iphone: "https://armobileskin.com/product-category/iphone-mobile-skin-templates/"
+      ipad: "https://armobileskin.com/product-category/ipad-tab/ipad/"
+      macbook: "https://armobileskin.com/product-category/laptop/apple-macbook-skin-template/"
+      new_update: "https://armobileskin.com/update/"
+
+  - id: "vecras"
+    name: "VecRas"
+    url: "https://vecras.com/"
+    role: "alternate"
+    priority: 2
+    notes: "代替サイト。E-Cigarette専用カテゴリあり。カスタムオーダー対応も可"
+    category_urls:
+      e_cigarette: "https://vecras.com/collections/cutfiles-e-cigarettes"
+      computers: "https://vecras.com/collections/cutfiles-computers"
+      macbooks: "https://vecras.com/collections/cutfiles-macbooks"
+      iphone: "https://vecras.com/collections/cutfiles-phones-apple"
+
+  - id: "templaz"
+    name: "TEMPLAZ"
+    url: "https://templaz.com/"
+    role: "alternate"
+    priority: 3
+    notes: "iPhone/MacBook専門。SVG・CDR・PDF対応"
+    category_urls:
+      iphone: "https://templaz.com/collections/iphone-skin-templates"
+      macbook: "https://templaz.com/collections/macbook"
+
+  - id: "ultraskins"
+    name: "ULTRASkins.Net"
+    url: "https://ultraskins.net/"
+    role: "alternate"
+    priority: 4
+    notes: "iPhone特化"
+    category_urls:
+      iphone: "https://ultraskins.net/iphone/"
+
+  - id: "cutout"
+    name: "Cutout.shop"
+    url: "https://cutout.shop/"
+    role: "alternate"
+    priority: 5
+    notes: "最新モデル＋IQOS Lil Solid 等。リル系を扱う数少ないサイト"
+    category_urls:
+      lil_solid: "https://cutout.shop/products/IQOS-Lil-Solid-2-0-Vector-Skin-Cut-Files-p597843664"
+      all: "https://cutout.shop/products"
+
+  - id: "ultraguardz"
+    name: "UltraGuardz"
+    url: "https://www.ultraguardz.com/"
+    role: "reference"
+    priority: 6
+    notes: "参考（完成品スキン販売・競合分析用）。カットデータ調達対象ではない"
+
+# ============================================================
+# 公式ウォッチ先（ペンライト系REAL判定用）
+# ============================================================
+official_watch:
+  - series: "キングブレード"
+    name: "ルイファン"
+    url: "https://ruifan.co.jp/"
+  - series: "ミックスペンラ"
+    name: "ターンオン"
+    url: "https://www.penlight.jp/"

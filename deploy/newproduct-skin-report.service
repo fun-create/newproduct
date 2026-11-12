@@ -1,0 +1,32 @@
+# スキンシール展開判断レポート（週次・FR-251・ADR-140）。Auto GROWTH の ag-skin-report から引き取り。
+# **deploy/ は正本ではない。正本は /etc/systemd/system/。**配る前に diff -u で突き合わせる。
+#   sudo cp /opt/newproduct/deploy/newproduct-skin-report.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+# **タイマーを有効にするのは切り替えの日だけ**（同じ週に2通届かない順。HUB tasks/to-autogrowth.md）:
+#   1. NEW PRODUCT が --send なしの試運転（下の ExecStart から --send を外して1回・または手で）
+#   2. Auto GROWTH が ag-skin-report.timer を止めたと返事 → 3. sudo systemctl enable --now newproduct-skin-report.timer
+# 終了コード: 1 前提不足／2 調査失敗／3 検証に落ちた（配らない）／4 送信失敗（HTML は data/skin_report に残る）
+
+[Unit]
+Description=NEW PRODUCT スキンシール展開判断レポート（週次・Claude Code CLI）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=newproduct
+Group=newproduct
+WorkingDirectory=/opt/newproduct
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/opt/newproduct
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SKIN_REPORT_MODEL=opus
+Environment="SKIN_REPORT_MENTION_TO=5865584:石原 千恵子,6224035:増地 洋子"
+ExecStart=/usr/bin/python3 /opt/newproduct/tools/skin_report/skin_report.py --send
+TimeoutStartSec=45min
+
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/opt/newproduct/data /opt/newproduct/logs

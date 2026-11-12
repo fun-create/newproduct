@@ -579,3 +579,6 @@ button.np-btn-cw { white-space: nowrap; }
 .np-launch form.np-inline { flex-wrap: wrap; }
 /* 新商品マスタに載せる欄（ADR-139） */
 label.np-block { display: block; margin: .3rem 0; }
+
+/* スキンシール展開判断レポート（ADR-140）。本文は白地の HTML なので枠の中は白のまま */
+.np-skin-frame { width: 100%; height: 78vh; border: 1px solid var(--fca-line); border-radius: 8px; background: #fff; }
