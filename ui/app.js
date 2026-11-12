@@ -4709,7 +4709,7 @@
       if (d.error) { b.appendChild(el("p", { "class": "np-warn", text: "レポートの置き場を読めません: " + d.error })); return; }
       if (!d.reports.length) { b.appendChild(el("p", { "class": "np-note", text: "まだ1本もありません。" })); return; }
       var c = d.cur;
-      if (c.counts) b.appendChild(kpiRow(c.counts.map(function (x) { return kpi(x.label, x.n + " シリーズ"); })
+      if (c.counts) b.appendChild(kpiRow(c.counts.map(function (x) { return kpi(x.label, x.n + " 件"); })
         .concat([kpi("新発売", c.n_new + " 件", "型の新設が要らないものは数えない")])));
       else b.appendChild(el("p", { "class": "np-sub", text: c.meta_err ? "根拠の JSON を読めません（" + c.meta_err + "）。本文は下に出しています。" : "この回は根拠の JSON が残っていません（判定の内訳と到達確認は出せません）。" }));
       if (c.mention_missing) b.appendChild(el("p", { "class": "np-warn", text: "この回は宛先（TO）が付いていません。" }));
