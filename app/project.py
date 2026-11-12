@@ -224,6 +224,10 @@ def _filters(args: dict):
         where.append("substr(launch_date,1,7)=?"); params.append(args["launch_month"])
     if args.get("source_of_truth"):
         where.append("source_of_truth=?"); params.append(args["source_of_truth"])
+    # 検索窓（2026-11-12 石原さん）。社内呼称か案件 ID に、空白で区切った語が**全部**含まれるもの
+    for term in str(args.get("q") or "").split()[:5]:
+        t = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")[:60] + "%"
+        where.append("(internal_name LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\')"); params += [t, t]
     return " AND ".join(where), params
 
 

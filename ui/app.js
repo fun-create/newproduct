@@ -840,9 +840,11 @@
     // 既定はステージ「開発中」だけ（2026-11-10 追加修正依頼書 4-2。11-09 H04 の「未発売」から変更）。
     // 「未発売」（保留など開発中以外も含む）・発売済み・すべては「ステージ」で選ぶ。リンクで stage が付いていればそれを守る
     var STAGE_DEFAULT = "開発中";
-    var stageQ = q.get("stage") || STAGE_DEFAULT;
+    // 検索窓（2026-11-12 石原さん）。語を入れたら、ステージを選んでいなければ全部の案件から探す
+    var word = (q.get("q") || "").trim();
+    var stageQ = q.get("stage") || (word ? "_all" : STAGE_DEFAULT);
     qs.push("stage=" + encodeURIComponent(stageQ));
-    ["flow", "owner", "launch_month", "source_of_truth"].forEach(function (k) {
+    ["q", "flow", "owner", "launch_month", "source_of_truth"].forEach(function (k) {
       if (q.get(k)) qs.push(k + "=" + encodeURIComponent(q.get(k)));
     });
     api("/api/projects?" + qs.join("&")).then(function (d) {
@@ -865,7 +867,9 @@
       var ss = sel("stage", "ステージ", [{ code: "_active", label: "未発売の案件（開発中・保留などすべて）" },
         { code: "_launched", label: "発売済み（発売済・追跡中・評価完了）" }, { code: "_all", label: "すべての案件" }]
         .concat(d.filters.stage.filter(function (s) { return (s.code || s) !== STAGE_DEFAULT; })), stageQ === STAGE_DEFAULT ? "" : stageQ);
-      ss.firstChild.textContent = "開発中（既定）";
+      ss.firstChild.textContent = word ? "すべての案件（検索のとき）" : "開発中（既定）";
+      if (word && !q.get("stage")) ss.value = "";
+      f.appendChild(el("input", { type: "search", name: "q", value: word, placeholder: "案件名・ID で探す", "aria-label": "案件を探す（案件名・ID）", maxlength: "60" }));
       f.appendChild(ss);
       f.appendChild(sel("flow", "フロー", d.filters.flow, q.get("flow")));
       f.appendChild(sel("owner", "担当", d.filters.owner, q.get("owner")));
@@ -881,7 +885,8 @@
       });
       b.appendChild(f);
 
-      if (stageQ === STAGE_DEFAULT) b.appendChild(el("p", { "class": "np-sub", text: "ステージが「開発中」の案件だけを出しています。保留・発売済みなどは「ステージ」で「未発売の案件」「発売済み」「すべての案件」などを選びます。" }));
+      if (word) b.appendChild(el("p", { "class": "np-sub", text: "「" + word + "」を含む案件を出しています（" + (q.get("stage") ? "選んだステージの中" : "すべてのステージ") + "）。" }));
+      else if (stageQ === STAGE_DEFAULT) b.appendChild(el("p", { "class": "np-sub", text: "ステージが「開発中」の案件だけを出しています。保留・発売済みなどは「ステージ」で「未発売の案件」「発売済み」「すべての案件」などを選びます。" }));
       else if (stageQ === "_active") b.appendChild(el("p", { "class": "np-sub", text: "発売済みの案件は出していません（保留なども含めた未発売の案件）。" }));
       if (!d.rows.length && stageQ !== STAGE_DEFAULT) {
         b.appendChild(el("p", { "class": "np-note", text: "この条件の案件はありません。" }));
