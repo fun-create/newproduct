@@ -1090,6 +1090,28 @@ class H(BaseHTTPRequestHandler):
             except seisan_m.Refused as e:
                 return self.sendj(409, {"error": "CIP が断りました: " + str(e)})
 
+        # WEBチームへ渡すページ（段階 W・ADR-143・FR-303〜314）。**下の汎用の口より先に置く**
+        if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("web") and parts[2] in (
+                "web", "web-material", "web-hand", "web-state", "web-comment"):
+            from app import webpass
+            pid, what = parts[1], parts[2]
+            if what == "web" and method == "GET":
+                if (qs.get("v") or "").isdigit():
+                    return self.sendj(200, webpass.version(pid, int(qs["v"])))
+                return self.sendj(200, webpass.overview(pid, uid))
+            if method != "POST" or what == "web":
+                return self.sendj(404, {"error": "not found"})
+            d = self.body()
+            if what == "web-material":
+                return self.sendj(200, webpass.save_material(pid, d.get("key", ""), d.get("body", ""), uid))
+            if what == "web-hand":
+                return self.sendj(200, webpass.hand(pid, uid))
+            if what == "web-state":
+                return self.sendj(200, webpass.set_state(pid, d.get("state", ""), uid))
+            vid = d.get("version_id", "")
+            if not str(vid).isdigit():
+                raise ValueError("版を選んでください")
+            return self.sendj(200, webpass.comment(pid, int(vid), d.get("kind", ""), d.get("body", ""), d.get("reply_to"), uid))
         # タスクを足す（ADR-107）。**下の汎用の口より先に置く**（そちらは知らない what を 404 にする）
         if len(parts) == 3 and parts[0] == "projects" and parts[2] == "tasks" and method == "POST":
             d = self.body()

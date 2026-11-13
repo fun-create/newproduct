@@ -326,6 +326,13 @@ def main() -> int:
         note(st == 200 and d["total"] == 0, "取り込む前の台帳は0件", str(d))
         st, d = cl.get("/api/listings?shop=nope")
         note(st == 404, "知らない店は 404", str(st))
+        # WEBチームへ渡すページ（段階 W）: 見られる。必須が空なら渡せない（400）。知らない版は 404
+        st, d = cl.get(f"/api/projects/{pid}/web")
+        note(st == 200 and len(d["steps"]) == 9 and d["page"]["sections"][0]["title"] == "商品の概要", "渡す画面の口（①〜⑨・ページ）", str(st))
+        st, d = cl.post(f"/api/projects/{pid}/web-hand", {})
+        note(st in (400, 403), "必須が空なら渡せない（または業務ロールが無い）", f"{st} {d}")
+        st, d = cl.get(f"/api/projects/{pid}/web?v=9")
+        note(st == 404, "知らない版は 404", str(st))
         st, d = cl.get("/api/tasks?when=none&mine=0")
         note(st == 200 and len(d["rows"]) == 34,
              "「期限なし」で34件（展開直後は期限を入れない）", str(len(d["rows"])))

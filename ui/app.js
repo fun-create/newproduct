@@ -1148,6 +1148,13 @@
           b.appendChild(c);
         });
 
+        // WEBチームへ渡す（段階 W・ADR-143）。別の画面で、①〜⑨・ページの材料・版・やり取り
+        var wp = el("div", { "class": "np-card", id: "np-sec-web" });
+        wp.appendChild(el("h2", { text: "WEBチームへ渡す" }));
+        wp.appendChild(el("p", { "class": "np-sub", text: "コンセプトとページの材料を1枚にして、WEBチーム（Webマーケ）へ渡します。渡すと版が固まり、WEBチームは同じ画面で質問・修正の希望を書けます。" }));
+        wp.appendChild(btnRow([navBtn("#/projects/" + encodeURIComponent(d.id) + "/web", "WEBチームへ渡す画面を開く")]));
+        b.appendChild(wp);
+
         // LP依頼書（FR-118）。カルテの項目から作る。**送らない**（人が見て貼る）
         var lp = el("div", { "class": "np-card", id: "np-sec-lpreq" });
         lp.appendChild(el("h2", { text: "LP依頼書" }));
@@ -4699,6 +4706,172 @@
 
   /** 新機種調査（FR-140・ADR-102）。AI がウェブで探した新機種の候補を人が決める。展開の表の正本はここ */
   // スキンシール展開判断レポート（週次・Auto GROWTH から引き取り・ADR-140・FR-251）。**見るだけ。**配るのは月曜 8:00 のタイマー
+  // ── WEBチームへ渡すページ（段階 W・ADR-143・FR-303〜314）。カルテ C 節の上に「ページの材料」を足し、1枚にして渡す ──
+  function webPage(page, holder) {
+    page.sections.forEach(function (sec, i) {
+      var c = el("section", { "class": "np-card np-webpage-sec" });
+      c.appendChild(el("h3", { text: (i + 1) + ". " + sec.title }));
+      var dl = el("dl", { "class": "np-webpage" });
+      sec.items.forEach(function (it) {
+        dl.appendChild(el("dt", null, [txt(it.label + " "), it.missing && it.required ? tag("必須・未記入", "alert") : null,
+          it.pending ? tag("あとで", "neutral") : null]));
+        if (it.lines) {
+          var ol = el("ol");
+          it.lines.forEach(function (x) { ol.appendChild(el("li", { text: x })); });
+          dl.appendChild(el("dd", null, [ol]));
+        } else dl.appendChild(el("dd", { text: it.text, style: "white-space: pre-wrap" }));
+      });
+      c.appendChild(dl);
+      holder.appendChild(c);
+    });
+  }
+  function viewWebPass(pid) {
+    loading();
+    var v = (hashQuery().get("v") || "").replace(/[^0-9]/g, "");
+    if (v) return viewWebVersion(pid, v);
+    api("/api/projects/" + encodeURIComponent(pid) + "/web").then(function (d) {
+      var b = clear();
+      setTitle("WEBチームへ渡す", d.project.internal_name || pid);
+      b.appendChild(btnRow([navBtn("#/projects/" + encodeURIComponent(pid), "案件へ戻る", "back")]));
+      b.appendChild(el("p", { "class": "np-note", text: "アイデアから順にコンセプトを固め、ページの材料を足して、1枚のページで WEBチーム（Webマーケ）へ渡します。"
+        + "前の段が空でも先へ進めます。必須を確かめるのは「渡す」を押したときだけです。渡すと、その時点の中身が版として固まります。" }));
+      // ①〜⑨
+      var st = el("div", { "class": "np-card" });
+      st.appendChild(el("h2", { text: "どこまで済んだか" }));
+      var ol = el("ol", { "class": "np-steps" });
+      d.steps.forEach(function (x) {
+        ol.appendChild(el("li", null, [tag(x.done ? "済み" : (x.pending ? "あとで" : "まだ"), x.done ? "ok" : (x.pending ? "neutral" : "caution")),
+          txt(" " + x.label + "　"), el("span", { "class": "np-sub", text: x.how })]));
+      });
+      st.appendChild(ol);
+      st.appendChild(btnRow([navBtn("#/projects/" + encodeURIComponent(pid), "②〜⑥はカルテ C 節で書く", "sm")]));
+      b.appendChild(st);
+      // ⑦ ページの材料
+      var mc = el("div", { "class": "np-card", id: "np-web-materials" });
+      mc.appendChild(el("h2", { text: "⑦ ページの材料" }));
+      if (!d.can.edit || !d.project.editable) mc.appendChild(el("p", { "class": "np-sub", text: d.project.editable ? "書けるのは商品開発部・社長の業務ロールの人です。" : "Drive 側が正本の案件はアプリで編集できません。" }));
+      var f = el("form", { "class": "np-form" });
+      var inputs = {};
+      d.materials.forEach(function (m) {
+        var id = "np-wm-" + m.key;
+        f.appendChild(el("label", { "for": id }, [txt(m.label + " "), m.required ? tag("必須", "info") : null]));
+        var inp = m.key === "deadline" ? el("input", { type: "date", id: id, value: m.body })
+          : el("textarea", { id: id, rows: m.key === "contact" ? "1" : "4" });
+        if (m.key !== "deadline") inp.value = m.body;
+        if (!d.can.edit || !d.project.editable) inp.setAttribute("disabled", "disabled");
+        inputs[m.key] = { el: inp, was: m.body };
+        f.appendChild(inp);
+        f.appendChild(el("p", { "class": "np-sub", text: m.hint }));
+      });
+      var msg = el("p", { "class": "np-status", role: "status" });
+      var save = el("button", { type: "submit", "class": "np-btn", text: "材料を保存する" });
+      if (d.can.edit && d.project.editable) { f.appendChild(save); f.appendChild(msg); }
+      f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var ch = Object.keys(inputs).filter(function (k) { return inputs[k].el.value.trim() !== (inputs[k].was || "").trim(); });
+        if (!ch.length) { msg.textContent = "変わった欄がありません。"; return; }
+        save.disabled = true;
+        ch.reduce(function (pr, k) {
+          return pr.then(function () { return post("/api/projects/" + encodeURIComponent(pid) + "/web-material", { key: k, body: inputs[k].el.value }); });
+        }, Promise.resolve()).then(function () { msg.textContent = ch.length + " 欄を保存しました。"; setTimeout(function () { viewWebPass(pid); }, 600); })
+          .catch(function (e) { save.disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+      });
+      mc.appendChild(f);
+      b.appendChild(mc);
+      // 渡すページ（いまの中身）
+      var pg = el("div", { "class": "np-card", id: "np-web-page" });
+      pg.appendChild(el("h2", { text: "渡すページ（いまの中身）" }));
+      if (d.page.missing.length) pg.appendChild(el("p", { "class": "np-warn", text: "渡す前に埋める欄が " + d.page.missing.length + " つあります: " + d.page.missing.join("、") }));
+      if (d.changed_since_last) pg.appendChild(el("p", { "class": "np-sub", text: d.changed_since_last.length
+        ? "前に渡した版から変わった所: " + d.changed_since_last.join("、") : "前に渡した版から変わっていません。" }));
+      webPage(d.page, pg);
+      // ⑨ 渡す
+      var hb = el("div", { "class": "np-btnrow" });
+      var hmsg = el("p", { "class": "np-status", role: "status" });
+      if (d.can.hand && d.project.editable) {
+        var hbtn = el("button", { type: "button", "class": "np-btn", text: d.versions.length ? "直した中身で渡し直す（版を上げる）" : "WEBチームへ渡す" });
+        hbtn.addEventListener("click", function () {
+          hbtn.disabled = true;
+          post("/api/projects/" + encodeURIComponent(pid) + "/web-hand", {}).then(function (r) {
+            hmsg.textContent = "v" + r.ver + " として渡しました。" + (r.changed ? "前の版から変わった所: " + (r.changed.join("、") || "なし") : "");
+            setTimeout(function () { viewWebPass(pid); }, 900);
+          }).catch(function (e) { hbtn.disabled = false; hmsg.textContent = e.message; hmsg.className = "np-err"; });
+        });
+        hb.appendChild(hbtn);
+      }
+      pg.appendChild(hb);
+      pg.appendChild(hmsg);
+      pg.appendChild(el("p", { "class": "np-sub", text: d.notify }));
+      b.appendChild(pg);
+      // 渡した版とやり取り
+      var vc = el("div", { "class": "np-card", id: "np-web-versions" });
+      vc.appendChild(el("h2", { text: "渡した版とやり取り" }));
+      if (!d.versions.length) vc.appendChild(el("p", { "class": "np-note", text: "まだ渡していません。" }));
+      d.versions.forEach(function (x, i) {
+        var box = el("div", { "class": "np-webver" });
+        box.appendChild(el("h3", null, [txt("v" + x.ver + " "), tag(x.state, x.state === "仕上がり受領" ? "ok" : "info"),
+          txt("　" + x.handed_at.slice(0, 16) + " " + x.handed_by + " が渡した")]));
+        if (x.changed) box.appendChild(el("p", { "class": "np-sub", text: "前の版から変わった所: " + (x.changed.join("、") || "なし") }));
+        if (x.state_at) box.appendChild(el("p", { "class": "np-sub", text: "状態を変えた: " + x.state_at.slice(0, 16) + " " + x.state_by }));
+        var row = [navBtn("#/projects/" + encodeURIComponent(pid) + "/web?v=" + x.ver, "この版のページを開く（印刷・PDF）", "sm")];
+        if (i === 0) d.can.states.forEach(function (s) {
+          if (d.states.indexOf(s) <= d.states.indexOf(x.state)) return;
+          var sb = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "「" + s + "」にする" });
+          sb.addEventListener("click", function () {
+            sb.disabled = true;
+            post("/api/projects/" + encodeURIComponent(pid) + "/web-state", { state: s }).then(function () { viewWebPass(pid); })
+              .catch(function (e) { sb.disabled = false; box.appendChild(el("p", { "class": "np-err", text: e.message })); });
+          });
+          row.push(sb);
+        });
+        box.appendChild(btnRow(row));
+        var byId = {};
+        x.comments.forEach(function (c) { byId[c.id] = c; });
+        if (x.comments.length) {
+          var ul = el("ul", { "class": "np-comments" });
+          x.comments.forEach(function (c) {
+            ul.appendChild(el("li", null, [tag(c.kind, c.kind === "答え" ? "ok" : "caution"),
+              txt(" " + (c.reply_to && byId[c.reply_to] ? "（#" + c.reply_to + " へ）" : "") + c.body + "　"),
+              el("span", { "class": "np-sub", text: "#" + c.id + "・" + c.by_user + "・" + c.at.slice(0, 16) })]));
+          });
+          box.appendChild(ul);
+        }
+        if (d.can.comment) {
+          var cf = el("form", { "class": "np-form" });
+          var kind = el("select", { "aria-label": "種類" }, ["質問", "修正の希望", "答え"].map(function (k) { return el("option", { value: k, text: k }); }));
+          var rto = el("select", { "aria-label": "どれへの答えか" }, [el("option", { value: "", text: "（答えのときだけ選ぶ）" })]
+            .concat(x.comments.filter(function (c) { return c.kind !== "答え"; }).map(function (c) { return el("option", { value: String(c.id), text: "#" + c.id + " " + c.body.slice(0, 30) }); })));
+          var ta = el("textarea", { rows: "3", "aria-label": "書き込む中身" });
+          var cmsg = el("p", { "class": "np-status", role: "status" });
+          cf.appendChild(el("p", null, [kind, txt(" "), rto]));
+          cf.appendChild(ta);
+          cf.appendChild(el("button", { type: "submit", "class": "np-btn np-btn-sm", text: "v" + x.ver + " に書き込む" }));
+          cf.appendChild(cmsg);
+          cf.addEventListener("submit", function (e) {
+            e.preventDefault();
+            post("/api/projects/" + encodeURIComponent(pid) + "/web-comment", { version_id: x.id, kind: kind.value, body: ta.value, reply_to: rto.value })
+              .then(function () { viewWebPass(pid); })
+              .catch(function (er) { cmsg.textContent = er.message; cmsg.className = "np-err"; });
+          });
+          box.appendChild(cf);
+        }
+        vc.appendChild(box);
+      });
+      b.appendChild(vc);
+    }).catch(fail);
+  }
+  function viewWebVersion(pid, ver) {
+    api("/api/projects/" + encodeURIComponent(pid) + "/web?v=" + encodeURIComponent(ver)).then(function (d) {
+      var b = clear();
+      setTitle("WEBチームへ渡すページ v" + d.ver, d.page.internal_name || pid);
+      var pb = el("button", { type: "button", "class": "np-btn", text: "印刷・PDF にする" });
+      pb.addEventListener("click", function () { window.print(); });
+      b.appendChild(btnRow([navBtn("#/projects/" + encodeURIComponent(pid) + "/web", "渡す画面へ戻る", "back"), pb]));
+      b.appendChild(el("p", { "class": "np-sub", text: "v" + d.ver + "・" + d.state + "・" + d.handed_at.slice(0, 16) + " " + d.handed_by + " が渡した。この版の中身は固まっています（直すと次の版になります）。" }));
+      webPage(d.page, b);
+    }).catch(fail);
+  }
+
   // ── 店の出品の台帳（段階1・ADR-141・FR-275〜290）。**見るだけ。**取り込みは管理者が tools/listing_import.py で ──
   var LISTING_STATES = ["公開", "非公開", "そのほか", "消えた"];
   function viewListings() {
@@ -7933,7 +8106,7 @@
   function setHelpLink(path, entry) {
     var a = document.getElementById("np-help");
     if (!a) return;
-    var sec = HELP_SEC[path] || (/^#\/projects\//.test(path) ? "案件" : /^#\/ideas\//.test(path) ? "アイデア" : entry.label);
+    var sec = HELP_SEC[path] || (/^#\/projects\/[^/]+\/web$/.test(path) ? "WEBチームへ渡す" : /^#\/projects\//.test(path) ? "案件" : /^#\/ideas\//.test(path) ? "アイデア" : entry.label);
     a.setAttribute("href", "/#/manual" + (sec && path !== "#/manual" ? "?sec=" + encodeURIComponent(sec) : ""));
   }
   function manualTabBtn(label, sec) {
@@ -8015,6 +8188,8 @@
     refreshGuide(path);
     if (path === "#/") return viewHome();
     if (path === "#/todo") return viewTodo();
+    var mw = /^#\/projects\/([A-Za-z0-9_-]+)\/web$/.exec(path);
+    if (mw) return viewWebPass(mw[1]);
     if (m) return viewProject(m[1]);
     if (mi) return viewIdea(mi[1]);
     if (path === "#/automation") return viewAutomation();
