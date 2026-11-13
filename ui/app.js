@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas", "#/skin-report": "#/ideas",
-                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/", "#/listings": "#/projects", "#/sellables": "#/projects", "#/sellables/candidates": "#/projects", "#/options": "#/projects", "#/options/defs": "#/projects" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/", "#/listings": "#/projects", "#/sellables": "#/projects", "#/sellables/candidates": "#/projects", "#/options": "#/projects", "#/options/defs": "#/projects", "#/exports": "#/projects" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -88,7 +88,7 @@
   var NAV_ALL = NAV.concat([{ view: "settings", hash: "#/settings", label: "設定" }]);
   function match(path) {
     // 1件の画面（#/listings/123・#/sellables/abc）も帯は「案件」に（ALIAS は完全一致だけなので頭で見る）
-    var p = ALIAS[path] || (/^#\/(listings|sellables|options)\//.test(path) ? "#/projects" : path);
+    var p = ALIAS[path] || (/^#\/(listings|sellables|options|exports)\//.test(path) ? "#/projects" : path);
     var best = NAV_ALL[0], bestLen = -1;
     for (var i = 0; i < NAV_ALL.length; i++) {
       var h = NAV_ALL[i].hash;
@@ -163,7 +163,7 @@
   var SUBNAV = [
     [["#/", "ダッシュボード"], ["#/todo", "やること"], ["#/reports", "月次レポート"]],
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
-    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/listings", "店の出品の台帳"], ["#/sellables", "売るもの"], ["#/sellables/candidates", "束ねる候補"], ["#/options", "選択肢の整理"], ["#/options/defs", "選択肢の定義"]],
+    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/listings", "店の出品の台帳"], ["#/sellables", "売るもの"], ["#/sellables/candidates", "束ねる候補"], ["#/options", "選択肢の整理"], ["#/options/defs", "選択肢の定義"], ["#/exports", "店への書き出し"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
     [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"], ["#/skin-report", "スキンシール判断"]],
     [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]
@@ -4938,6 +4938,96 @@
     }).catch(fail);
   }
 
+  // ── 店への書き出しの承認と反映の記録（段階4・ADR-152）──
+  function viewExports() {
+    loading();
+    var st = hashQuery().get("state") || "";
+    api("/api/exports" + (st ? "?state=" + encodeURIComponent(st) : "")).then(function (d) {
+      var b = clear();
+      setTitle("店への書き出し");
+      b.appendChild(el("p", { "class": "np-warn", role: "note", text: d.unverified }));
+      b.appendChild(el("p", { "class": "np-note", text: "店の登録用ファイルの書き出しの依頼です。頼む → 検査 → 承認者が中身を見て承認（差し戻し）→ ファイルができる → 管理画面に取り込んだ人が結果を記録、の順です。"
+        + "頼むのは出品の画面の「この出品の書き出しを頼む」からです。" }));
+      var fl = el("div", { "class": "np-filters" });
+      [["", "すべて"], ["承認待ち", "承認待ち"], ["書き出し済み", "書き出し済み"], ["反映済み", "反映済み"], ["反映失敗", "反映失敗"], ["差し戻し", "差し戻し"]].forEach(function (x) {
+        fl.appendChild(el("a", { href: "#/exports" + (x[0] ? "?state=" + encodeURIComponent(x[0]) : ""), text: x[1], "aria-current": x[0] === st ? "true" : null }));
+      });
+      b.appendChild(fl);
+      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "まだありません。" })); return; }
+      b.appendChild(table(["番号", "店", "新規・更新", "出品", "状態", "頼んだ人・日時", "承認", "反映"], d.rows.map(function (r) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/exports/" + r.id, text: "#" + r.id })]), el("td", { text: r.shop_label }), el("td", { text: r.kind }),
+          el("td", { text: fmtNum(r.n_listings, " 件") }), el("td", null, [tag(r.state, r.state === "反映済み" ? "ok" : r.state === "反映失敗" || r.state === "差し戻し" ? "alert" : "info")]),
+          el("td", { text: r.requested_by + "・" + r.requested_at.slice(0, 16) }), el("td", { text: r.decided_by ? r.decided_by + "・" + r.decided_at.slice(0, 16) : "—" }),
+          el("td", { text: r.applied_by ? r.applied_by + "・" + r.applied_at.slice(0, 16) : "—" })]);
+      })));
+    }).catch(fail);
+  }
+  function viewExport(id) {
+    loading();
+    api("/api/exports/" + encodeURIComponent(id)).then(function (d) {
+      var b = clear();
+      setTitle("店への書き出し #" + d.id, d.state);
+      b.appendChild(btnRow([navBtn("#/exports", "書き出しの一覧へ戻る", "back")]));
+      b.appendChild(el("p", { "class": "np-warn", role: "note", text: d.unverified }));
+      b.appendChild(table(["項目", "値"], [["店", d.shop], ["新規・更新", d.kind], ["状態", d.state], ["頼んだ人", d.requested_by + "・" + d.requested_at.slice(0, 16)],
+        ["理由", d.reason || "—"], ["承認できる人", d.approvers.join("、") || "（設定が空）"],
+        ["承認・差し戻し", d.decided_by ? d.decided_by + "・" + d.decided_at.slice(0, 16) + (d.decision_note ? "「" + d.decision_note + "」" : "") : "—"],
+        ["取り込んだ結果", d.applied_by ? d.applied_by + "・" + d.applied_at.slice(0, 16) + (d.applied_note ? "「" + d.applied_note + "」" : "") : "—"]]
+        .map(function (x) { return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]); })));
+      b.appendChild(el("h2", { text: "頼んだときの検査" }));
+      var ul = el("ul");
+      (d.check.errors || []).forEach(function (e) { ul.appendChild(el("li", null, [tag("止める", "alert"), txt(" " + e)])); });
+      (d.check.warnings || []).forEach(function (w) { ul.appendChild(el("li", { text: w })); });
+      b.appendChild(ul);
+      b.appendChild(el("h2", { text: "書き出す出品（" + d.listings.length + " 件）" }));
+      b.appendChild(table(["識別子", "掲載名", "価格", "状態", "選択肢の行"], d.listings.map(function (l) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/listings/" + l.id, text: l.ext_id })]), el("td", { text: l.title || "—" }), el("td", { text: yen(l.price, "—") }),
+          el("td", { text: l.state }), el("td", { text: fmtNum(l.n_options, " 行") })]);
+      })));
+      if (d.preview.length) {
+        var det = el("details", { "class": "np-card" }, [el("summary", { text: "商品ファイルに書く中身（空でない列）" })]);
+        d.preview.forEach(function (row) {
+          det.appendChild(table(["列", "値"], Object.keys(row).map(function (k) { return el("tr", null, [el("th", { scope: "row", text: k }), el("td", { text: String(row[k]) })]); })));
+        });
+        b.appendChild(det);
+      }
+      var msg = el("p", { "class": "np-status", role: "status" });
+      if (d.can_decide) {
+        var note = el("input", { type: "text", placeholder: "ひとこと（差し戻すときは理由）", "aria-label": "承認・差し戻しのひとこと" });
+        var ok = el("button", { type: "button", "class": "np-btn", text: "中身を見て承認する（ファイルを作る）" });
+        var ng = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "差し戻す" });
+        [[ok, "1"], [ng, "0"]].forEach(function (x) {
+          x[0].addEventListener("click", function () {
+            x[0].disabled = true;
+            post("/api/exports/" + d.id + "/decide", { ok: x[1], note: note.value }).then(function () { viewExport(id); })
+              .catch(function (e) { x[0].disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+          });
+        });
+        b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "承認" }), el("p", null, [note]), btnRow([ok, ng])]));
+      }
+      if (d.files.length) {
+        b.appendChild(el("h2", { text: "書き出したファイル" }));
+        b.appendChild(table(["ファイル", "行", "SHA-256（先頭）"], d.files.map(function (f) {
+          return el("tr", null, [el("td", null, [el("a", { href: "/api/exports/" + d.id + "/file/" + f.id, text: f.name })]), el("td", { text: String(f.rows) }), el("td", { text: f.sha256.slice(0, 12) })]);
+        })));
+      }
+      if (d.can_record) {
+        var rn = el("input", { type: "text", placeholder: "管理画面に出た結果・エラーの内容（お客さまの情報は書かない）", "aria-label": "取り込んだ結果" });
+        var rok = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "取り込めた（反映済み）" });
+        var rng = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "エラーになった（反映失敗）" });
+        [[rok, "1"], [rng, "0"]].forEach(function (x) {
+          x[0].addEventListener("click", function () {
+            x[0].disabled = true;
+            post("/api/exports/" + d.id + "/result", { ok: x[1], note: rn.value }).then(function () { viewExport(id); })
+              .catch(function (e) { x[0].disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+          });
+        });
+        b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "管理画面に取り込んだ結果" }), el("p", null, [rn]), btnRow([rok, rng])]));
+      }
+      b.appendChild(msg);
+    }).catch(fail);
+  }
+
   // ── 選択肢の整理（段階3・ADR-148）。取り込んだ店の項目名を、使い回せる「選択肢の定義」に寄せる ──
   var OPT_SRC = { opt_select: "価格つきの選択肢", selection: "項目選択肢", rakuten_option: "商品オプション", gm_class: "規格", gm_option: "オプション", yahoo_option: "オプション" };
   function viewOptClusters() {
@@ -5356,6 +5446,19 @@
         ["売るもの", d.sellable ? d.sellable.label + "（" + d.sellable.id + "・" + d.sellable.state + "）" : "まだ束ねていない（「束ねる候補」から）"]];
       b.appendChild(table(["項目", "値"], rows.map(function (x) { return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]); })));
       if (d.sellable) b.appendChild(btnRow([navBtn("#/sellables/" + d.sellable.id, "売るもの " + d.sellable.id + " を開く", "sm")]));
+      if (["goods", "uchiwa", "frame"].indexOf(d.shop) >= 0 && !d.gone_import_id) {
+        var rq = el("input", { type: "text", placeholder: "なぜ書き出すか（例: 管理画面での試しの1件）", "aria-label": "書き出す理由" });
+        var rb = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "この出品の書き出しを頼む" });
+        var rmsg = el("p", { "class": "np-status", role: "status" });
+        rb.addEventListener("click", function () {
+          rb.disabled = true;
+          post("/api/exports", { shop: d.shop, ext_ids: d.ext_id, reason: rq.value }).then(function (r) { location.hash = "#/exports/" + r.id; })
+            .catch(function (e) { rb.disabled = false; rmsg.textContent = e.message; rmsg.className = "np-err"; });
+        });
+        b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "店への書き出し" }),
+          el("p", { "class": "np-sub", text: "書き出す前に検査し、承認者（設定）が中身を見て承認するとファイルができます。FutureShop の取り込みの形はまだ確かめていません。" }),
+          el("p", null, [rq, txt(" "), rb]), rmsg]));
+      }
       b.appendChild(el("h2", { text: "CIP の商品（作るもの）との結び付け（" + d.cip_links.length + " 行）" }));
       if (!d.cip_links.length) b.appendChild(el("p", { "class": "np-note", text: "CIP の店コードの対応表に、この出品の識別子がありません（結べていません）。" }));
       else b.appendChild(table(["共通商品コード", "分類", "形・サイズ・入数", "CIP の店コード", "当たった所"], d.cip_links.map(function (k) {
@@ -8521,7 +8624,7 @@
   var HELP_SEC = {
     "#/routines": "タスク", "#/tasks/assign": "タスク", "#/trends": "トレンド（FCTR）", "#/ai-score": "アイデア",
     "#/calibration": "採点の校正", "#/devices": "新機種調査", "#/opportunities": "年間プラン", "#/simulate": "年間プラン",
-    "#/gates": "案件", "#/listings": "店の出品の台帳", "#/sellables": "売るもの", "#/sellables/candidates": "売るもの", "#/options": "選択肢の整理", "#/options/defs": "選択肢の整理", "#/improve": "改善要望", "#/todo": "やること", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
+    "#/gates": "案件", "#/listings": "店の出品の台帳", "#/sellables": "売るもの", "#/sellables/candidates": "売るもの", "#/options": "選択肢の整理", "#/options/defs": "選択肢の整理", "#/exports": "店への書き出し", "#/improve": "改善要望", "#/todo": "やること", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
     "#/settings/templates": "標準タスクのひな形を直すとき", "#/settings/ideas-import": "アイデアをまとめて登録するとき"
   };
   function setHelpLink(path, entry) {
@@ -8635,6 +8738,9 @@
     if (path === "#/calibration") return viewCalibration();
     if (path === "#/devices") return viewDevices();
     if (path === "#/skin-report") return viewSkinReport();
+    if (path === "#/exports") return viewExports();
+    var mex = /^#\/exports\/(\d+)$/.exec(path);
+    if (mex) return viewExport(mex[1]);
     if (path === "#/options") return viewOptClusters();
     if (path === "#/options/defs") return viewOptDefs();
     var mod = /^#\/options\/defs\/(\d+)$/.exec(path);

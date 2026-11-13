@@ -1297,6 +1297,29 @@ class H(BaseHTTPRequestHandler):
                 except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
                     return self.sendj(502, {"error": f"送れませんでした: {e}"})
             return self.sendj(404, {"error": "not found"})
+        # 店への書き出しの承認と反映の記録（段階4・ADR-152）
+        if parts and parts[0] == "exports":
+            from app import exportreq
+            if method == "GET":
+                if parts == ["exports"]:
+                    return self.sendj(200, exportreq.listing_(qs))
+                if len(parts) == 2 and parts[1].isdigit():
+                    return self.sendj(200, exportreq.detail(int(parts[1]), uid))
+                if len(parts) == 4 and parts[1].isdigit() and parts[2] == "file" and parts[3].isdigit():
+                    import urllib.parse as _up
+                    name, data = exportreq.file_bytes(int(parts[1]), int(parts[3]))
+                    store.audit(uid, "export.download", parts[1], {"file": name})
+                    return self.send(200, data, "text/csv; charset=Shift_JIS",
+                                     [("Content-Disposition", "attachment; filename*=UTF-8''" + _up.quote(name)), ("Cache-Control", "no-store")])
+                return self.sendj(404, {"error": "not found"})
+            d = self.body()
+            if parts == ["exports"]:
+                return self.sendj(200, exportreq.create(d.get("shop", ""), (d.get("ext_ids") or "").split(","), d.get("reason", ""), uid))
+            if len(parts) == 3 and parts[1].isdigit() and parts[2] == "decide":
+                return self.sendj(200, exportreq.decide(int(parts[1]), d.get("ok") == "1", d.get("note", ""), uid))
+            if len(parts) == 3 and parts[1].isdigit() and parts[2] == "result":
+                return self.sendj(200, exportreq.record_result(int(parts[1]), d.get("ok") == "1", d.get("note", ""), uid))
+            return self.sendj(404, {"error": "not found"})
         # 選択肢の整理（段階3・ADR-148）。見るのはログインした人、定義を作る・寄せる・外すのは社長と商品開発部管理者
         if parts and parts[0] == "options":
             from app import optdef
