@@ -1297,6 +1297,25 @@ class H(BaseHTTPRequestHandler):
                 except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
                     return self.sendj(502, {"error": f"送れませんでした: {e}"})
             return self.sendj(404, {"error": "not found"})
+        # 売るもの・束ねる候補（段階2・ADR-147）。見るのはログインした人、作る・直すのは社長と商品開発部管理者
+        if parts and parts[0] == "sellables":
+            from app import sellable
+            if method == "GET":
+                if parts == ["sellables"]:
+                    return self.sendj(200, sellable.listing_(qs))
+                if parts == ["sellables", "candidates"]:
+                    return self.sendj(200, sellable.candidates(qs))
+                if len(parts) == 2:
+                    return self.sendj(200, sellable.detail(parts[1]))
+                return self.sendj(404, {"error": "not found"})
+            d = self.body()
+            if parts == ["sellables", "bundle"]:
+                return self.sendj(200, sellable.bundle((d.get("codes") or "").split(","), uid))
+            if len(parts) == 2:
+                return self.sendj(200, sellable.update(parts[1], d, uid))
+            if len(parts) == 3 and parts[2] == "unlink" and str(d.get("listing_id", "")).isdigit():
+                return self.sendj(200, sellable.unlink(parts[1], int(d["listing_id"]), uid))
+            return self.sendj(404, {"error": "not found"})
         # 店の出品の台帳（段階1・ADR-141・FR-275〜290）。**画面からは見るだけ。**取り込みは管理者が tools/listing_import.py で
         if parts and parts[0] == "listings" and method == "GET":
             from app import listing

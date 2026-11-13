@@ -29,7 +29,7 @@
   var ALIAS = { "#/gates": "#/projects",
                 "#/cost": "#/sales", "#/abc": "#/sales", "#/trends": "#/ideas", "#/reports": "#/",
                 "#/opportunities": "#/plan", "#/manual": "#/settings", "#/settings/events": "#/settings", "#/simulate": "#/plan", "#/ai-score": "#/ideas", "#/calibration": "#/ideas", "#/devices": "#/ideas", "#/skin-report": "#/ideas",
-                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/", "#/listings": "#/projects" };
+                "#/automation": "#/settings", "#/tasks/assign": "#/tasks", "#/routines": "#/tasks", "#/todo": "#/", "#/listings": "#/projects", "#/sellables": "#/projects", "#/sellables/candidates": "#/projects" };
 
   var links = Array.prototype.slice.call(
     document.querySelectorAll(".fca-nav a[data-view]"));
@@ -87,7 +87,8 @@
   // 設定は帯ではなく右端に置く（2026-11-09。帯は7つまで）。現在地とタイトルのために、ここでは帯の仲間として数える
   var NAV_ALL = NAV.concat([{ view: "settings", hash: "#/settings", label: "設定" }]);
   function match(path) {
-    var p = ALIAS[path] || path;
+    // 1件の画面（#/listings/123・#/sellables/abc）も帯は「案件」に（ALIAS は完全一致だけなので頭で見る）
+    var p = ALIAS[path] || (/^#\/(listings|sellables)\//.test(path) ? "#/projects" : path);
     var best = NAV_ALL[0], bestLen = -1;
     for (var i = 0; i < NAV_ALL.length; i++) {
       var h = NAV_ALL[i].hash;
@@ -162,7 +163,7 @@
   var SUBNAV = [
     [["#/", "ダッシュボード"], ["#/todo", "やること"], ["#/reports", "月次レポート"]],
     [["#/tasks", "タスク"], ["#/tasks/assign", "担当の割り振り"], ["#/routines", "繰り返しの仕事"]],
-    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/listings", "店の出品の台帳"]],
+    [["#/projects", "案件の一覧"], ["#/gates", "ゲート盤"], ["#/listings", "店の出品の台帳"], ["#/sellables", "売るもの"], ["#/sellables/candidates", "束ねる候補"]],
     [["#/plan", "年間プラン"], ["#/opportunities", "機会カレンダー"], ["#/simulate", "販売計画シミュレーション"]],
     [["#/ideas", "アイデアの一覧"], ["#/trends", "トレンド（FCTR）"], ["#/ai-score", "AI採点の案"], ["#/calibration", "採点の校正"], ["#/devices", "新機種調査"], ["#/skin-report", "スキンシール判断"]],
     [["#/settings", "設定"], ["#/automation", "自動化依頼"], ["#/manual", "操作マニュアル"]]
@@ -4937,6 +4938,139 @@
     }).catch(fail);
   }
 
+  // ── 売るもの・束ねる候補（段階2・ADR-147）。CIP の共通商品コードが同じ出品を、人が選んで1つの売るものにする ──
+  function pager(base, d) {
+    if (d.pages <= 1) return null;
+    var pg = el("p", { "class": "np-btnrow" });
+    if (d.page > 1) pg.appendChild(navBtn(base + "page=" + (d.page - 1), "前のページ", "sm"));
+    pg.appendChild(txt(" " + d.page + " / " + d.pages + " ページ "));
+    if (d.page < d.pages) pg.appendChild(navBtn(base + "page=" + (d.page + 1), "次のページ", "sm"));
+    return pg;
+  }
+  function viewCandidates() {
+    loading();
+    var q = hashQuery();
+    var f = { min_shops: q.get("min_shops") || "2", q: q.get("q") || "", page: q.get("page") || "1" };
+    api("/api/sellables/candidates?min_shops=" + encodeURIComponent(f.min_shops) + "&q=" + encodeURIComponent(f.q) + "&page=" + encodeURIComponent(f.page)).then(function (d) {
+      var b = clear();
+      setTitle("束ねる候補");
+      b.appendChild(el("p", { "class": "np-note", text: "CIP の共通商品コードが同じ出品を、店をまたいで1つの候補にしています（台帳と CIP の結び付けから）。"
+        + "同じ商品だと確かめたものに印を付けて「売るものにする」を押すと、候補ごとに売るもの（基準の商品）が1つできます。決めるのは人です。"
+        + "作るのは社長と商品開発部管理者の業務ロールの人です。店の管理画面は変わりません。" }));
+      b.appendChild(el("p", { "class": "np-sub", text: "候補 " + fmtNum(d.total, " 件") + "・もう売るもの " + fmtNum(d.bundled, " 件")
+        + "・選択肢で作るものが変わる出品 " + fmtNum(d.held_multi, " 件") + "（候補に入れていません。選択肢の整理＝段階3で扱います）" }));
+      var form = el("form", { "class": "np-filters", role: "search" });
+      var ms = el("select", { name: "min_shops", "aria-label": "店の数" }, [["1", "1店から"], ["2", "2店以上にある"], ["3", "3店以上にある"], ["4", "4店以上にある"]]
+        .map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.min_shops ? "selected" : null }); }));
+      var qi = el("input", { type: "search", value: f.q, placeholder: "共通商品コードの一部", "aria-label": "共通商品コード" });
+      form.appendChild(ms); form.appendChild(qi); form.appendChild(el("button", { type: "submit", "class": "np-btn", text: "絞り込む" }));
+      form.addEventListener("submit", function (e) { e.preventDefault(); location.hash = "#/sellables/candidates?min_shops=" + ms.value + "&q=" + encodeURIComponent(qi.value.trim()); });
+      b.appendChild(form);
+      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "この条件の候補はありません。" })); return; }
+      var picks = {};
+      var msg = el("p", { "class": "np-status", role: "status" });
+      var go = el("button", { type: "button", "class": "np-btn", text: "印を付けた候補を売るものにする" });
+      var all = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "このページの候補に全部印を付ける" });
+      var boxes = [];
+      b.appendChild(table(["印", "共通商品コード", "分類・形・サイズ・入数", "店", "出品"], d.rows.map(function (g) {
+        var cb = el("input", { type: "checkbox", "aria-label": g.product_code + " を売るものにする" });
+        cb.addEventListener("change", function () { if (cb.checked) picks[g.product_code] = 1; else delete picks[g.product_code]; });
+        boxes.push([cb, g.product_code]);
+        var ul = el("ul", { "class": "np-plain" });
+        g.listings.forEach(function (l) {
+          ul.appendChild(el("li", null, [txt(l.shop_label + "："), el("a", { href: "#/listings/" + l.id, text: l.ext_id }),
+            txt("（" + l.state + (l.price !== null ? "・" + yen(l.price) : "") + "） "), el("span", { "class": "np-sub", text: (l.title || "").slice(0, 40) })]));
+        });
+        return el("tr", null, [el("td", null, [cb]), el("td", null, [el("a", { href: "#/listings?code=" + encodeURIComponent(g.product_code), text: g.product_code })]),
+          el("td", { text: [[g.cat1, g.cat2, g.cat3].filter(Boolean).join(" / "), g.shape, g.size, g.pack_qty ? g.pack_qty + "個入" : ""].filter(Boolean).join("・") || "—" }),
+          el("td", { text: g.n_shops + " 店" }), el("td", null, [ul])]);
+      })));
+      all.addEventListener("click", function () { boxes.forEach(function (x) { x[0].checked = true; picks[x[1]] = 1; }); });
+      go.addEventListener("click", function () {
+        var codes = Object.keys(picks);
+        if (!codes.length) { msg.textContent = "印を付けてください。"; return; }
+        go.disabled = true;
+        post("/api/sellables/bundle", { codes: codes.join(",") }).then(function (r) {
+          msg.textContent = r.made.length + " 件の売るものを作りました" + (r.skipped.length ? "（" + r.skipped.length + " 件はもう候補ではありませんでした）" : "") + "。";
+          setTimeout(function () { viewCandidates(); }, 900);
+        }).catch(function (e) { go.disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+      });
+      b.appendChild(btnRow([all, go]));
+      b.appendChild(msg);
+      var pg = pager("#/sellables/candidates?min_shops=" + f.min_shops + "&q=" + encodeURIComponent(f.q) + "&", d);
+      if (pg) b.appendChild(pg);
+    }).catch(fail);
+  }
+  function viewSellables() {
+    loading();
+    var q = hashQuery();
+    var f = { state: q.get("state") || "", q: q.get("q") || "", page: q.get("page") || "1" };
+    api("/api/sellables?state=" + encodeURIComponent(f.state) + "&q=" + encodeURIComponent(f.q) + "&page=" + encodeURIComponent(f.page)).then(function (d) {
+      var b = clear();
+      setTitle("売るもの");
+      b.appendChild(el("p", { "class": "np-note", text: "売るもの（基準の商品）の一覧です。店の出品と CIP の作るものを、この単位でつなぎます。名前は社内の呼び名で、あとで直せます。" }));
+      b.appendChild(btnRow([navBtn("#/sellables/candidates", "束ねる候補を見る")]));
+      var form = el("form", { "class": "np-filters", role: "search" });
+      var ss = el("select", { "aria-label": "状態" }, [["", "すべて"], ["準備中", "準備中"], ["販売中", "販売中"], ["終了", "終了"]]
+        .map(function (x) { var n = x[0] ? (d.counts[x[0]] || 0) : null; return el("option", { value: x[0], text: x[1] + (n === null ? "" : " " + n), selected: x[0] === f.state ? "selected" : null }); }));
+      var qi = el("input", { type: "search", value: f.q, placeholder: "番号・呼び名・共通商品コード", "aria-label": "探す語" });
+      form.appendChild(ss); form.appendChild(qi); form.appendChild(el("button", { type: "submit", "class": "np-btn", text: "絞り込む" }));
+      form.addEventListener("submit", function (e) { e.preventDefault(); location.hash = "#/sellables?state=" + encodeURIComponent(ss.value) + "&q=" + encodeURIComponent(qi.value.trim()); });
+      b.appendChild(form);
+      b.appendChild(el("p", { "class": "np-sub", text: fmtNum(d.total, " 件") }));
+      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "まだありません。「束ねる候補」から作ります。" })); return; }
+      b.appendChild(table(["番号", "呼び名", "状態", "共通商品コード", "店・出品", "基準の価格"], d.rows.map(function (r) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/sellables/" + r.id, text: r.id })]), el("td", { text: r.label }), el("td", { text: r.state }),
+          el("td", { text: (r.codes || "—").split(",").join("、") }), el("td", { text: r.n_shops + " 店・" + r.n_listings + " 件" }), el("td", { text: yen(r.base_price, "未定") })]);
+      })));
+      var pg = pager("#/sellables?state=" + encodeURIComponent(f.state) + "&q=" + encodeURIComponent(f.q) + "&", d);
+      if (pg) b.appendChild(pg);
+    }).catch(fail);
+  }
+  function viewSellable(id) {
+    loading();
+    api("/api/sellables/" + encodeURIComponent(id)).then(function (d) {
+      var b = clear();
+      setTitle("売るもの " + d.id, d.label);
+      b.appendChild(btnRow([navBtn("#/sellables", "売るものの一覧へ戻る", "back")]));
+      var f = el("form", { "class": "np-form" });
+      var lb = el("input", { type: "text", id: "np-sl-label", value: d.label });
+      var st = el("select", { id: "np-sl-state" }, d.states.map(function (x) { return el("option", { value: x, text: x, selected: x === d.state ? "selected" : null }); }));
+      var bp = el("input", { type: "text", id: "np-sl-price", inputmode: "numeric", value: d.base_price === null ? "" : String(d.base_price), placeholder: "未定なら空" });
+      var msg = el("p", { "class": "np-status", role: "status" });
+      f.appendChild(el("label", { "for": "np-sl-label", text: "呼び名（社内）" })); f.appendChild(lb);
+      f.appendChild(el("label", { "for": "np-sl-state", text: "状態" })); f.appendChild(st);
+      f.appendChild(el("label", { "for": "np-sl-price", text: "基準の価格（税込・円）" })); f.appendChild(bp);
+      f.appendChild(el("button", { type: "submit", "class": "np-btn np-btn-sm", text: "直す" })); f.appendChild(msg);
+      f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        post("/api/sellables/" + encodeURIComponent(d.id), { label: lb.value, state: st.value, base_price: bp.value })
+          .then(function (r) { msg.textContent = r.changed.length ? "直しました。" : "変わった所がありません。"; if (r.changed.length) setTimeout(function () { viewSellable(id); }, 600); })
+          .catch(function (er) { msg.textContent = er.message; msg.className = "np-err"; });
+      });
+      b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "基本" }), el("p", { "class": "np-sub", text: "分類: " + ([d.cat1, d.cat2, d.cat3].filter(Boolean).join(" / ") || "—") }), f]));
+      b.appendChild(el("h2", { text: "作るもの（CIP の共通商品コード）" }));
+      b.appendChild(table(["選択肢の組", "共通商品コード", "数量"], d.makes.map(function (m) {
+        return el("tr", null, [el("td", { text: m.combo || "（選択肢なし）" }), el("td", null, [el("a", { href: "#/listings?code=" + encodeURIComponent(m.product_code), text: m.product_code })]), el("td", { text: String(m.qty) })]);
+      })));
+      b.appendChild(el("h2", { text: "束ねている出品（" + d.listings.length + " 件）" }));
+      b.appendChild(table(["店", "識別子", "掲載名", "価格", "状態", ""], d.listings.map(function (l) {
+        var ub = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "外す" });
+        ub.addEventListener("click", function () {
+          ub.disabled = true;
+          post("/api/sellables/" + encodeURIComponent(d.id) + "/unlink", { listing_id: l.id }).then(function () { viewSellable(id); })
+            .catch(function (e) { ub.disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+        });
+        return el("tr", null, [el("td", { text: l.shop_label }), el("td", null, [el("a", { href: "#/listings/" + l.id, text: l.ext_id })]),
+          el("td", { text: l.title || "—" }), el("td", { text: yen(l.price, "—") }), el("td", { text: l.gone_import_id ? "最後のファイルに無かった" : l.state }), el("td", null, [ub])]);
+      })));
+      b.appendChild(el("h2", { text: "変更の履歴" }));
+      b.appendChild(table(["日時", "誰が", "何を", "中身"], d.revisions.map(function (r) {
+        return el("tr", null, [el("td", { text: r.changed_at.slice(0, 16) }), el("td", { text: r.changed_by }), el("td", { text: r.what }), el("td", { text: r.detail || "" })]);
+      })));
+    }).catch(fail);
+  }
+
   // ── 店の出品の台帳（段階1・ADR-141・FR-275〜290）。**見るだけ。**取り込みは管理者が tools/listing_import.py で ──
   var LISTING_STATES = ["公開", "非公開", "そのほか", "消えた"];
   function viewListings() {
@@ -5012,8 +5146,9 @@
       var rows = [["店", d.shop_label], [d.id_label, d.ext_id], ["2つ目の識別子", d.ext_sub || "—"], ["掲載名", d.title || "（掲載名なし）"],
         ["価格", yen(d.price, "—")], ["状態", (d.gone_import_id ? "最後のファイルに無かった（前は " + d.state + "）" : d.state) + "（店の値: " + (d.state_raw || "空") + "）"],
         ["販売期間", (d.sale_from || "—") + " 〜 " + (d.sale_to || "—")], ["カテゴリ", d.category || "—"], ["レイアウト", d.layout || "—"],
-        ["売るもの", d.sellable_id || "まだ結んでいない（段階2で結ぶ）"]];
+        ["売るもの", d.sellable ? d.sellable.label + "（" + d.sellable.id + "・" + d.sellable.state + "）" : "まだ束ねていない（「束ねる候補」から）"]];
       b.appendChild(table(["項目", "値"], rows.map(function (x) { return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]); })));
+      if (d.sellable) b.appendChild(btnRow([navBtn("#/sellables/" + d.sellable.id, "売るもの " + d.sellable.id + " を開く", "sm")]));
       b.appendChild(el("h2", { text: "CIP の商品（作るもの）との結び付け（" + d.cip_links.length + " 行）" }));
       if (!d.cip_links.length) b.appendChild(el("p", { "class": "np-note", text: "CIP の店コードの対応表に、この出品の識別子がありません（結べていません）。" }));
       else b.appendChild(table(["共通商品コード", "分類", "形・サイズ・入数", "CIP の店コード", "当たった所"], d.cip_links.map(function (k) {
@@ -8179,7 +8314,7 @@
   var HELP_SEC = {
     "#/routines": "タスク", "#/tasks/assign": "タスク", "#/trends": "トレンド（FCTR）", "#/ai-score": "アイデア",
     "#/calibration": "採点の校正", "#/devices": "新機種調査", "#/opportunities": "年間プラン", "#/simulate": "年間プラン",
-    "#/gates": "案件", "#/listings": "店の出品の台帳", "#/improve": "改善要望", "#/todo": "やること", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
+    "#/gates": "案件", "#/listings": "店の出品の台帳", "#/sellables": "売るもの", "#/sellables/candidates": "売るもの", "#/improve": "改善要望", "#/todo": "やること", "#/cost": "売上・原価", "#/abc": "売上・原価", "#/automation": "設定", "#/settings/events": "年間イベントに点を付けるとき",
     "#/settings/templates": "標準タスクのひな形を直すとき", "#/settings/ideas-import": "アイデアをまとめて登録するとき"
   };
   function setHelpLink(path, entry) {
@@ -8293,6 +8428,10 @@
     if (path === "#/calibration") return viewCalibration();
     if (path === "#/devices") return viewDevices();
     if (path === "#/skin-report") return viewSkinReport();
+    if (path === "#/sellables") return viewSellables();
+    if (path === "#/sellables/candidates") return viewCandidates();
+    var msl = /^#\/sellables\/([0-9a-f]+)$/.exec(path);
+    if (msl) return viewSellable(msl[1]);
     if (path === "#/listings") return viewListings();
     var ml = /^#\/listings\/(\d+)$/.exec(path);
     if (ml) return viewListing(ml[1]);

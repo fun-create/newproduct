@@ -333,6 +333,7 @@ def detail(lid: int) -> dict:
     d["options"] = [dict(o, raw=json.loads(o.pop("raw_json"))) for o in store.rows(store.q(
         "SELECT id, src, item_name, value, code, price, sort, raw_json FROM listing_option WHERE listing_id=? ORDER BY src, sort, id",
         (lid,)))]
+    d["sellable"] = dict(store.one("SELECT id, label, state FROM sellable WHERE id=?", (d["sellable_id"],)) or {}) if d["sellable_id"] else None
     d["cip_links"] = store.rows(store.q(
         "SELECT k.product_code, k.store_code, k.cip_store, k.matched_by, k.cat1, k.cat2, k.cat3, k.shape, k.size, k.pack_qty, k.as_of, "
         "o.value AS option_value FROM listing_cip_link k LEFT JOIN listing_option o ON o.id=k.option_id "
