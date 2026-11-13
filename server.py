@@ -1250,6 +1250,23 @@ class H(BaseHTTPRequestHandler):
                 except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
                     return self.sendj(502, {"error": f"送れませんでした: {e}"})
             return self.sendj(404, {"error": "not found"})
+        # 店の出品の台帳（段階1・ADR-141・FR-275〜290）。**画面からは見るだけ。**取り込みは管理者が tools/listing_import.py で
+        if parts and parts[0] == "listings" and method == "GET":
+            from app import listing
+            try:
+                if parts == ["listings"]:
+                    return self.sendj(200, listing.listings(qs))
+                if parts == ["listings", "summary"]:
+                    return self.sendj(200, listing.summary())
+                if parts == ["listings", "imports"]:
+                    return self.sendj(200, {"rows": listing.imports(qs.get("shop") or "")})
+                if len(parts) == 2 and parts[1].isdigit():
+                    return self.sendj(200, listing.detail(int(parts[1])))
+            except LookupError as e:
+                return self.sendj(404, {"error": str(e)})
+            except ValueError:
+                return self.sendj(400, {"error": "絞り込みの値を読めません"})
+            return self.sendj(404, {"error": "not found"})
         # 発売後の改善要望（ADR-132）。受け付け・直すのは利用者全員。タスクにすると案件外の仕事になり、担当者と期限があればカレンダーへ
         if parts and parts[0] == "improve":
             from app import improve

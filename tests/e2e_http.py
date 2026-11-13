@@ -314,9 +314,18 @@ def main() -> int:
              "期間フィルタの件数が出る", str(d["counts"]))
         note("6フロー合算" in d["template_totals"]["caption"],
              "標準工数に「6フロー合算」の注記", d["template_totals"]["caption"])
-        # 業務ロールのある人の既定は「自分の分」（ADR-119）。全員の分は mine=0
+        # 既定は全員の分（2026-11-09 修正依頼書 H08・FR-238。ADR-119 の「自分の分」から変えた）。自分の分だけは mine=1
         st0, d0 = cl.get("/api/tasks")
-        note(st0 == 200 and d0["mine"] is True, "業務ロールのある人のタスクの既定は「自分の分」", str(d0.get("mine")))
+        note(st0 == 200 and d0["mine"] is False, "タスクの既定は全員の分（FR-238）", str(d0.get("mine")))
+        st1, d1 = cl.get("/api/tasks?mine=1")
+        note(st1 == 200 and d1["mine"] is True, "mine=1 で自分の分だけ", str(d1.get("mine")))
+        # 店の出品の台帳（段階1）: ログインした人は見られる。まだ取り込んでいなければ0件
+        st, d = cl.get("/api/listings/summary")
+        note(st == 200 and len(d["shops"]) == 9, "台帳の店は9店", str(st))
+        st, d = cl.get("/api/listings?shop=goods&page=1")
+        note(st == 200 and d["total"] == 0, "取り込む前の台帳は0件", str(d))
+        st, d = cl.get("/api/listings?shop=nope")
+        note(st == 404, "知らない店は 404", str(st))
         st, d = cl.get("/api/tasks?when=none&mine=0")
         note(st == 200 and len(d["rows"]) == 34,
              "「期限なし」で34件（展開直後は期限を入れない）", str(len(d["rows"])))
