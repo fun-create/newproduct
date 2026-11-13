@@ -59,8 +59,9 @@ def _pii_counts(p: dict) -> dict:
 
 
 def _diff(code: str, p: dict) -> dict:
-    cur = {r["ext_id"]: (r["row_hash"], r["gone_import_id"]) for r in store.q(
-        "SELECT ext_id, row_hash, gone_import_id FROM listing WHERE shop=?", (code,))}
+    rows_ = store.q("SELECT ext_id, row_hash, gone_import_id, first_import_id FROM listing WHERE shop=?", (code,))
+    cur = {r["ext_id"]: (r["row_hash"], r["gone_import_id"]) for r in rows_}
+    np_new = {r["ext_id"] for r in rows_ if r["first_import_id"] == 0}   # NEW PRODUCT で作り、まだ店のファイルに出てきていない出品
     added, changed, same, back = [], [], [], []
     for k, r in p["recs"].items():
         if k not in cur:
@@ -72,13 +73,15 @@ def _diff(code: str, p: dict) -> dict:
         else:
             same.append(k)
     purge = [k for k in p.get("excluded", []) if k in cur]
-    gone = [k for k, (_, g) in cur.items() if g is None and k not in p["recs"] and k not in purge]
+    # NEW PRODUCT で作った出品は、店のファイルに無くても「消えた」にしない（まだ店に入れていないだけ）
+    gone = [k for k, (_, g) in cur.items() if g is None and k not in p["recs"] and k not in purge and k not in np_new]
     mcur = {r["ext_id"]: (r["row_hash"], r["gone_import_id"]) for r in store.q(
         "SELECT ext_id, row_hash, gone_import_id FROM shop_option_master WHERE shop=?", (code,))}
     m_add = [k for k in p["masters"] if k not in mcur]
     m_chg = [k for k, m in p["masters"].items() if k in mcur and (mcur[k][1] is not None or mcur[k][0] != m["hash"])]
     m_gone = [k for k, (_, g) in mcur.items() if g is None and k not in p["masters"]]
     return {"added": added, "changed": changed + back, "same": same, "gone": gone, "returned": back, "purge": purge,
+            "np_arrived": [k for k in np_new if k in p["recs"]],
             "m_added": m_add, "m_changed": m_chg, "m_gone": m_gone}
 
 
@@ -104,6 +107,7 @@ def preview(code: str, paths) -> dict:
     counts["listings"] = len(p["recs"])
     counts["masters"] = len(p["masters"])
     counts["orphans"] = sum(p["orphans"].values())
+    counts["np_arrived"] = len(d["np_arrived"])
     counts["excluded"] = len(p.get("excluded", []))
     states = {}
     for r in p["recs"].values():
@@ -172,6 +176,8 @@ def apply(code: str, paths, by: str) -> dict:
         if d["same"]:
             c.executemany("UPDATE listing SET last_import_id=? WHERE id=?", [(iid, ids[k]) for k in d["same"]])
         c.executemany("UPDATE listing SET gone_import_id=? WHERE id=?", [(iid, ids[k]) for k in d["gone"]])
+        # NEW PRODUCT で作った出品が店のファイルに出てきた＝店に入った。ここからは店から取り込んだ出品として扱う（以後の書き出しは更新）
+        c.executemany("UPDATE listing SET first_import_id=? WHERE id=? AND first_import_id=0", [(iid, ids[k]) for k in d["np_arrived"]])
         for k in d["purge"]:                      # 専用ページ（PL-64）。取り消しでも戻さない（名前を残さないため前の値も持たない）
             _purge_one(c, code, k, ids[k])
         for k in d["m_added"] + d["m_changed"]:
@@ -334,7 +340,7 @@ def listings(args: dict) -> dict:
     total = store.val(f"SELECT COUNT(*) FROM listing l WHERE {w}", ps)
     rs = store.rows(store.q(
         f"SELECT l.id, l.shop, s.label AS shop_label, l.ext_id, l.ext_sub, l.title, l.price, l.state, l.layout, l.category, "
-        f"l.sellable_id, l.gone_import_id, i.at AS last_at, (SELECT COUNT(*) FROM listing_option o WHERE o.listing_id=l.id) AS n_options, "
+        f"l.sellable_id, l.gone_import_id, l.first_import_id, i.at AS last_at, (SELECT COUNT(*) FROM listing_option o WHERE o.listing_id=l.id) AS n_options, "
         f"(SELECT GROUP_CONCAT(DISTINCT k.product_code) FROM listing_cip_link k WHERE k.listing_id=l.id) AS cip_codes "
         f"FROM listing l JOIN shop s ON s.code=l.shop LEFT JOIN listing_import i ON i.id=l.last_import_id "
         f"WHERE {w} ORDER BY s.sort, l.ext_id LIMIT ? OFFSET ?", ps + [PER_PAGE, (page - 1) * PER_PAGE]))

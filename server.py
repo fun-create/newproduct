@@ -1386,6 +1386,13 @@ class H(BaseHTTPRequestHandler):
             if len(parts) == 3 and parts[2] == "unlink" and str(d.get("listing_id", "")).isdigit():
                 return self.sendj(200, sellable.unlink(parts[1], int(d["listing_id"]), uid))
             return self.sendj(404, {"error": "not found"})
+        # NEW PRODUCT で新しい出品を作る・直す（段階4・ADR-155）。雛形の出品を写す。FutureShop の3店だけ
+        if len(parts) == 3 and parts[0] == "listings" and parts[1].isdigit() and parts[2] in ("new", "edit-new") and method == "POST":
+            from app import listing_new
+            d = self.body()
+            if parts[2] == "new":
+                return self.sendj(200, listing_new.create_from_template(int(parts[1]), d, uid))
+            return self.sendj(200, listing_new.update_new(int(parts[1]), d, uid))
         # 店の出品の台帳（段階1・ADR-141・FR-275〜290）。**画面からは見るだけ。**取り込みは管理者が tools/listing_import.py で
         if parts and parts[0] == "listings" and method == "GET":
             from app import listing

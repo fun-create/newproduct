@@ -5422,7 +5422,7 @@
       else b.appendChild(table(["店", "識別子", "2つ目の識別子", "掲載名", "価格", "状態", "選択肢の行", "レイアウト・カテゴリ", "CIP の共通商品コード"], d.rows.map(function (r) {
         return el("tr", null, [el("td", { text: r.shop_label }), el("td", null, [el("a", { href: "#/listings/" + r.id, text: r.ext_id })]),
           el("td", { text: r.ext_sub || "—" }), el("td", { text: r.title || "（掲載名なし）" }), el("td", { text: yen(r.price, "—") }),
-          el("td", { text: r.gone_import_id ? "最後のファイルに無かった" : r.state }), el("td", { text: fmtNum(r.n_options, " 行") }),
+          el("td", { text: r.gone_import_id ? "最後のファイルに無かった" : r.state + (r.first_import_id === 0 ? "（NEW PRODUCT で作った・店にまだ無い）" : "") }), el("td", { text: fmtNum(r.n_options, " 行") }),
           el("td", { text: r.layout || r.category || "—" }), el("td", { text: r.cip_codes ? r.cip_codes.split(",").join("、") : "まだ結んでいない" })]);
       })));
       if (d.pages > 1) {
@@ -5446,6 +5446,41 @@
         ["売るもの", d.sellable ? d.sellable.label + "（" + d.sellable.id + "・" + d.sellable.state + "）" : "まだ束ねていない（「束ねる候補」から）"]];
       b.appendChild(table(["項目", "値"], rows.map(function (x) { return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]); })));
       if (d.sellable) b.appendChild(btnRow([navBtn("#/sellables/" + d.sellable.id, "売るもの " + d.sellable.id + " を開く", "sm")]));
+      // NEW PRODUCT で新しい出品を作る・直す（ADR-155）
+      var fsShop = ["goods", "uchiwa", "frame"].indexOf(d.shop) >= 0 && !d.gone_import_id;
+      function newForm(vals, label, url, after) {
+        var f = el("form", { "class": "np-form" });
+        var ins = {};
+        [["url_code", "商品URLコード（2〜32 文字の半角英数字と - _）", vals.url_code], ["item_no", "商品番号（32 文字まで・~ 不可）", vals.item_no],
+         ["title", "商品名（300 文字まで）", vals.title], ["price", "本体価格（円）", vals.price], ["catch", "キャッチコピー（200 文字まで・なくてよい）", vals["catch"]],
+         ["sellable_id", "売るものの番号（なくてよい）", vals.sellable_id]].forEach(function (x) {
+          var id = "np-nl-" + x[0] + "-" + label.length;
+          f.appendChild(el("label", { "for": id, text: x[1] }));
+          ins[x[0]] = el("input", { type: "text", id: id, value: x[2] || "" });
+          f.appendChild(ins[x[0]]);
+        });
+        var st = el("select", { "aria-label": "ステータス" }, [["1", "1（非公開）"], ["0", "0（公開）"]].map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === (vals.status || "1") ? "selected" : null }); }));
+        f.appendChild(el("p", null, [txt("ステータス "), st]));
+        var m = el("p", { "class": "np-status", role: "status" });
+        f.appendChild(el("button", { type: "submit", "class": "np-btn np-btn-sm", text: label })); f.appendChild(m);
+        f.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var o = { status: st.value };
+          Object.keys(ins).forEach(function (k) { o[k] = ins[k].value; });
+          post(url, o).then(after).catch(function (er) { m.textContent = er.message; m.className = "np-err"; });
+        });
+        return f;
+      }
+      if (d.first_import_id === 0) {
+        b.appendChild(el("p", { "class": "np-warn", role: "note", text: "NEW PRODUCT で作った出品です。店にはまだありません。店に入れるには「この出品の書き出しを頼む」（新規）から。" }));
+        b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "この出品を直す" }),
+          newForm({ url_code: d.ext_id, item_no: d.raw["商品番号"], title: d.raw["商品名"], price: d.raw["本体価格"], "catch": d.raw["キャッチコピー"],
+                    status: d.raw["ステータス"], sellable_id: d.sellable_id }, "直す", "/api/listings/" + d.id + "/edit-new", function () { viewListing(id); })]));
+      } else if (fsShop) {
+        b.appendChild(el("div", { "class": "np-card" }, [el("h2", { text: "この出品を雛形に、新しい出品を作る" }),
+          el("p", { "class": "np-sub", text: "グループ・レイアウト・送料などの設定と選択肢を写します。登録日時・JANコード・キャッチコピーは写しません。作った出品は店にはまだ無く、書き出し（新規）を承認してから店に入れます。" }),
+          newForm({ status: "1" }, "新しい出品を作る", "/api/listings/" + d.id + "/new", function (r) { location.hash = "#/listings/" + r.id; })]));
+      }
       if (["goods", "uchiwa", "frame"].indexOf(d.shop) >= 0 && !d.gone_import_id) {
         var rq = el("input", { type: "text", placeholder: "なぜ書き出すか（例: 管理画面での試しの1件）", "aria-label": "書き出す理由" });
         var rb = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "この出品の書き出しを頼む" });
