@@ -92,6 +92,13 @@ def main() -> int:
             print("店の記号が要ります")
             return 2
         code = a.args[0]
+        if a.what == "roundtrip" and store.val("SELECT cart FROM shop WHERE code=?", (code,)) in ("rakuten", "yahoo", "giftmall"):
+            from app import mall_export
+            r = mall_export.roundtrip(code, a.args[1:])
+            print(f"往復の検査 {code}: {'同じ' if r['ok'] else '違いあり'}（専用ページとして除いた {r['excluded']}）")
+            for k, v in (r.get("kinds") or {"item": r}).items():
+                print(f"  {k}: 元 {v['orig']}・台帳 {v['mine']}・元だけ {v['only_in_file']}・台帳だけ {v['only_in_ledger']}・CSV 読み直し {'同じ' if v['csv_reread_same'] else '違う'}")
+            return 0 if r["ok"] else 1
         if a.what == "roundtrip":
             r = fs_export.roundtrip(code, a.args[1:])
             print(f"往復の検査 {code}: {'同じ' if r['ok'] else '違いあり'}（専用ページとして除いた {r['excluded']}）")
