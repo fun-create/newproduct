@@ -169,6 +169,41 @@ class Listing(unittest.TestCase):
         self.assertEqual(self.m.preview("goods", [d])["pii"]["phone"], 1)
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing"), 0)
 
+    def test_private_pages_not_imported(self):
+        # 「○○様専用」「専用ページ」は取り込まない（PL-64）。機種専用などの仕様の「専用」は取り込む
+        d = self.dir / "goods"
+        fs_files(d, goods=[{"商品URLコード": "p1", "ステータス": "1", "商品名": "山田様専用 アクスタ"},
+                           {"商品URLコード": "p2", "ステータス": "1", "商品名": "追加料金 専用ページ"},
+                           {"商品URLコード": "p3", "ステータス": "0", "商品名": "スマホ 専用 ケース"},
+                           {"商品URLコード": "p4", "ステータス": "0", "商品名": "アクスタ"}],
+                 sel=[{"商品URLコード": "p1", "選択肢タイプ": "t", "セレクト／ラジオボタン用項目名": "x"}])
+        pv = self.m.preview("goods", [d])
+        self.assertEqual((pv["counts"]["listings"], pv["counts"]["excluded"], pv["errors"]), (2, 2, []))
+        self.m.apply("goods", [d], "boss")
+        self.assertEqual(sorted(r["ext_id"] for r in self.store.q("SELECT ext_id FROM listing")), ["p3", "p4"])
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_option"), 0)     # p1 の選択肢も入らない
+        # 先に入ってしまった分は消せる（台帳から行ごと・取り消し用の記録からも）
+        self.store.ex("INSERT INTO listing (shop,ext_id,title,state,raw_json,row_hash,first_import_id,last_import_id) "
+                      "VALUES ('goods','old1','佐藤様専用','非公開','{}','h',1,1)")
+        self.store.ex("INSERT INTO listing_import_prev (import_id,tbl,ext_id,action) VALUES (1,'listing','old1','added')")
+        self.store.conn().commit()
+        self.assertEqual(self.m.purge_private(False, "")["total"], 1)                     # 既定は数えるだけ
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing WHERE ext_id='old1'"), 1)
+        with self.assertRaises(PermissionError):
+            self.m.purge_private(True, "devlead")
+        r = self.m.purge_private(True, "boss")
+        self.assertEqual((r["total"], r["per_shop"]), (1, {"goods": 1}))
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing WHERE ext_id='old1'"), 0)
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_import_prev WHERE ext_id='old1'"), 0)
+        # 取り込み直しで専用ページが台帳にあれば消す（gone にしない）
+        self.store.ex("INSERT INTO listing (shop,ext_id,title,state,raw_json,row_hash,first_import_id,last_import_id) "
+                      "VALUES ('goods','p1','x','非公開','{}','h',1,1)")
+        self.store.conn().commit()
+        c = self.m.preview("goods", [d])["counts"]
+        self.assertEqual((c["purge"], c["gone"]), (1, 0))
+        self.m.apply("goods", [d], "boss")
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing WHERE ext_id='p1'"), 0)
+
     def test_broken_inputs(self):
         from app import listing_parse as lp
         d = self.dir / "goods"

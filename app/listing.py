@@ -7,6 +7,7 @@
 - 消えた出品は消さない（`gone_import_id` を立てる）。次にまた出てきたら戻す
 - **取り込めるのは社長の業務ロールの人だけ**（FR-302・`IMPORT_ROLES`）。画面からは見るだけ（段階1）
 - お客さまの情報は入らない前提だが、入れる前にメールアドレス・電話番号の形を数え、1件でもあれば止める（値は出さない）
+- **「○○様専用」「専用ページ」の出品は取り込まない**（PL-64・`listing_parse.PRIVATE_TITLE`）。台帳に既にあれば行ごと消す（取り消しでも戻さない）
 """
 from __future__ import annotations
 
@@ -70,13 +71,14 @@ def _diff(code: str, p: dict) -> dict:
             changed.append(k)
         else:
             same.append(k)
-    gone = [k for k, (_, g) in cur.items() if g is None and k not in p["recs"]]
+    purge = [k for k in p.get("excluded", []) if k in cur]
+    gone = [k for k, (_, g) in cur.items() if g is None and k not in p["recs"] and k not in purge]
     mcur = {r["ext_id"]: (r["row_hash"], r["gone_import_id"]) for r in store.q(
         "SELECT ext_id, row_hash, gone_import_id FROM shop_option_master WHERE shop=?", (code,))}
     m_add = [k for k in p["masters"] if k not in mcur]
     m_chg = [k for k, m in p["masters"].items() if k in mcur and (mcur[k][1] is not None or mcur[k][0] != m["hash"])]
     m_gone = [k for k, (_, g) in mcur.items() if g is None and k not in p["masters"]]
-    return {"added": added, "changed": changed + back, "same": same, "gone": gone, "returned": back,
+    return {"added": added, "changed": changed + back, "same": same, "gone": gone, "returned": back, "purge": purge,
             "m_added": m_add, "m_changed": m_chg, "m_gone": m_gone}
 
 
@@ -102,6 +104,7 @@ def preview(code: str, paths) -> dict:
     counts["listings"] = len(p["recs"])
     counts["masters"] = len(p["masters"])
     counts["orphans"] = sum(p["orphans"].values())
+    counts["excluded"] = len(p.get("excluded", []))
     states = {}
     for r in p["recs"].values():
         states[r["state"]] = states.get(r["state"], 0) + 1
@@ -169,6 +172,8 @@ def apply(code: str, paths, by: str) -> dict:
         if d["same"]:
             c.executemany("UPDATE listing SET last_import_id=? WHERE id=?", [(iid, ids[k]) for k in d["same"]])
         c.executemany("UPDATE listing SET gone_import_id=? WHERE id=?", [(iid, ids[k]) for k in d["gone"]])
+        for k in d["purge"]:                      # 専用ページ（PL-64）。取り消しでも戻さない（名前を残さないため前の値も持たない）
+            _purge_one(c, code, k, ids[k])
         for k in d["m_added"] + d["m_changed"]:
             m = p["masters"][k]
             c.execute("INSERT INTO shop_option_master (shop,ext_id,name,raw_json,row_hash,first_import_id,last_import_id) "
@@ -201,9 +206,11 @@ def undo(iid: int, by: str) -> dict:
         for r in c.execute("SELECT * FROM listing_import_prev WHERE import_id=?", (iid,)).fetchall():
             if r["tbl"] == "listing":
                 if r["action"] == "added":
-                    lid = c.execute("SELECT id FROM listing WHERE shop=? AND ext_id=?", (code, r["ext_id"])).fetchone()[0]
-                    c.execute("DELETE FROM listing_option WHERE listing_id=?", (lid,))
-                    c.execute("DELETE FROM listing WHERE id=?", (lid,))
+                    x = c.execute("SELECT id FROM listing WHERE shop=? AND ext_id=?", (code, r["ext_id"])).fetchone()
+                    if x is None:                 # 専用ページとして消したもの（PL-64）
+                        continue
+                    c.execute("DELETE FROM listing_option WHERE listing_id=?", (x[0],))
+                    c.execute("DELETE FROM listing WHERE id=?", (x[0],))
                     n["removed"] += 1
                 else:
                     b = json.loads(r["before_json"])
@@ -231,6 +238,31 @@ def undo(iid: int, by: str) -> dict:
     store.audit(by, "listing.undo", code, {"import_id": iid, **n})
     return n
 
+
+
+def _purge_one(c, code: str, ext_id: str, lid: int):
+    c.execute("DELETE FROM listing_option WHERE listing_id=?", (lid,))
+    c.execute("DELETE FROM listing WHERE id=?", (lid,))
+    # 識別子に名前が入っていることもあるので、取り消し用の記録からも消す
+    c.execute("DELETE FROM listing_import_prev WHERE tbl='listing' AND ext_id=? AND import_id IN "
+              "(SELECT id FROM listing_import WHERE shop=?)", (ext_id, code))
+
+
+def purge_private(apply: bool, by: str) -> dict:
+    """台帳に入っている専用ページ（PL-64）を数える・消す。**名前は出さない**（店ごとの件数だけ）。"""
+    from app import gate
+    rs = [r for r in store.q("SELECT id, shop, ext_id, title FROM listing") if lp.PRIVATE_TITLE.search(r["title"] or "")]
+    per = {}
+    for r in rs:
+        per[r["shop"]] = per.get(r["shop"], 0) + 1
+    if apply:
+        if not IMPORT_ROLES & set(gate.roles_of(by)):
+            raise PermissionError("消せるのは社長の業務ロールの人だけです")
+        with store.tx() as c:
+            for r in rs:
+                _purge_one(c, r["shop"], r["ext_id"], r["id"])
+        store.audit(by, "listing.purge_private", "", {"per_shop": per, "total": len(rs)})
+    return {"total": len(rs), "per_shop": per, "applied": apply}
 
 # ── 見る（段階1は見るだけ）──────────────────────────────────
 def summary() -> dict:

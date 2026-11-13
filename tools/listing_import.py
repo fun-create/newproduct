@@ -6,6 +6,7 @@
     sudo -u newproduct env ... python3 tools/listing_import.py apply    goods  <フォルダかファイル…> --by masateru
     sudo -u newproduct env ... python3 tools/listing_import.py undo     <取り込みの番号> --by masateru
     sudo -u newproduct env ... python3 tools/listing_import.py list     [goods]
+    sudo -u newproduct env ... python3 tools/listing_import.py purge-private [--apply --by masateru]   # 専用ページ（PL-64）を消す
 
 店の記号: goods うちわ=uchiwa frame rakuten yahoo_goods yahoo_frame giftmall amazon overseas
 **値は出さない**（件数・ファイル名・列の数だけ）。取り込めるのは社長の業務ロールの人だけ（--by masateru）。
@@ -37,6 +38,7 @@ def show(pv: dict) -> None:
     print("公開の状態: " + "・".join(f"{k} {v}" for k, v in sorted(pv["states"].items()))
           + ("" if pv["state_checked"] else "（この店の 0/1 などの読み方は画面で確かめていません）"))
     print(f"親の無い行 {c['orphans']} {json.dumps(pv['orphans'], ensure_ascii=False) if pv['orphans'] else ''}")
+    print(f"専用ページとして外した出品 {c['excluded']}（台帳から消す {c['purge']}）")
     print(f"お客さまの情報らしい値: メールアドレスの形 {pv['pii']['email']}・電話番号の形 {pv['pii']['phone']}")
     for e in pv["errors"]:
         print("  ✗ " + e)
@@ -44,9 +46,10 @@ def show(pv: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["preview", "apply", "undo", "list"])
+    ap.add_argument("what", choices=["preview", "apply", "undo", "list", "purge-private"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--by", default="")
+    ap.add_argument("--apply", action="store_true", help="purge-private で本当に消す")
     a = ap.parse_args()
     store.migrate()
     if a.what in ("preview", "apply"):
@@ -63,6 +66,13 @@ def main() -> int:
             return 2
         r = listing.apply(code, paths, a.by)
         print(f"\n書きました: 取り込み #{r['import_id']}")
+        return 0
+    if a.what == "purge-private":
+        # 台帳に入っている「○○様専用」「専用ページ」の出品（PL-64）を消す。既定は数えるだけ
+        if a.apply and not a.by:
+            print("--apply には --by が要ります")
+            return 2
+        print(listing.purge_private(a.apply, a.by))
         return 0
     if a.what == "undo":
         if not a.args or not a.by:

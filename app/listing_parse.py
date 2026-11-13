@@ -35,6 +35,11 @@ STATE_MAP = {
 }
 STATE_CHECKED = {"futureshop", "giftmall"}
 
+# **特定のお客さま向けの専用ページは取り込まない**（PL-64・2026-11-13 EC統合 08:30。商品名にお名前が入り得る）。
+# 「○○様専用」「専用ページ」の形。Amazon の「～専用」（機種専用などの仕様）は当てない。
+# 当たった出品は、読んだ行としては数えるが、台帳にも件数の検査にも入れない（名前を保存しない）
+PRIVATE_TITLE = re.compile(r"様\s*専用|専用\s*(ページ|カート|出品|注文)|様\s*(用|向け)\b")
+
 # 落とす列（説明文・画像・在庫の数）。正規表現は列名の全体に当てる
 _STOCK = r"(現在在庫数|調整在庫数|在庫数|お気に入り登録数|quantity|pending-quantity|Variant Inventory Qty)"
 DROP = {
@@ -285,6 +290,9 @@ def parse(cart: str, paths: list[Path]) -> dict:
             ps = [o["price"] for o in rec["options"] if o["price"] is not None]
             rec["price"] = min(ps) if ps else None
 
+    excluded = [k for k, r in recs.items() if PRIVATE_TITLE.search(r["title"] or "")]
+    for k in excluded:
+        del recs[k]
     for rec in recs.values():
         rec["state"] = sm.get((rec["state_raw"] or "").strip(), "そのほか")
         rec["hash"] = rec_hash(rec)
@@ -296,6 +304,7 @@ def parse(cart: str, paths: list[Path]) -> dict:
             if f["accounted"] != f["rows"]:
                 errors.append(f"{f['name']}: 読んだ行 {f['rows']} と数えた行 {f['accounted']} が合いません")
     return {"cart": cart, "recs": recs, "masters": masters, "files": files, "orphans": orphans, "errors": errors,
+            "excluded": excluded,
             "state_checked": cart in STATE_CHECKED}
 
 
