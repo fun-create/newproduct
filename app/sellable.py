@@ -152,6 +152,8 @@ def detail(sid: str) -> dict:
     d["revisions"] = store.rows(store.q("SELECT changed_at, changed_by, what, detail FROM sellable_revision WHERE sellable_id=? "
                                         "ORDER BY id DESC LIMIT 50", (sid,)))
     d["states"] = list(STATES)
+    d.update(options_of(sid))
+    d["all_defs"] = store.rows(store.q("SELECT id, name, kind FROM option_def ORDER BY name"))
     return d
 
 
@@ -198,4 +200,136 @@ def unlink(sid: str, listing_id: int, uid: str) -> dict:
         c.execute("UPDATE listing SET sellable_id=NULL WHERE id=?", (listing_id,))
         _rev(c, sid, uid, "出品を外した", f"{r['shop']}：{r['ext_id']}")
     store.audit(uid, "sellable.unlink", sid, {"listing_id": listing_id})
+    return {"ok": True}
+
+
+# ── 売るものに付ける選択肢（段階3・ADR-150・FR-263）────────────────────────
+# 使う値を絞り、価格を商品ごとに上書きする。価格が空なら定義の追加の価格を使う（0 で埋めない）
+
+def _sellable(sid: str):
+    r = store.one("SELECT id FROM sellable WHERE id=?", (sid,))
+    if r is None:
+        raise LookupError("売るものがありません")
+
+
+def options_of(sid: str) -> dict:
+    """付けた選択肢（定義ごとに値・使うか・価格）と、束ねた出品が使っている価格の決まり。"""
+    used = {r["def_value_id"]: r["n"] for r in store.q(
+        "SELECT o.def_value_id, COUNT(DISTINCT o.listing_id) n FROM listing_option o JOIN listing l ON l.id=o.listing_id "
+        "WHERE l.sellable_id=? AND o.def_value_id IS NOT NULL GROUP BY o.def_value_id", (sid,))}
+    out = []
+    for d in store.q("SELECT d.id, d.name, d.kind, d.input_type, so.sort FROM sellable_option so JOIN option_def d ON d.id=so.def_id "
+                     "WHERE so.sellable_id=? ORDER BY so.sort, d.name", (sid,)):
+        vals = []
+        for v in store.q("SELECT v.id, v.code, v.label, v.add_price, sv.enabled, sv.price FROM option_value v "
+                         "LEFT JOIN sellable_option_value sv ON sv.value_id=v.id AND sv.sellable_id=? WHERE v.def_id=? ORDER BY v.sort",
+                         (sid, d["id"])):
+            vals.append({"id": v["id"], "code": v["code"], "label": v["label"], "def_price": v["add_price"],
+                         "enabled": bool(v["enabled"]), "price": v["price"],
+                         "effective": v["price"] if v["price"] is not None else v["add_price"], "listings": used.get(v["id"], 0)})
+        out.append({**dict(d), "values": vals})
+    attached = {o["id"] for o in out}
+    unattached = store.rows(store.q(
+        "SELECT DISTINCT d.id, d.name FROM listing_option o JOIN listing l ON l.id=o.listing_id JOIN option_value v ON v.id=o.def_value_id "
+        "JOIN option_def d ON d.id=v.def_id WHERE l.sellable_id=? ORDER BY d.name", (sid,)))
+    rules = store.rows(store.q(
+        "SELECT p.id, p.name, p.tiers_json, COUNT(DISTINCT x.listing_id) n FROM price_rule_listing x JOIN listing l ON l.id=x.listing_id "
+        "JOIN price_rule p ON p.id=x.rule_id WHERE l.sellable_id=? GROUP BY p.id ORDER BY p.name", (sid,)))
+    import json as _json
+    for r in rules:
+        r["tiers"] = _json.loads(r.pop("tiers_json"))
+    return {"options": out, "in_listings_not_attached": [x for x in unattached if x["id"] not in attached],
+            "price_rules": rules}
+
+
+def copy_from_listings(sid: str, uid: str) -> dict:
+    """束ねた出品が使っている定義の値を、売るものの選択肢として写す（既にあるものは触らない）。
+    価格は出品でいちばん多い価格。定義の追加の価格と同じなら空（定義に従う）。"""
+    _need(uid)
+    _sellable(sid)
+    from collections import Counter
+    rows = store.q("SELECT v.def_id, o.def_value_id vid, o.price, v.add_price FROM listing_option o JOIN listing l ON l.id=o.listing_id "
+                   "JOIN option_value v ON v.id=o.def_value_id WHERE l.sellable_id=?", (sid,))
+    prices, defs = {}, []
+    for r in rows:
+        prices.setdefault(r["vid"], [r["add_price"], Counter()])[1][r["price"]] += 1
+        if r["def_id"] not in defs:
+            defs.append(r["def_id"])
+    n_def = n_val = 0
+    with store.tx() as c:
+        have = {r[0] for r in c.execute("SELECT def_id FROM sellable_option WHERE sellable_id=?", (sid,))}
+        sort = c.execute("SELECT COALESCE(MAX(sort),0) FROM sellable_option WHERE sellable_id=?", (sid,)).fetchone()[0]
+        for did in defs:
+            if did in have:
+                continue
+            sort += 1
+            c.execute("INSERT INTO sellable_option (sellable_id, def_id, sort) VALUES (?,?,?)", (sid, did, sort))
+            n_def += 1
+            for vid, (addp, cnt) in prices.items():
+                if c.execute("SELECT def_id FROM option_value WHERE id=?", (vid,)).fetchone()[0] != did:
+                    continue
+                p = cnt.most_common(1)[0][0]
+                c.execute("INSERT OR IGNORE INTO sellable_option_value (sellable_id, value_id, enabled, price) VALUES (?,?,1,?)",
+                          (sid, vid, None if (p or None) == (addp or None) else p))
+                n_val += 1
+        if n_def:
+            _rev(c, sid, uid, "選択肢を台帳から写した", f"定義 {n_def}・値 {n_val}")
+    return {"defs": n_def, "values": n_val}
+
+
+def attach_def(sid: str, did: int, uid: str) -> dict:
+    """定義を付ける（値はすべて使う・価格は定義に従う）。"""
+    _need(uid)
+    _sellable(sid)
+    d = store.one("SELECT name FROM option_def WHERE id=?", (did,))
+    if d is None:
+        raise LookupError("その定義はありません")
+    with store.tx() as c:
+        if c.execute("SELECT 1 FROM sellable_option WHERE sellable_id=? AND def_id=?", (sid, did)).fetchone():
+            raise ValueError("この選択肢はもう付いています")
+        sort = c.execute("SELECT COALESCE(MAX(sort),0)+1 FROM sellable_option WHERE sellable_id=?", (sid,)).fetchone()[0]
+        c.execute("INSERT INTO sellable_option (sellable_id, def_id, sort) VALUES (?,?,?)", (sid, did, sort))
+        c.execute("INSERT OR IGNORE INTO sellable_option_value (sellable_id, value_id, enabled, price) "
+                  "SELECT ?, id, 1, NULL FROM option_value WHERE def_id=?", (sid, did))
+        _rev(c, sid, uid, "選択肢を付けた", d["name"])
+    return {"ok": True}
+
+
+def save_values(sid: str, did: int, rows: list[dict], uid: str) -> dict:
+    """値ごとに 使う／使わない と価格（空なら定義に従う）を保存する。"""
+    _need(uid)
+    if store.one("SELECT 1 FROM sellable_option WHERE sellable_id=? AND def_id=?", (sid, did)) is None:
+        raise LookupError("この選択肢は付いていません")
+    valid = {r["id"] for r in store.q("SELECT id FROM option_value WHERE def_id=?", (did,))}
+    ch = []
+    with store.tx() as c:
+        for r in rows:
+            vid = int(r["value_id"])
+            if vid not in valid:
+                raise ValueError("この選択肢の値ではありません")
+            p = str(r.get("price") if r.get("price") is not None else "").replace(",", "").strip()
+            if p and not (p.lstrip("-").isdigit()):
+                raise ValueError("価格は円の整数で入れてください（定義に従うなら空）")
+            price = int(p) if p else None
+            en = 1 if r.get("enabled") else 0
+            cur = c.execute("SELECT enabled, price FROM sellable_option_value WHERE sellable_id=? AND value_id=?", (sid, vid)).fetchone()
+            if ((cur["enabled"], cur["price"]) if cur is not None else (0, None)) == (en, price):
+                continue                          # 行が無い＝使わない・価格なし
+            c.execute("INSERT INTO sellable_option_value (sellable_id, value_id, enabled, price) VALUES (?,?,?,?) "
+                      "ON CONFLICT(sellable_id, value_id) DO UPDATE SET enabled=excluded.enabled, price=excluded.price", (sid, vid, en, price))
+            ch.append(vid)
+        if ch:
+            name = c.execute("SELECT name FROM option_def WHERE id=?", (did,)).fetchone()[0]
+            _rev(c, sid, uid, "選択肢の値を直した", f"{name}: {len(ch)} 値")
+    return {"changed": len(ch)}
+
+
+def detach_def(sid: str, did: int, uid: str) -> dict:
+    _need(uid)
+    with store.tx() as c:
+        if c.execute("DELETE FROM sellable_option WHERE sellable_id=? AND def_id=?", (sid, did)).rowcount == 0:
+            raise LookupError("この選択肢は付いていません")
+        c.execute("DELETE FROM sellable_option_value WHERE sellable_id=? AND value_id IN (SELECT id FROM option_value WHERE def_id=?)", (sid, did))
+        name = c.execute("SELECT name FROM option_def WHERE id=?", (did,)).fetchone()
+        _rev(c, sid, uid, "選択肢を外した", name[0] if name else str(did))
     return {"ok": True}

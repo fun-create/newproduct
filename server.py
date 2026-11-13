@@ -1339,6 +1339,27 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(200, sellable.bundle((d.get("codes") or "").split(","), uid))
             if len(parts) == 2:
                 return self.sendj(200, sellable.update(parts[1], d, uid))
+            if len(parts) == 4 and parts[2] == "options":
+                # 売るものに付ける選択肢（ADR-150・FR-263）
+                if parts[3] == "copy":
+                    return self.sendj(200, sellable.copy_from_listings(parts[1], uid))
+                did = str(d.get("def_id", ""))
+                if not did.isdigit():
+                    raise ValueError("選択肢の定義を選んでください")
+                if parts[3] == "attach":
+                    return self.sendj(200, sellable.attach_def(parts[1], int(did), uid))
+                if parts[3] == "detach":
+                    return self.sendj(200, sellable.detach_def(parts[1], int(did), uid))
+                if parts[3] == "save":
+                    rows = []
+                    for ln in (d.get("rows") or "").split("\n"):
+                        if not ln:
+                            continue
+                        vid, en, price = (ln.split("|") + ["", ""])[:3]
+                        if not vid.isdigit():
+                            raise ValueError("値の形が違います")
+                        rows.append({"value_id": vid, "enabled": en == "1", "price": price})
+                    return self.sendj(200, sellable.save_values(parts[1], int(did), rows, uid))
             if len(parts) == 3 and parts[2] == "unlink" and str(d.get("listing_id", "")).isdigit():
                 return self.sendj(200, sellable.unlink(parts[1], int(d["listing_id"]), uid))
             return self.sendj(404, {"error": "not found"})

@@ -5204,6 +5204,62 @@
       b.appendChild(table(["選択肢の組", "共通商品コード", "数量"], d.makes.map(function (m) {
         return el("tr", null, [el("td", { text: m.combo || "（選択肢なし）" }), el("td", null, [el("a", { href: "#/listings?code=" + encodeURIComponent(m.product_code), text: m.product_code })]), el("td", { text: String(m.qty) })]);
       })));
+      // 選択肢（ADR-150・FR-263）。使う値を絞り、価格を商品ごとに上書きする（空なら定義の価格）
+      b.appendChild(el("h2", { text: "選択肢（" + d.options.length + " つ）" }));
+      var omsg = el("p", { "class": "np-status", role: "status" });
+      var cp = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "台帳から写す" });
+      cp.addEventListener("click", function () {
+        cp.disabled = true;
+        post("/api/sellables/" + encodeURIComponent(d.id) + "/options/copy", {}).then(function (r) {
+          omsg.textContent = r.defs ? "定義 " + r.defs + "・値 " + r.values + " を写しました。" : "写すものがありません（束ねた出品の選択肢が、まだ定義に寄せていないか、もう付いています）。";
+          if (r.defs) setTimeout(function () { viewSellable(id); }, 700); else cp.disabled = false;
+        }).catch(function (e) { cp.disabled = false; omsg.textContent = e.message; omsg.className = "np-err"; });
+      });
+      var adSel = el("select", { "aria-label": "付ける定義" }, [el("option", { value: "", text: "（定義を選ぶ）" })].concat(d.all_defs.map(function (x) { return el("option", { value: String(x.id), text: x.name + "（" + x.kind + "）" }); })));
+      var ad = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "定義を付ける" });
+      ad.addEventListener("click", function () {
+        if (!adSel.value) { omsg.textContent = "定義を選んでください。"; return; }
+        post("/api/sellables/" + encodeURIComponent(d.id) + "/options/attach", { def_id: adSel.value }).then(function () { viewSellable(id); })
+          .catch(function (e) { omsg.textContent = e.message; omsg.className = "np-err"; });
+      });
+      b.appendChild(el("p", { "class": "np-sub", text: "束ねた出品が使っている選択肢を「台帳から写す」で写せます（価格は出品でいちばん多い価格・定義と同じなら空）。"
+        + (d.in_listings_not_attached.length ? "まだ付けていない定義: " + d.in_listings_not_attached.map(function (x) { return x.name; }).join("、") : "") }));
+      b.appendChild(btnRow([cp, adSel, ad]));
+      b.appendChild(omsg);
+      d.options.forEach(function (o) {
+        var card = el("div", { "class": "np-card" });
+        card.appendChild(el("h3", null, [txt(o.name + " "), tag(o.kind, "neutral")]));
+        var inputs = [];
+        card.appendChild(table(["使う", "コード", "値", "価格（空なら定義の価格）", "定義の価格", "使っている出品"], o.values.map(function (v) {
+          var en = el("input", { type: "checkbox", "aria-label": v.label + " を使う" }); en.checked = v.enabled;
+          var pr = el("input", { type: "text", inputmode: "numeric", value: v.price === null ? "" : String(v.price), placeholder: v.def_price === null ? "なし" : String(v.def_price), "aria-label": v.label + " の価格", size: "8" });
+          inputs.push([v.id, en, pr]);
+          return el("tr", null, [el("td", null, [en]), el("td", { text: v.code }), el("td", { text: v.label }), el("td", null, [pr]),
+            el("td", { text: v.def_price === null ? "なし" : yen(v.def_price) }), el("td", { text: v.listings ? fmtNum(v.listings, " 件") : "—" })]);
+        })));
+        var sv = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "この選択肢を保存" });
+        var rm = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "外す" });
+        var m2 = el("p", { "class": "np-status", role: "status" });
+        sv.addEventListener("click", function () {
+          post("/api/sellables/" + encodeURIComponent(d.id) + "/options/save", { def_id: o.id, rows: inputs.map(function (x) { return x[0] + "|" + (x[1].checked ? "1" : "0") + "|" + x[2].value.trim(); }).join("\n") })
+            .then(function (r) { m2.textContent = r.changed ? r.changed + " 値を直しました。" : "変わった所がありません。"; })
+            .catch(function (e) { m2.textContent = e.message; m2.className = "np-err"; });
+        });
+        rm.addEventListener("click", function () {
+          rm.disabled = true;
+          post("/api/sellables/" + encodeURIComponent(d.id) + "/options/detach", { def_id: o.id }).then(function () { viewSellable(id); })
+            .catch(function (e) { rm.disabled = false; m2.textContent = e.message; m2.className = "np-err"; });
+        });
+        card.appendChild(btnRow([sv, rm])); card.appendChild(m2);
+        b.appendChild(card);
+      });
+      if (d.price_rules.length) {
+        b.appendChild(el("h2", { text: "価格の決まり（束ねた出品が使っているもの）" }));
+        b.appendChild(table(["名前", "段", "出品"], d.price_rules.map(function (r) {
+          return el("tr", null, [el("td", { text: r.name }), el("td", { text: r.tiers.map(function (t) { return t.min + (t.max === null ? "個以上" : t.max !== t.min ? "〜" + t.max + "個" : "個") + " " + t.rate + "%"; }).join("・") }),
+            el("td", { text: fmtNum(r.n, " 件") })]);
+        })));
+      }
       b.appendChild(el("h2", { text: "束ねている出品（" + d.listings.length + " 件）" }));
       b.appendChild(table(["店", "識別子", "掲載名", "価格", "状態", ""], d.listings.map(function (l) {
         var ub = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "外す" });

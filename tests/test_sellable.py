@@ -96,5 +96,44 @@ class Sellable(unittest.TestCase):
             self.m.detail("nope")
 
 
+    def test_options_copy_and_override(self):
+        from app import optdef
+        sid = self.m.bundle(["AG0001"], "boss")["made"][0]["id"]        # g1・r1・y1
+        ins = lambda ext, v, pr: self.store.ex("INSERT INTO listing_option (listing_id,src,item_name,value,price,raw_json) VALUES (?,?,?,?,?,'{}')",
+                                               (self.ids[ext], "opt_select", "台座の色", v, pr))
+        ins("g1", "白", 0); ins("g1", "黒", 200); ins("r1", "白", 0); ins("r1", "黒", 300); ins("y1", "黒", 300)
+        ins("u1", "赤", 500)                                                  # 別の売るものの出品（写さない）
+        self.store.conn().commit()
+        self.assertEqual(self.m.copy_from_listings(sid, "boss"), {"defs": 0, "values": 0})   # まだ定義に寄せていない
+        members = ["goods|opt_select|台座の色", "rakuten|opt_select|台座の色", "yahoo_goods|opt_select|台座の色", "uchiwa|opt_select|台座の色"]
+        did = optdef.assign({"name": "台座の色", "kind": "追加料金"}, members, "boss")["def_id"]
+        self.assertEqual([x["name"] for x in self.m.detail(sid)["in_listings_not_attached"]], ["台座の色"])
+        with self.assertRaises(PermissionError):
+            self.m.copy_from_listings(sid, "dev")
+        self.assertEqual(self.m.copy_from_listings(sid, "boss"), {"defs": 1, "values": 2})    # 白・黒（赤は別の売るもの）
+        self.assertEqual(self.m.copy_from_listings(sid, "boss"), {"defs": 0, "values": 0})    # 二重に写さない
+        o = self.m.detail(sid)["options"][0]
+        v = {x["label"]: x for x in o["values"]}
+        # 定義の「黒」は 300 円（いちばん多い）。この売るものの出品も 300 が多いので空（定義に従う）
+        self.assertEqual((v["黒"]["def_price"], v["黒"]["price"], v["黒"]["effective"], v["黒"]["enabled"]), (300, None, 300, True))
+        self.assertEqual((v["赤"]["enabled"], v["白"]["listings"]), (False, 2))
+        with self.assertRaises(ValueError):
+            self.m.save_values(sid, did, [{"value_id": v["黒"]["id"], "enabled": True, "price": "三百"}], "boss")
+        r = self.m.save_values(sid, did, [{"value_id": v["黒"]["id"], "enabled": True, "price": "250"},
+                                          {"value_id": v["赤"]["id"], "enabled": False, "price": ""}], "boss")
+        self.assertEqual(r["changed"], 1)                                   # 赤はもともと使わない（行が無い）ので変わらない
+        v = {x["label"]: x for x in self.m.detail(sid)["options"][0]["values"]}
+        self.assertEqual((v["黒"]["price"], v["黒"]["effective"]), (250, 250))
+        with self.assertRaises(ValueError):
+            self.m.attach_def(sid, did, "boss")
+        self.m.detach_def(sid, did, "boss")
+        self.assertEqual(self.m.detail(sid)["options"], [])
+        self.m.attach_def(sid, did, "lead")                                 # 付けると値は全部使う・価格は定義
+        v = {x["label"]: x for x in self.m.detail(sid)["options"][0]["values"]}
+        self.assertTrue(all(x["enabled"] and x["price"] is None for x in v.values()))
+        self.assertIn("選択肢を付けた", [x["what"] for x in self.m.detail(sid)["revisions"]])
+
+
+
 if __name__ == "__main__":
     unittest.main()
