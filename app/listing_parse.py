@@ -238,7 +238,7 @@ def parse(cart: str, paths: list[Path]) -> dict:
                        state_raw=r.get("display"), sale_from=r.get("sale-period-start"), sale_to=r.get("sale-period-end"),
                        category=r.get("product-category"), raw=r)
             if r.get("options"):
-                rec["options"].append(_opt("yahoo_options", {"options": r["options"]}, None, r["options"]))
+                rec["options"] += yahoo_options(r["options"])
             put(fn, rec)
     elif cart == "giftmall":
         for fn, r in data["item"]:
@@ -247,13 +247,25 @@ def parse(cart: str, paths: list[Path]) -> dict:
             item = " / ".join(x for x in (r.get("規格分類名1"), r.get("規格分類名2")) if x)
             val = " / ".join(x for x in (r.get("規格名1"), r.get("規格名2")) if x)
             attach(fn, r["商品ID"], _opt("gm_class", r, item, val, r.get("商品コード"), _int(r.get("販売価格"))), "gm_class")
-        for fn, r in data.get("option", []):
-            attach(fn, r["商品ID"], _opt("gm_option", r, r.get("オプション名 (フロント用)"), None, r.get("オプションID")), "gm_option")
         for fn, r in data.get("master", []):
             if r["オプションID"] in masters:
                 errors.append(f"{fn}: オプションIDが2回出てきます: {r['オプションID']}")
             masters[r["オプションID"]] = {"ext_id": r["オプションID"], "name": r.get("オプション名 (フロント用)"), "raw": r}
             acc(fn)
+        for fn, r in data.get("option", []):
+            # 商品に付いたオプションを、マスタの選択肢ごとの行にする（名前と価格はマスタにある）
+            m = masters.get(r.get("オプションID", ""))
+            vals = gm_values(m["raw"]) if m else []
+            if r["商品ID"] not in recs:
+                orphans["gm_option"] = orphans.get("gm_option", 0) + 1
+                acc(fn)
+                continue
+            acc(fn)
+            name = r.get("オプション名 (フロント用)") or (m["name"] if m else None)
+            if not vals:
+                recs[r["商品ID"]]["options"].append(_opt("gm_option", r, name, None, r.get("オプションID")))
+            for n, (v, price) in enumerate(vals, start=1):
+                recs[r["商品ID"]]["options"].append(_opt("gm_option", {**r, "値": v}, name, v, r.get("オプションID"), price, n))
         for rec in recs.values():
             ps = [o["price"] for o in rec["options"] if o["src"] == "gm_class" and o["price"] is not None]
             rec["price"] = min(ps) if ps else None
@@ -306,6 +318,41 @@ def parse(cart: str, paths: list[Path]) -> dict:
     return {"cart": cart, "recs": recs, "masters": masters, "files": files, "orphans": orphans, "errors": errors,
             "excluded": excluded,
             "state_checked": cart in STATE_CHECKED}
+
+
+def yahoo_options(text: str) -> list[dict]:
+    """Yahoo の options（1列）を、項目 × 値の行にする。
+
+    書き方（11-13 本物のファイルで確かめた）: 項目は空行で区切る。1項目は半角空白で区切った「項目名 値1 値2 …」。
+    自由入力は「項目名 inscription 最大文字数」。項目名に「|仕様ID|」が付くことがある（カラー|10011|）。"""
+    out = []
+    for block in re.split(r"\r?\n", text or ""):
+        t = [x for x in block.strip().split(" ") if x]
+        if not t:
+            continue
+        name, spec = t[0], None
+        m = re.fullmatch(r"(.+?)\|(\d+)\|", name)
+        if m:
+            name, spec = m.group(1), m.group(2)
+        raw = {"項目": name} | ({"仕様ID": spec} if spec else {})
+        if len(t) >= 2 and t[1] == "inscription":
+            out.append(_opt("yahoo_option", raw | {"自由入力": True, "最大文字数": t[2] if len(t) > 2 else ""}, name, None, None, None, 0))
+            continue
+        if len(t) == 1:
+            out.append(_opt("yahoo_option", raw, name, None))
+        for n, v in enumerate(t[1:], start=1):
+            out.append(_opt("yahoo_option", raw | {"値": v}, name, v, None, None, n))
+    return out
+
+
+def gm_values(master_raw: dict) -> list[tuple[str, int | None]]:
+    """ギフトモールのオプションのマスタから、選択肢（名称・価格）を順に取り出す。アクティブでないものも残す。"""
+    out = []
+    for c, v in master_raw.items():
+        m = re.fullmatch(r"選択肢(\d+)\(名称\)", c)
+        if m and v:
+            out.append((int(m.group(1)), v, _int(master_raw.get(f"選択肢{m.group(1)}(価格)"))))
+    return [(v, p) for _, v, p in sorted(out)]
 
 
 def rec_hash(rec: dict) -> str:

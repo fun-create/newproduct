@@ -8,8 +8,8 @@
 - 定義は種類を持つ（FR-261）: 作るもの（作るものが変わる）／追加料金／お客さまの入力。選ぶ型か自由入力か
 - 定義にすると、選んだ項目名の値が定義の値になり（FR-262）、台帳のその行が定義の値と結ばれる（`listing_option.def_value_id`）
 - 値の追加の価格は、出品ごとに違うことがある。定義には**いちばん多い価格**を置き、出品ごとの違いはそのまま台帳に残る（商品ごとの上書き＝FR-263 は次）
-- 対象は、選択肢に値と価格を持つ元のファイル（自社 EC の価格つきと項目選択肢・楽天の商品オプション・ギフトモールの規格）。
-  Yahoo の options（1列に詰めた文字）・Shopify・楽天の SKU は次
+- 対象は、選択肢に値と価格を持つ元のファイル（自社 EC の価格つきと項目選択肢・楽天の商品オプション・ギフトモールの規格とオプション・
+  Yahoo の options を項目 × 値に読み分けたもの）。Shopify・楽天の SKU は次
 - 定義を作る・寄せる・外すのは社長と商品開発部管理者
 - お客さまの入力の値は台帳に無い（取り込むのは店の設定だけ）。自由入力の項目は値なしの定義になる
 """
@@ -24,8 +24,8 @@ from app import store
 EDIT_ROLES = {"president", "admin"}
 KINDS = ("作るもの", "追加料金", "お客さまの入力")
 INPUTS = ("選ぶ", "自由入力")
-SRCS = ("opt_select", "selection", "rakuten_option", "gm_class")
-GROUPS = {"own": ("goods", "uchiwa", "frame"), "rakuten": ("rakuten",), "giftmall": ("giftmall",)}
+SRCS = ("opt_select", "selection", "rakuten_option", "gm_class", "gm_option", "yahoo_option")
+GROUPS = {"own": ("goods", "uchiwa", "frame"), "rakuten": ("rakuten",), "yahoo": ("yahoo_goods", "yahoo_frame"), "giftmall": ("giftmall",)}
 PER_PAGE = 30
 _STRIP = re.compile(r"^(表面|裏面|おもて面|うら面)\s*[:：]\s*|^【\d+個目】|^\d+個目[:：]?|[\s□■◆◇●○★☆※]+")
 
@@ -63,9 +63,10 @@ def clusters(args: dict) -> dict:
     q = ",".join("?" * len(shops))
     rows = store.q(
         f"SELECT l.shop, o.src, o.item_name, COUNT(DISTINCT o.listing_id) n_listings, COUNT(DISTINCT o.value) n_values, "
-        f"SUM(o.price IS NOT NULL AND o.price<>0) n_priced, MIN(o.price) pmin, MAX(o.price) pmax, a.def_id "
+        f"SUM(o.price IS NOT NULL AND o.price<>0) n_priced, MIN(o.price) pmin, MAX(o.price) pmax, COALESCE(a.def_id, -pa.rule_id) def_id "
         f"FROM listing_option o JOIN listing l ON l.id=o.listing_id "
         f"LEFT JOIN option_alias a ON a.shop=l.shop AND a.src=o.src AND a.item_name=o.item_name "
+        f"LEFT JOIN price_rule_alias pa ON pa.shop=l.shop AND pa.src=o.src AND pa.item_name=o.item_name "
         f"WHERE l.gone_import_id IS NULL AND l.shop IN ({q}) AND o.src IN ({','.join('?' * len(SRCS))}) "
         f"AND o.item_name IS NOT NULL AND o.item_name<>'' GROUP BY l.shop, o.src, o.item_name", list(shops) + list(SRCS))
     by = {}
@@ -91,6 +92,9 @@ def clusters(args: dict) -> dict:
         c["suggest_kind"] = "追加料金" if c["priced"] else ("お客さまの入力" if all(not m["n_values"] for m in c["members"]) else "作るもの")
         c["suggest_input"] = "自由入力" if all(not m["n_values"] for m in c["members"]) else "選ぶ"
         c["suggest_name"] = strip_name(c["members"][0]["item_name"]) or c["members"][0]["item_name"]
+        from app import pricerule
+        # 数量の段として読めるなら「価格の決まり」の候補（ADR-149）。出品ごとの段の表の種類と件数
+        c["tier_tables"] = pricerule.suggest([(m["shop"], m["src"], m["item_name"]) for m in c["members"] if not m["def_id"]])
     defs = store.rows(store.q("SELECT id, name, kind FROM option_def ORDER BY name"))
     done = store.val(f"SELECT COUNT(*) FROM option_alias WHERE shop IN ({q})", list(shops))
     return {"group": grp, "rows": rows, "total": total, "page": page, "per_page": PER_PAGE,
@@ -141,6 +145,8 @@ def assign(fields: dict, members: list[str], uid: str) -> dict:
                             (shop, src, item)).fetchone()
             if hit is None:
                 raise LookupError(f"台帳にその項目名がありません: {shop} {item}")
+            if c.execute("SELECT 1 FROM price_rule_alias WHERE shop=? AND src=? AND item_name=?", (shop, src, item)).fetchone():
+                raise ValueError(f"「{item}」（{shop}）は価格の決まりに寄せてあります。先に外してください")
             old = c.execute("SELECT def_id FROM option_alias WHERE shop=? AND src=? AND item_name=?", (shop, src, item)).fetchone()
             if old and old["def_id"] != did:
                 raise ValueError(f"「{item}」（{shop}）はもう別の定義に寄せてあります。先に外してください")

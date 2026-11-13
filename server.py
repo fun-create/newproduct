@@ -1304,11 +1304,18 @@ class H(BaseHTTPRequestHandler):
                 if parts == ["options", "clusters"]:
                     return self.sendj(200, optdef.clusters(qs))
                 if parts == ["options", "defs"]:
-                    return self.sendj(200, {"rows": optdef.defs()})
+                    from app import pricerule
+                    return self.sendj(200, {"rows": optdef.defs(), "rules": pricerule.rules()})
                 if len(parts) == 3 and parts[1] == "defs" and parts[2].isdigit():
                     return self.sendj(200, optdef.detail(int(parts[2])))
                 return self.sendj(404, {"error": "not found"})
             d = self.body()
+            if parts == ["options", "rules"]:
+                from app import pricerule
+                return self.sendj(200, pricerule.create(d.get("name", ""), optdef._members([x for x in (d.get("members") or "").split("\n") if x]), uid))
+            if len(parts) == 4 and parts[1] == "rules" and parts[2].isdigit() and parts[3] == "detach":
+                from app import pricerule
+                return self.sendj(200, pricerule.detach(int(parts[2]), d.get("shop", ""), d.get("src", ""), d.get("item_name", ""), uid))
             if parts == ["options", "assign"]:
                 return self.sendj(200, optdef.assign(d, [x for x in (d.get("members") or "").split("\n") if x], uid))
             if len(parts) == 3 and parts[1] == "defs" and parts[2].isdigit():

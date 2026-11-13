@@ -250,6 +250,30 @@ class Listing(unittest.TestCase):
         self.m.purge_private(True, "boss")
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_cip_link WHERE product_code='AG0002'"), 0)
 
+    def test_yahoo_and_giftmall_options(self):
+        from app import listing_parse as lp
+        rows = lp.yahoo_options("胴着/袴カラー 選択して下さい！ 紺/紺 白/白\n\n垂上※不要な場合は「なし」を入力 inscription 4\n\nカラー|10011| シルバー")
+        self.assertEqual([(o["item_name"], o["value"], o["sort"]) for o in rows],
+                         [("胴着/袴カラー", "選択して下さい！", 1), ("胴着/袴カラー", "紺/紺", 2), ("胴着/袴カラー", "白/白", 3),
+                          ("垂上※不要な場合は「なし」を入力", None, 0), ("カラー", "シルバー", 1)])
+        self.assertEqual((rows[3]["raw"]["最大文字数"], rows[4]["raw"]["仕様ID"]), ("4", "10011"))
+        self.assertEqual(lp.yahoo_options(""), [])
+        self.assertEqual(lp.gm_values({"選択肢2(名称)": "青", "選択肢2(価格)": "", "選択肢1(名称)": "赤", "選択肢1(価格)": "300", "選択肢3(名称)": ""}),
+                         [("赤", 300), ("青", None)])
+        g = self.dir / "gm"
+        g.mkdir()
+        write(g / "item_20261102_1.csv", ["コントロールカラム", "商品ID", "商品名", "公開・非公開"], [{"商品ID": "9", "商品名": "ギフト", "公開・非公開": "公開"}])
+        write(g / "item_option_20261102_1.csv", ["コントロールカラム", "商品ID", "オプションID", "オプション名 (フロント用)"],
+              [{"商品ID": "9", "オプションID": "o1", "オプション名 (フロント用)": "ラッピング"}, {"商品ID": "9", "オプションID": "o2", "オプション名 (フロント用)": "メッセージ"}])
+        write(g / "option_master_20261102_1.csv", ["コントロールカラム", "オプションID", "オプション名 (フロント用)", "タイプ", "選択肢1(名称)", "選択肢1(価格)", "選択肢2(名称)", "選択肢2(価格)"],
+              [{"オプションID": "o1", "オプション名 (フロント用)": "ラッピング", "タイプ": "select", "選択肢1(名称)": "なし", "選択肢1(価格)": "0",
+                "選択肢2(名称)": "あり", "選択肢2(価格)": "330"},
+               {"オプションID": "o2", "オプション名 (フロント用)": "メッセージ", "タイプ": "text"}])
+        p = lp.parse("giftmall", [x for x in g.iterdir()])
+        opts = [(o["item_name"], o["value"], o["price"]) for o in p["recs"]["9"]["options"]]
+        self.assertEqual(opts, [("ラッピング", "なし", 0), ("ラッピング", "あり", 330), ("メッセージ", None, None)])
+        self.assertEqual(p["errors"], [])
+
     def test_broken_inputs(self):
         from app import listing_parse as lp
         d = self.dir / "goods"

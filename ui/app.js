@@ -4939,7 +4939,7 @@
   }
 
   // ── 選択肢の整理（段階3・ADR-148）。取り込んだ店の項目名を、使い回せる「選択肢の定義」に寄せる ──
-  var OPT_SRC = { opt_select: "価格つきの選択肢", selection: "項目選択肢", rakuten_option: "商品オプション", gm_class: "規格" };
+  var OPT_SRC = { opt_select: "価格つきの選択肢", selection: "項目選択肢", rakuten_option: "商品オプション", gm_class: "規格", gm_option: "オプション", yahoo_option: "オプション" };
   function viewOptClusters() {
     loading();
     var q = hashQuery();
@@ -4953,7 +4953,7 @@
         + "まとめ方は案です。どの項目名を入れるかは人が決めます。店の管理画面は変わりません。" }));
       b.appendChild(btnRow([navBtn("#/options/defs", "作った定義を見る")]));
       var form = el("form", { "class": "np-filters" });
-      var gs = el("select", { "aria-label": "店" }, [["own", "自社 EC（グッズ本店・うちわ本店・アットフレーム）"], ["rakuten", "楽天"], ["giftmall", "ギフトモール"]]
+      var gs = el("select", { "aria-label": "店" }, [["own", "自社 EC（グッズ本店・うちわ本店・アットフレーム）"], ["rakuten", "楽天"], ["yahoo", "Yahoo（2店）"], ["giftmall", "ギフトモール"]]
         .map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.group ? "selected" : null }); }));
       var ps = el("select", { "aria-label": "価格" }, [["1", "価格の付くものだけ"], ["0", "価格を問わない"]].map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.priced ? "selected" : null }); }));
       var ts = el("select", { "aria-label": "済んだもの" }, [["1", "まだ寄せていないもの"], ["0", "寄せたものも"]].map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.todo ? "selected" : null }); }));
@@ -4992,6 +4992,25 @@
             setTimeout(function () { viewOptClusters(); }, 900);
           }).catch(function (e) { go.disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
         });
+        if (c.tier_tables) {
+          var pr = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "価格の決まりにする（段の表ごとに1つ）" });
+          var tierTxt = function (ts) { return ts.map(function (t) { return t.min + (t.max === null ? "個以上" : t.max !== t.min ? "〜" + t.max + "個" : "個") + " " + t.rate + "%"; }).join("・"); };
+          card.appendChild(el("p", { "class": "np-warn", text: "値が数量の段として読めます（出品によって段の表が " + c.tier_tables.length + " 種類）。"
+            + "数量割引なら、選択肢の定義ではなく「価格の決まり」にします。割引の額は商品ごとに違うので、率の段だけを持ち、出品を表に結びます。" }));
+          var tl = el("ul", { "class": "np-plain" });
+          c.tier_tables.forEach(function (t, i) { tl.appendChild(el("li", { text: (c.tier_tables.length > 1 ? String.fromCharCode(65 + i) + "（出品 " + t.n_listings + " 件）: " : "") + tierTxt(t.tiers) })); });
+          card.appendChild(tl);
+          pr.addEventListener("click", function () {
+            var ms = picks.filter(function (x) { return x[0].checked && !x[0].disabled; }).map(function (x) { return x[1].shop + "|" + x[1].src + "|" + x[1].item_name; });
+            if (!ms.length) { msg.textContent = "印を付けてください。"; return; }
+            pr.disabled = true;
+            post("/api/options/rules", { name: nm.value, members: ms.join("\n") }).then(function (r) {
+              msg.textContent = "価格の決まりを " + r.rules.length + " つ作りました" + (r.bad_listings ? "（段が読めない・食い違う出品 " + r.bad_listings + " 件は結んでいません）" : "") + "。";
+              setTimeout(function () { viewOptClusters(); }, 900);
+            }).catch(function (e) { pr.disabled = false; msg.textContent = e.message; msg.className = "np-err"; });
+          });
+          card.appendChild(btnRow([pr]));
+        }
         card.appendChild(el("p", null, [txt("新しい定義: "), nm, txt(" "), kd, txt(" "), it]));
         card.appendChild(el("p", null, [txt("または既存の定義へ: "), ex]));
         card.appendChild(btnRow([go])); card.appendChild(msg);
@@ -5008,7 +5027,21 @@
       setTitle("選択肢の定義");
       b.appendChild(btnRow([navBtn("#/options", "選択肢の整理へ", "back")]));
       b.appendChild(el("p", { "class": "np-note", text: "使い回せる選択肢の定義です。種類は 作るもの（選ぶと作るものが変わる）・追加料金・お客さまの入力 の3つです。" }));
-      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "まだありません。「選択肢の整理」から作ります。" })); return; }
+      if (d.rules.length) {
+        b.appendChild(el("h2", { text: "価格の決まり（数量で割引）" }));
+        b.appendChild(table(["名前", "段", "寄せた店の項目名", "結んだ出品"], d.rules.map(function (r) {
+          var ul = el("ul", { "class": "np-plain" });
+          r.aliases.forEach(function (a) {
+            var x = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "外す" });
+            x.addEventListener("click", function () { x.disabled = true; post("/api/options/rules/" + r.id + "/detach", { shop: a.shop, src: a.src, item_name: a.item_name }).then(function () { viewOptDefs(); }); });
+            ul.appendChild(el("li", null, [txt(a.shop_label + "：" + a.item_name + " "), x]));
+          });
+          return el("tr", null, [el("td", { text: r.name }), el("td", { text: r.tiers.map(function (t) { return t.min + (t.max === null ? "個以上" : t.max !== t.min ? "〜" + t.max + "個" : "個") + " " + t.rate + "%"; }).join("・") }),
+            el("td", null, [ul]), el("td", { text: fmtNum(r.n_listings, " 件") })]);
+        })));
+        b.appendChild(el("h2", { text: "選択肢の定義" }));
+      }
+      if (!d.rows.length) { b.appendChild(el("p", { "class": "np-note", text: "選択肢の定義はまだありません。「選択肢の整理」から作ります。" })); return; }
       b.appendChild(table(["定義", "種類", "型", "値", "寄せた項目名", "結んだ出品"], d.rows.map(function (r) {
         return el("tr", null, [el("td", null, [el("a", { href: "#/options/defs/" + r.id, text: r.name })]), el("td", { text: r.kind }), el("td", { text: r.input_type }),
           el("td", { text: fmtNum(r.n_values, " 個") }), el("td", { text: fmtNum(r.n_alias, " 件") }), el("td", { text: fmtNum(r.n_listings, " 件") })]);
