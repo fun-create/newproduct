@@ -71,7 +71,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 - **11-13 段階1の土台を本番へ（ADR-142・十文字さん「出して取り込みまで」）**: 表 062・`app/listing_parse.py`・`app/listing.py`・`tools/listing_import.py`・画面「店の出品の台帳」（案件の下・見るだけ）。10:27〜10:28 に本番へ9店 48,483 件（取り込み #1〜#9・by masateru）。2回目は9店とも変化0。VPS に置いた25ファイルは消した。控えは1回 11MB
 - **11-13 段階 W の1つ目（ADR-143・10:53 本番へ・十文字さん「出す」）**: 案件 →「WEBチームへ渡す」。①〜⑨・ページの材料・渡す（版を固める）・状態・やり取り。WEBチーム＝業務ロール webmkt（本番は satomi・takahashi・yukiho。十文字さん「この3人でよい」）。11-13 11:00 素材のアップロード（ADR-144）も本番へ。控えは deploy/backup_media.sh（cron 04:25）。次: ChatWork の知らせ（宛先待ち）・AI のページ案（Auto GROWTH の枠 `newproduct-pagedraft` 待ち）
 - **11-13 11:07 専用ページ34件を本番の台帳から消した（ADR-145）**。08:30 の EC統合の連絡を見落として入れていた。今後は既定で外す。EC統合の45件との差を問い合わせ中
-- **11-13 段階2の1つ目（ADR-146・本番は未反映）**: `tools/listing_import.py cip-link [--apply --by masateru]` で出品と CIP の共通商品コードを結ぶ（CIP は読むだけ・毎回作り直す）。本番の写しで出品 5,191 件
+- **11-13 段階2の1つ目（ADR-146・12:33 本番で結んだ・出品 5,191 件）**: `tools/listing_import.py cip-link [--apply --by masateru]` で出品と CIP の共通商品コードを結ぶ（CIP は読むだけ・毎回作り直す）。本番の写しで出品 5,191 件
 - 取り込み・取り消しは業務ロール「社長」だけ（NP の admin は商品開発部管理者で別物）。次の取り込みは `tools/listing_import.py preview → apply --by masateru`。画面からの取り込みはまだ
 - 次は**段階 W（FR-303〜325）と段階1（FR-253〜279 の表・FR-287〜289 の取り込み）を並行**。本番への反映はいつもの手順＋十文字さんの確認
 - CLAUDE.md §1・§3-1 は 11-12 十文字さんの承認で直した
