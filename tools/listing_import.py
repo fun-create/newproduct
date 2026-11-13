@@ -6,6 +6,7 @@
     sudo -u newproduct env ... python3 tools/listing_import.py apply    goods  <フォルダかファイル…> --by masateru
     sudo -u newproduct env ... python3 tools/listing_import.py undo     <取り込みの番号> --by masateru
     sudo -u newproduct env ... python3 tools/listing_import.py list     [goods]
+    sudo -u newproduct env ... python3 tools/listing_import.py cip-link [--apply --by masateru]   # CIP の共通商品コードと結ぶ（段階2）
     sudo -u newproduct env ... python3 tools/listing_import.py purge-private [--apply --by masateru]   # 専用ページ（PL-64）を消す
 
 店の記号: goods うちわ=uchiwa frame rakuten yahoo_goods yahoo_frame giftmall amazon overseas
@@ -46,7 +47,7 @@ def show(pv: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["preview", "apply", "undo", "list", "purge-private"])
+    ap.add_argument("what", choices=["preview", "apply", "undo", "list", "purge-private", "cip-link"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--by", default="")
     ap.add_argument("--apply", action="store_true", help="purge-private で本当に消す")
@@ -66,6 +67,18 @@ def main() -> int:
             return 2
         r = listing.apply(code, paths, a.by)
         print(f"\n書きました: 取り込み #{r['import_id']}")
+        return 0
+    if a.what == "cip-link":
+        # 出品と CIP の共通商品コードを結び直す（段階2・ADR-146）。CIP は読むだけ。既定は数えるだけ
+        if a.apply and not a.by:
+            print("--apply には --by が要ります")
+            return 2
+        from app import listing_cip
+        r = listing_cip.run(a.apply, a.by)
+        print(f"CIP の対応表 {r['cip_rows']} 行（時点 {r['as_of']}）→ 結んだ行 {r['link_rows']}・出品 {r['listings']}・共通商品コード {r['product_codes']}"
+              f"（{'書いた' if r['applied'] else '数えただけ'}）")
+        for k, v in r["per_store"].items():
+            print(f"  {k}: 店コード {v['codes']}・結べた {v['linked']}・台帳に無い {v['unmatched']}" + ("（知らない店）" if v.get("unknown_store") else ""))
         return 0
     if a.what == "purge-private":
         # 台帳に入っている「○○様専用」「専用ページ」の出品（PL-64）を消す。既定は数えるだけ

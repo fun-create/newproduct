@@ -4942,7 +4942,7 @@
   function viewListings() {
     loading();
     var q = hashQuery();
-    var f = { shop: q.get("shop") || "", state: q.get("state") || "", linked: q.get("linked") || "", q: q.get("q") || "",
+    var f = { shop: q.get("shop") || "", state: q.get("state") || "", linked: q.get("linked") || "", cip: q.get("cip") || "", code: q.get("code") || "", q: q.get("q") || "",
               page: q.get("page") || "1" };
     var qs = Object.keys(f).filter(function (k) { return f[k]; }).map(function (k) { return k + "=" + encodeURIComponent(f[k]); }).join("&");
     Promise.all([api("/api/listings/summary"), api("/api/listings" + (qs ? "?" + qs : ""))]).then(function (all) {
@@ -4957,12 +4957,14 @@
           el("td", { text: fmtNum(s.counts["公開"] || 0, " 件") }), el("td", { text: fmtNum(s.counts["非公開"] || 0, " 件") }),
           el("td", { text: s.counts["そのほか"] ? fmtNum(s.counts["そのほか"], " 件") : "—" }),
           el("td", { text: s.gone ? fmtNum(s.gone, " 件") : "—" }),
-          el("td", { text: s.total ? fmtNum(s.linked, " 件") : "—" }),
+          el("td", { text: s.total ? (s.cip_store ? fmtNum(s.cip_linked, " 件") : "CIP に無い店") : "—" }),
           el("td", { text: li ? li.at.slice(0, 16) + "（" + li.by_user + "）" : "まだ取り込んでいません" }),
           el("td", { text: s.total ? (s.state_checked ? "画面で確かめた" : "カートの仕様（画面では未確認）") : "—" })]);
       });
       b.appendChild(el("h2", { text: "店ごとの件数" }));
-      b.appendChild(table(["店", "公開", "非公開", "そのほか", "最後のファイルに無かった", "売るものと結んだ", "最後の取り込み", "公開・非公開の読み方"], srows));
+      b.appendChild(table(["店", "公開", "非公開", "そのほか", "最後のファイルに無かった", "CIP の商品と結んだ", "最後の取り込み", "公開・非公開の読み方"], srows));
+      b.appendChild(el("p", { "class": "np-sub", text: sm.cip_run ? "CIP の商品との結び付け: CIP の店コードの対応表（時点 " + (sm.cip_run.as_of || "不明") + "）から " + sm.cip_run.at.slice(0, 16) + " に作り直した。CIP の対応表が正で、ここでは直せません。"
+        : "CIP の商品との結び付けは、まだ作っていません。" }));
 
       var form = el("form", { "class": "np-filters", role: "search" });
       var shopSel = el("select", { name: "shop", "aria-label": "店" }, [el("option", { value: "", text: "すべての店" })]
@@ -4971,23 +4973,26 @@
         .concat(LISTING_STATES.map(function (x) { return el("option", { value: x, text: x === "消えた" ? "最後のファイルに無かった" : x, selected: x === f.state ? "selected" : null }); })));
       var lkSel = el("select", { name: "linked", "aria-label": "売るものと結んだか" }, [["", "結んだかを問わない"], ["yes", "結んだ"], ["no", "まだ結んでいない"]]
         .map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.linked ? "selected" : null }); }));
+      var ckSel = el("select", { name: "cip", "aria-label": "CIP の商品と結んだか" }, [["", "CIP と結んだかを問わない"], ["yes", "CIP と結んだ"], ["no", "CIP とまだ結んでいない"]]
+        .map(function (x) { return el("option", { value: x[0], text: x[1], selected: x[0] === f.cip ? "selected" : null }); }));
       var qIn = el("input", { type: "search", name: "q", value: f.q, placeholder: "識別子・掲載名の語（空白で区切ると全部を含むもの）", "aria-label": "探す語" });
-      form.appendChild(shopSel); form.appendChild(stSel); form.appendChild(lkSel); form.appendChild(qIn);
+      form.appendChild(shopSel); form.appendChild(stSel); form.appendChild(ckSel); form.appendChild(qIn);
       form.appendChild(el("button", { type: "submit", "class": "np-btn", text: "絞り込む" }));
       form.addEventListener("submit", function (e) {
         e.preventDefault();
-        var o = { shop: shopSel.value, state: stSel.value, linked: lkSel.value, q: qIn.value.trim() };
+        var o = { shop: shopSel.value, state: stSel.value, cip: ckSel.value, q: qIn.value.trim() };
         location.hash = "#/listings?" + Object.keys(o).filter(function (k) { return o[k]; }).map(function (k) { return k + "=" + encodeURIComponent(o[k]); }).join("&");
       });
       b.appendChild(el("h2", { text: "出品の一覧" }));
       b.appendChild(form);
+      if (f.code) b.appendChild(el("p", { "class": "np-note" }, [txt("CIP の共通商品コード " + f.code + " と結んだ出品（店をまたいで同じ商品）。 "), el("a", { href: "#/listings", text: "絞り込みを外す" })]));
       b.appendChild(el("p", { "class": "np-sub", text: fmtNum(d.total, " 件") + "（" + d.page + " / " + d.pages + " ページ・1ページ " + d.per_page + " 件）" }));
       if (!d.rows.length) b.appendChild(el("p", { "class": "np-note", text: sm.shops.some(function (s) { return s.total; }) ? "この条件に当たる出品はありません。" : "まだ1店も取り込んでいません。" }));
-      else b.appendChild(table(["店", "識別子", "2つ目の識別子", "掲載名", "価格", "状態", "選択肢の行", "レイアウト・カテゴリ", "売るもの"], d.rows.map(function (r) {
+      else b.appendChild(table(["店", "識別子", "2つ目の識別子", "掲載名", "価格", "状態", "選択肢の行", "レイアウト・カテゴリ", "CIP の共通商品コード"], d.rows.map(function (r) {
         return el("tr", null, [el("td", { text: r.shop_label }), el("td", null, [el("a", { href: "#/listings/" + r.id, text: r.ext_id })]),
           el("td", { text: r.ext_sub || "—" }), el("td", { text: r.title || "（掲載名なし）" }), el("td", { text: yen(r.price, "—") }),
           el("td", { text: r.gone_import_id ? "最後のファイルに無かった" : r.state }), el("td", { text: fmtNum(r.n_options, " 行") }),
-          el("td", { text: r.layout || r.category || "—" }), el("td", { text: r.sellable_id || "まだ結んでいない" })]);
+          el("td", { text: r.layout || r.category || "—" }), el("td", { text: r.cip_codes ? r.cip_codes.split(",").join("、") : "まだ結んでいない" })]);
       })));
       if (d.pages > 1) {
         var pg = el("p", { "class": "np-btnrow" });
@@ -5009,6 +5014,15 @@
         ["販売期間", (d.sale_from || "—") + " 〜 " + (d.sale_to || "—")], ["カテゴリ", d.category || "—"], ["レイアウト", d.layout || "—"],
         ["売るもの", d.sellable_id || "まだ結んでいない（段階2で結ぶ）"]];
       b.appendChild(table(["項目", "値"], rows.map(function (x) { return el("tr", null, [el("th", { scope: "row", text: x[0] }), el("td", { text: x[1] })]); })));
+      b.appendChild(el("h2", { text: "CIP の商品（作るもの）との結び付け（" + d.cip_links.length + " 行）" }));
+      if (!d.cip_links.length) b.appendChild(el("p", { "class": "np-note", text: "CIP の店コードの対応表に、この出品の識別子がありません（結べていません）。" }));
+      else b.appendChild(table(["共通商品コード", "分類", "形・サイズ・入数", "CIP の店コード", "当たった所"], d.cip_links.map(function (k) {
+        return el("tr", null, [el("td", null, [el("a", { href: "#/listings?code=" + encodeURIComponent(k.product_code), text: k.product_code })]),
+          el("td", { text: [k.cat1, k.cat2, k.cat3].filter(Boolean).join(" / ") || "—" }),
+          el("td", { text: [k.shape, k.size, k.pack_qty ? k.pack_qty + "個入" : ""].filter(Boolean).join("・") || "—" }),
+          el("td", { text: k.cip_store + "：" + k.store_code }),
+          el("td", { text: k.matched_by === "option" ? "SKU・規格（" + (k.option_value || "—") + "）" : k.matched_by === "ext_sub" ? "2つ目の識別子" : "識別子" })]);
+      })));
       b.appendChild(el("h2", { text: "付いている選択肢（" + d.options.length + " 行）" }));
       if (!d.options.length) b.appendChild(el("p", { "class": "np-note", text: "選択肢はありません。" }));
       else b.appendChild(table(["元のファイル", "項目名", "値", "コード", "価格"], d.options.map(function (o) {

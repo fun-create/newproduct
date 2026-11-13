@@ -276,9 +276,12 @@ def summary() -> dict:
                     "gone": store.val("SELECT COUNT(*) FROM listing WHERE shop=? AND gone_import_id IS NOT NULL", (s["code"],)),
                     "linked": store.val("SELECT COUNT(*) FROM listing WHERE shop=? AND sellable_id IS NOT NULL AND gone_import_id IS NULL",
                                         (s["code"],)),
+                    "cip_linked": store.val("SELECT COUNT(DISTINCT l.id) FROM listing l JOIN listing_cip_link k ON k.listing_id=l.id "
+                                            "WHERE l.shop=? AND l.gone_import_id IS NULL", (s["code"],)),
                     "last_import": dict(last) if last else None,
                     "state_checked": s["cart"] in lp.STATE_CHECKED})
-    return {"shops": out}
+    from app import listing_cip
+    return {"shops": out, "cip_run": listing_cip.last_run()}
 
 
 def listings(args: dict) -> dict:
@@ -299,6 +302,14 @@ def listings(args: dict) -> dict:
         where.append("l.sellable_id IS NOT NULL")
     elif lk == "no":
         where.append("l.sellable_id IS NULL")
+    ck = args.get("cip") or ""
+    if ck == "yes":
+        where.append("EXISTS (SELECT 1 FROM listing_cip_link k WHERE k.listing_id=l.id)")
+    elif ck == "no":
+        where.append("NOT EXISTS (SELECT 1 FROM listing_cip_link k WHERE k.listing_id=l.id)")
+    pc = (args.get("code") or "").strip()
+    if pc:
+        where.append("EXISTS (SELECT 1 FROM listing_cip_link k WHERE k.listing_id=l.id AND k.product_code=?)"); ps.append(pc)
     for w in (args.get("q") or "").split():
         where.append("(l.ext_id LIKE ? OR l.ext_sub LIKE ? OR l.title LIKE ?)"); ps += [f"%{w}%"] * 3
     page = max(1, int(args.get("page") or 1))
@@ -306,7 +317,8 @@ def listings(args: dict) -> dict:
     total = store.val(f"SELECT COUNT(*) FROM listing l WHERE {w}", ps)
     rs = store.rows(store.q(
         f"SELECT l.id, l.shop, s.label AS shop_label, l.ext_id, l.ext_sub, l.title, l.price, l.state, l.layout, l.category, "
-        f"l.sellable_id, l.gone_import_id, i.at AS last_at, (SELECT COUNT(*) FROM listing_option o WHERE o.listing_id=l.id) AS n_options "
+        f"l.sellable_id, l.gone_import_id, i.at AS last_at, (SELECT COUNT(*) FROM listing_option o WHERE o.listing_id=l.id) AS n_options, "
+        f"(SELECT GROUP_CONCAT(DISTINCT k.product_code) FROM listing_cip_link k WHERE k.listing_id=l.id) AS cip_codes "
         f"FROM listing l JOIN shop s ON s.code=l.shop LEFT JOIN listing_import i ON i.id=l.last_import_id "
         f"WHERE {w} ORDER BY s.sort, l.ext_id LIMIT ? OFFSET ?", ps + [PER_PAGE, (page - 1) * PER_PAGE]))
     return {"rows": rs, "total": total, "page": page, "per_page": PER_PAGE, "pages": max(1, -(-total // PER_PAGE))}
@@ -321,6 +333,10 @@ def detail(lid: int) -> dict:
     d["options"] = [dict(o, raw=json.loads(o.pop("raw_json"))) for o in store.rows(store.q(
         "SELECT id, src, item_name, value, code, price, sort, raw_json FROM listing_option WHERE listing_id=? ORDER BY src, sort, id",
         (lid,)))]
+    d["cip_links"] = store.rows(store.q(
+        "SELECT k.product_code, k.store_code, k.cip_store, k.matched_by, k.cat1, k.cat2, k.cat3, k.shape, k.size, k.pack_qty, k.as_of, "
+        "o.value AS option_value FROM listing_cip_link k LEFT JOIN listing_option o ON o.id=k.option_id "
+        "WHERE k.listing_id=? ORDER BY k.product_code", (lid,)))
     d["imports"] = store.rows(store.q("SELECT id, at, by_user, state FROM listing_import WHERE id IN (?,?,?)",
                                       (d["first_import_id"], d["last_import_id"], d["gone_import_id"] or 0)))
     return d

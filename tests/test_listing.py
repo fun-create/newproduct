@@ -204,6 +204,52 @@ class Listing(unittest.TestCase):
         self.m.apply("goods", [d], "boss")
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing WHERE ext_id='p1'"), 0)
 
+    def test_cip_link(self):
+        from app import listing_cip
+        d = self.dir / "goods"
+        fs_files(d)                                                   # a001（商品番号 A-1）・a002（商品番号なし）
+        self.m.apply("goods", [d], "boss")
+        r = self.dir / "rakuten"
+        r.mkdir()
+        write(r / "dl-normal-item_1.csv", ["商品管理番号（商品URL）", "商品番号", "商品名", "倉庫指定", "SKU管理番号", "バリエーション項目選択肢1", "通常購入販売価格"], [
+            {"商品管理番号（商品URL）": "r1", "商品番号": "R-1", "商品名": "うちわ", "倉庫指定": "0"},
+            {"商品管理番号（商品URL）": "r1", "SKU管理番号": "r1-red", "バリエーション項目選択肢1": "赤", "通常購入販売価格": "800"}])
+        self.m.apply("rakuten", [r], "boss")
+        items = [
+            {"store": "グッズ本店", "store_code": "A-1", "product_code": "AG0001", "cat1": "アクスタ", "pack_qty": 1},
+            {"store": "グッズ本店", "store_code": "a002", "product_code": "AG0002"},        # 商品番号が無いので URLコードで当たる
+            {"store": "グッズ本店", "store_code": "old-9", "product_code": "AG0009"},       # 台帳に無い
+            {"store": "楽天", "store_code": "r1-red", "product_code": "UC0001"},            # SKU で当たる
+            {"store": "楽天", "store_code": "R-1", "product_code": "UC0002"},              # 商品番号で当たる
+            {"store": "楽天", "store_code": "R-1", "product_code": "UC0003"},              # 1つの店コードが2つに割れる
+            {"store": "謎の店", "store_code": "x", "product_code": "ZZ0001"},
+        ]
+        fetch = lambda: {"as_of": "2026-11-13", "items": items}
+        out = listing_cip.run(False, "", fetch)                        # 既定は数えるだけ
+        self.assertEqual((out["link_rows"], out["listings"], out["product_codes"]), (5, 3, 5))
+        self.assertEqual(out["per_store"]["グッズ本店"], {"codes": 3, "linked": 2, "unmatched": 1})
+        self.assertTrue(out["per_store"]["謎の店"]["unknown_store"])
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_cip_link"), 0)
+        with self.assertRaises(PermissionError):
+            listing_cip.run(True, "devlead", fetch)
+        listing_cip.run(True, "boss", fetch)
+        listing_cip.run(True, "boss", fetch)                           # 作り直しても増えない
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_cip_link"), 5)
+        by = {r["product_code"]: r["matched_by"] for r in self.store.q("SELECT product_code, matched_by FROM listing_cip_link")}
+        self.assertEqual(by, {"AG0001": "ext_sub", "AG0002": "ext_id", "UC0001": "option", "UC0002": "ext_sub", "UC0003": "ext_sub"})
+        s = {x["code"]: x for x in self.m.summary()["shops"]}
+        self.assertEqual((s["goods"]["cip_linked"], s["rakuten"]["cip_linked"]), (2, 1))
+        self.assertEqual(self.m.listings({"cip": "no"})["total"], 0)
+        self.assertEqual(self.m.listings({"code": "UC0003"})["total"], 1)
+        det = self.m.detail(self.store.val("SELECT id FROM listing WHERE ext_id='r1'"))
+        self.assertEqual(sorted(k["product_code"] for k in det["cip_links"]), ["UC0001", "UC0002", "UC0003"])
+        self.assertEqual([k["option_value"] for k in det["cip_links"] if k["matched_by"] == "option"], [":赤"])
+        # 出品を消すと結び付けも消える（専用ページを消すとき）
+        self.store.ex("UPDATE listing SET title='田中様専用' WHERE ext_id='a002'")
+        self.store.conn().commit()
+        self.m.purge_private(True, "boss")
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM listing_cip_link WHERE product_code='AG0002'"), 0)
+
     def test_broken_inputs(self):
         from app import listing_parse as lp
         d = self.dir / "goods"
