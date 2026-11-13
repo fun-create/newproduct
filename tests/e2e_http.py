@@ -333,6 +333,10 @@ def main() -> int:
         note(st in (400, 403), "必須が空なら渡せない（または業務ロールが無い）", f"{st} {d}")
         st, d = cl.get(f"/api/projects/{pid}/web?v=9")
         note(st == 404, "知らない版は 404", str(st))
+        st, d = cl.get(f"/api/projects/{pid}/web-asset/999")
+        note(st == 404, "知らない素材は 404", str(st))
+        st, d = cl.post(f"/api/projects/{pid}/web-asset", {"name": "x.svg", "kind": "写真", "data": "PHN2Zz48L3N2Zz4="})
+        note(st in (400, 403), "SVG は断る（または業務ロールが無い）", f"{st} {d}")
         st, d = cl.get("/api/tasks?when=none&mine=0")
         note(st == 200 and len(d["rows"]) == 34,
              "「期限なし」で34件（展開直後は期限を入れない）", str(len(d["rows"])))

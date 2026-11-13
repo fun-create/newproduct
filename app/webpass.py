@@ -112,6 +112,9 @@ def build(pid: str) -> dict:
     vs = store.q("SELECT label, spec FROM project_variant WHERE project_id=? AND state != '見送り' ORDER BY label", (pid,))
     price.append({"label": "バリエーション", "lines": [r["label"] + (f"（{r['spec']}）" if r["spec"] else "") for r in vs] or ["なし"]})
     price.append(item("選択肢と価格の見せ方", m.get("options"), lines=True))
+    from app import webasset
+    ups = [{k: r[k] for k in ("id", "kind", "name", "mime", "note")} for r in webasset.listing(pid)]
+    uploaded = ({"label": "上げた素材", "assets": ups} if ups else {"label": "上げた素材", "text": "なし"})
     sections = [
         {"key": "overview", "title": "商品の概要", "items": [
             {"label": "社内呼称", "text": p.get("internal_name") or PENDING}, {"label": "分類", "text": project_m.product_label(p)},
@@ -124,7 +127,7 @@ def build(pid: str) -> dict:
         {"key": "concept", "title": "コンセプト", "items": [item("コンセプト", s.get("C.concept"), True)]},
         {"key": "draft", "title": "店ごとの商品ページ案", "items": [
             {"label": x, "text": "まだありません（AI のモックアップは予算の枠が入ってから）", "pending": True} for x in DRAFT_SHOPS]},
-        {"key": "assets", "title": "素材", "items": [item("載せたい写真・図", m.get("photos"), lines=True),
+        {"key": "assets", "title": "素材", "items": [item("載せたい写真・図", m.get("photos"), lines=True), uploaded,
                                                     item("参考にしたい他社のページ", m.get("refs"), lines=True)]},
         {"key": "price", "title": "価格と選択肢", "items": price},
         {"key": "dates", "title": "発売日と締切", "items": [

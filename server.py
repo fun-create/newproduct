@@ -1090,6 +1090,31 @@ class H(BaseHTTPRequestHandler):
             except seisan_m.Refused as e:
                 return self.sendj(409, {"error": "CIP が断りました: " + str(e)})
 
+        # WEBチームへ渡す素材（段階 W・ADR-144・FR-306）。上げる・見る・外す
+        if len(parts) >= 3 and parts[0] == "projects" and parts[2] == "web-asset":
+            from app import webasset
+            pid = parts[1]
+            if len(parts) == 3 and method == "POST":
+                import base64
+                d = self.body(limit=18 * 1024 * 1024)        # 1つ 10MB（base64 で 4/3 倍・フォーム形式で + と / が3文字になる分）
+                try:
+                    raw = base64.b64decode(d.get("data", ""), validate=True)
+                except ValueError:
+                    return self.sendj(400, {"error": "ファイルを読めませんでした（送り直してください）"})
+                return self.sendj(200, webasset.save(pid, d.get("name", ""), raw, d.get("kind", ""), d.get("note", ""), uid))
+            if len(parts) >= 4 and parts[3].isdigit():
+                aid = int(parts[3])
+                if len(parts) == 4 and method == "GET":
+                    path, mime, name = webasset.get(pid, aid)
+                    import urllib.parse as _up
+                    hdr = [("Cache-Control", "private, max-age=3600"),
+                           ("Content-Disposition", "inline; filename*=UTF-8''" + _up.quote(name))]
+                    if mime.startswith("image/"):
+                        hdr.append(("Content-Security-Policy", "default-src 'none'; sandbox"))
+                    return self.send(200, path.read_bytes(), mime, hdr)
+                if len(parts) == 5 and parts[4] == "delete" and method == "POST":
+                    return self.sendj(200, webasset.delete(pid, aid, uid))
+            return self.sendj(404, {"error": "not found"})
         # WEBチームへ渡すページ（段階 W・ADR-143・FR-303〜314）。**下の汎用の口より先に置く**
         if len(parts) == 3 and parts[0] == "projects" and parts[2].startswith("web") and parts[2] in (
                 "web", "web-material", "web-hand", "web-state", "web-comment"):

@@ -4707,6 +4707,24 @@
   /** 新機種調査（FR-140・ADR-102）。AI がウェブで探した新機種の候補を人が決める。展開の表の正本はここ */
   // スキンシール展開判断レポート（週次・Auto GROWTH から引き取り・ADR-140・FR-251）。**見るだけ。**配るのは月曜 8:00 のタイマー
   // ── WEBチームへ渡すページ（段階 W・ADR-143・FR-303〜314）。カルテ C 節の上に「ページの材料」を足し、1枚にして渡す ──
+  /** 上げた素材の並び（ADR-144）。画像は縮小して見せ、HEIC・PDF は開くリンクだけ（ブラウザが表示できないものがある） */
+  function assetGrid(pid, assets, onDelete) {
+    var g = el("ul", { "class": "np-assets" });
+    assets.forEach(function (a) {
+      var src = "/api/projects/" + encodeURIComponent(pid) + "/web-asset/" + a.id;
+      var show = /^image\/(jpeg|png|gif|webp)$/.test(a.mime);
+      var li = el("li", null, [show ? el("a", { href: src, target: "_blank", rel: "noopener" }, [el("img", { src: src, alt: a.kind + "・" + a.name, loading: "lazy" })])
+        : el("a", { href: src, target: "_blank", rel: "noopener", text: (a.mime === "application/pdf" ? "PDF を開く" : "ファイルを開く（" + a.mime + "）") }),
+        el("p", { "class": "np-sub", text: a.kind + "・" + a.name + (a.note ? "　" + a.note : "") })]);
+      if (onDelete) {
+        var db = el("button", { type: "button", "class": "np-btn np-btn-sm", text: "外す" });
+        db.addEventListener("click", function () { db.disabled = true; onDelete(a, db); });
+        li.appendChild(db);
+      }
+      g.appendChild(li);
+    });
+    return g;
+  }
   function webPage(page, holder) {
     page.sections.forEach(function (sec, i) {
       var c = el("section", { "class": "np-card np-webpage-sec" });
@@ -4715,6 +4733,10 @@
       sec.items.forEach(function (it) {
         dl.appendChild(el("dt", null, [txt(it.label + " "), it.missing && it.required ? tag("必須・未記入", "alert") : null,
           it.pending ? tag("あとで", "neutral") : null]));
+        if (it.assets) {
+          dl.appendChild(el("dd", null, [assetGrid(page.project_id, it.assets, null)]));
+          return;
+        }
         if (it.lines) {
           var ol = el("ol");
           it.lines.forEach(function (x) { ol.appendChild(el("li", { text: x })); });
@@ -4778,6 +4800,49 @@
       });
       mc.appendChild(f);
       b.appendChild(mc);
+      // 素材（FR-306・ADR-144）。上げたものはページの「素材」に並ぶ
+      var ac = el("div", { "class": "np-card", id: "np-web-assets" });
+      ac.appendChild(el("h2", { text: "素材（写真・図・試作品の写真）" }));
+      ac.appendChild(el("p", { "class": "np-sub", text: "JPEG・PNG・GIF・WebP・HEIC・PDF。1つ 10MB まで。お客さまの写真（名入れの実例など）は上げないでください。外しても、渡した版からは見られます。" }));
+      var cur = d.page.sections.filter(function (x) { return x.key === "assets"; })[0].items.filter(function (x) { return x.assets; })[0];
+      if (cur) ac.appendChild(assetGrid(pid, cur.assets, d.can.edit && d.project.editable ? function (a, btn) {
+        post("/api/projects/" + encodeURIComponent(pid) + "/web-asset/" + a.id + "/delete", {}).then(function () { viewWebPass(pid); })
+          .catch(function (e) { btn.disabled = false; ac.appendChild(el("p", { "class": "np-err", text: e.message })); });
+      } : null));
+      else ac.appendChild(el("p", { "class": "np-note", text: "まだ上げていません。" }));
+      if (d.can.edit && d.project.editable) {
+        var uf = el("form", { "class": "np-form" });
+        var fin = el("input", { type: "file", multiple: "multiple", accept: "image/jpeg,image/png,image/gif,image/webp,image/heic,.heic,application/pdf", "aria-label": "上げるファイル" });
+        var kd = el("select", { "aria-label": "種類" }, ["写真", "図", "試作品の写真", "そのほか"].map(function (k) { return el("option", { value: k, text: k }); }));
+        var nt = el("input", { type: "text", placeholder: "メモ（どこに使いたいか など・なくてよい）", "aria-label": "メモ" });
+        var ust = el("p", { "class": "np-status", role: "status" });
+        uf.appendChild(fin); uf.appendChild(el("p", null, [kd, txt(" "), nt]));
+        uf.appendChild(el("button", { type: "submit", "class": "np-btn np-btn-sm", text: "上げる" }));
+        uf.appendChild(ust);
+        uf.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var fs = Array.prototype.slice.call(fin.files || []);
+          if (!fs.length) { ust.textContent = "ファイルを選んでください"; return; }
+          var done = 0;
+          fs.reduce(function (pr, fl) {
+            return pr.then(function () {
+              if (fl.size > 10 * 1024 * 1024) throw new Error(fl.name + " は 10MB を超えています");
+              return new Promise(function (ok, ng) {
+                var rd = new FileReader();
+                rd.onload = function () { ok(String(rd.result).split(",")[1] || ""); };
+                rd.onerror = function () { ng(new Error(fl.name + " を読めませんでした")); };
+                rd.readAsDataURL(fl);
+              }).then(function (b64) {
+                ust.textContent = "上げています（" + (done + 1) + " / " + fs.length + "）…";
+                return post("/api/projects/" + encodeURIComponent(pid) + "/web-asset", { name: fl.name, kind: kd.value, note: nt.value, data: b64 });
+              }).then(function () { done++; });
+            });
+          }, Promise.resolve()).then(function () { ust.textContent = done + " 個上げました。"; setTimeout(function () { viewWebPass(pid); }, 600); })
+            .catch(function (e) { ust.textContent = (done ? done + " 個上げたところで止まりました: " : "") + e.message; ust.className = "np-err"; });
+        });
+        ac.appendChild(uf);
+      }
+      b.appendChild(ac);
       // 渡すページ（いまの中身）
       var pg = el("div", { "class": "np-card", id: "np-web-page" });
       pg.appendChild(el("h2", { text: "渡すページ（いまの中身）" }));

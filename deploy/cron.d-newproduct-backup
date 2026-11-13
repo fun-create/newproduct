@@ -1,7 +1,7 @@
 # NEW PRODUCT — 日次バックアップ（cron の定義の正本）。
 #
 #   sudo install -m 644 -o root -g root /opt/newproduct/deploy/cron.d-newproduct-backup /etc/cron.d/newproduct-backup
-#   sudo chmod 755 /opt/newproduct/deploy/backup.sh   # 落ちていると毎晩静かに失敗する
+#   sudo chmod 755 /opt/newproduct/deploy/backup.sh /opt/newproduct/deploy/backup_media.sh   # 落ちていると毎晩静かに失敗する
 #
 # **実行者は newproduct（root ではない）。**2026-10-14 十文字さん判断（seisan と同じ形）。
 # root が newproduct 持ちの台本を動かすと、アプリが乗っ取られたとき root まで広がる。
@@ -11,3 +11,5 @@
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 15 4 * * * newproduct /opt/newproduct/deploy/backup.sh >> /var/log/newproduct-backup.log 2>&1
+# 素材（画像）だけ毎日差分で（ADR-144）。backup.sh の10分後
+25 4 * * * newproduct /opt/newproduct/deploy/backup_media.sh >> /var/log/newproduct-backup.log 2>&1

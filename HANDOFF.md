@@ -69,7 +69,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://newproduct.fun-create.co.jp/ap
 - 11-12(木) 20:58 に**段階0**（ADR-141・要件表 第17章・FR-97/153 の根拠）を済ませた。食い違いの一覧は `docs/2026-11-12_出品機能_段階0_食い違い.md`
 - 20:57・20:59 の追加（自動反映は将来の予定 FR-327・承認者は2種・既存の説明と画像は取り込まない・自社 EC はレイアウトごとの型 FR-326）も反映済み
 - **11-13 段階1の土台を本番へ（ADR-142・十文字さん「出して取り込みまで」）**: 表 062・`app/listing_parse.py`・`app/listing.py`・`tools/listing_import.py`・画面「店の出品の台帳」（案件の下・見るだけ）。10:27〜10:28 に本番へ9店 48,483 件（取り込み #1〜#9・by masateru）。2回目は9店とも変化0。VPS に置いた25ファイルは消した。控えは1回 11MB
-- **11-13 段階 W の1つ目（ADR-143・10:53 本番へ・十文字さん「出す」）**: 案件 →「WEBチームへ渡す」。①〜⑨・ページの材料・渡す（版を固める）・状態・やり取り。WEBチーム＝業務ロール webmkt（本番は satomi・takahashi・yukiho。十文字さん「この3人でよい」）。次: 素材を上げる（VPS に置き画像だけ毎日差分で控える）・ChatWork の知らせ（宛先待ち）・AI のページ案（Auto GROWTH の枠 `newproduct-pagedraft` 待ち）
+- **11-13 段階 W の1つ目（ADR-143・10:53 本番へ・十文字さん「出す」）**: 案件 →「WEBチームへ渡す」。①〜⑨・ページの材料・渡す（版を固める）・状態・やり取り。WEBチーム＝業務ロール webmkt（本番は satomi・takahashi・yukiho。十文字さん「この3人でよい」）。11-13 素材のアップロード（ADR-144）も作った。控えは deploy/backup_media.sh（cron 04:25）。次: ChatWork の知らせ（宛先待ち）・AI のページ案（Auto GROWTH の枠 `newproduct-pagedraft` 待ち）
 - 取り込み・取り消しは業務ロール「社長」だけ（NP の admin は商品開発部管理者で別物）。次の取り込みは `tools/listing_import.py preview → apply --by masateru`。画面からの取り込みはまだ
 - 次は**段階 W（FR-303〜325）と段階1（FR-253〜279 の表・FR-287〜289 の取り込み）を並行**。本番への反映はいつもの手順＋十文字さんの確認
 - CLAUDE.md §1・§3-1 は 11-12 十文字さんの承認で直した
