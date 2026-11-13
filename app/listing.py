@@ -108,7 +108,7 @@ def preview(code: str, paths) -> dict:
     states = {}
     for r in p["recs"].values():
         states[r["state"]] = states.get(r["state"], 0) + 1
-    files = [{k: v for k, v in f.items() if k != "dropped_columns"} | {"dropped": len(f.get("dropped_columns") or [])}
+    files = [{k: v for k, v in f.items() if k not in ("dropped_columns", "header")} | {"dropped": len(f.get("dropped_columns") or [])}
              for f in p["files"]]
     return {"shop": s, "files": files, "counts": counts, "states": states, "orphans": p["orphans"], "pii": pii,
             "errors": errors, "state_checked": p["state_checked"], "_parsed": p, "_diff": d}
@@ -182,9 +182,26 @@ def apply(code: str, paths, by: str) -> dict:
                       (code, k, m["name"], _j(m["raw"]), m["hash"], iid, iid))
         c.executemany("UPDATE shop_option_master SET gone_import_id=? WHERE shop=? AND ext_id=?",
                       [(iid, code, k) for k in d["m_gone"]])
+    save_layouts(code, p["files"])
     store.audit(by, "listing.import", code, {"import_id": iid, "counts": counts,
                                              "files": [{"name": f["name"], "sha256": f.get("sha256")} for f in files]})
     return {"import_id": iid, "counts": counts}
+
+
+def save_layouts(code: str, files: list[dict]):
+    """取り込んだファイルの列の並びを覚える（書き出しの並び・ADR-151）。同じ種類のファイルが2つあれば最初のもの。"""
+    now = store.now_s()
+    seen = set()
+    with store.tx() as c:
+        for f in files:
+            if not f.get("used") or not f.get("header") or f["kind"] in seen:
+                continue
+            seen.add(f["kind"])
+            c.execute("INSERT INTO export_layout (shop,kind,columns_json,dropped_json,encoding,source_file,captured_at) VALUES (?,?,?,?,?,?,?) "
+                      "ON CONFLICT(shop,kind) DO UPDATE SET columns_json=excluded.columns_json, dropped_json=excluded.dropped_json, "
+                      "encoding=excluded.encoding, source_file=excluded.source_file, captured_at=excluded.captured_at",
+                      (code, f["kind"], json.dumps(f["header"], ensure_ascii=False), json.dumps(f.get("dropped_columns") or [], ensure_ascii=False),
+                       f.get("encoding") or "cp932", f["name"], now))
 
 
 def undo(iid: int, by: str) -> dict:

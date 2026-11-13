@@ -7,6 +7,9 @@
     sudo -u newproduct env ... python3 tools/listing_import.py undo     <取り込みの番号> --by masateru
     sudo -u newproduct env ... python3 tools/listing_import.py list     [goods]
     sudo -u newproduct env ... python3 tools/listing_import.py cip-link [--apply --by masateru]   # CIP の共通商品コードと結ぶ（段階2）
+    sudo -u newproduct env ... python3 tools/listing_import.py roundtrip goods <フォルダ>     # 往復の検査（段階4）
+    sudo -u newproduct env ... python3 tools/listing_import.py fs-check goods [--ext a,b]   # 書き出す前の検査
+    sudo -u newproduct env ... python3 tools/listing_import.py fs-export goods --ext a --out <フォルダ>   # 試しの1件の書き出し
     sudo -u newproduct env ... python3 tools/listing_import.py purge-private [--apply --by masateru]   # 専用ページ（PL-64）を消す
 
 店の記号: goods うちわ=uchiwa frame rakuten yahoo_goods yahoo_frame giftmall amazon overseas
@@ -47,10 +50,12 @@ def show(pv: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["preview", "apply", "undo", "list", "purge-private", "cip-link"])
+    ap.add_argument("what", choices=["preview", "apply", "undo", "list", "purge-private", "cip-link", "roundtrip", "fs-check", "fs-export"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--by", default="")
     ap.add_argument("--apply", action="store_true", help="purge-private で本当に消す")
+    ap.add_argument("--ext", default="", help="fs-export: 書き出す商品URLコード（, 区切り）")
+    ap.add_argument("--out", default="", help="fs-export: 書き出す先のフォルダ")
     a = ap.parse_args()
     store.migrate()
     if a.what in ("preview", "apply"):
@@ -79,6 +84,49 @@ def main() -> int:
               f"（{'書いた' if r['applied'] else '数えただけ'}）")
         for k, v in r["per_store"].items():
             print(f"  {k}: 店コード {v['codes']}・結べた {v['linked']}・台帳に無い {v['unmatched']}" + ("（知らない店）" if v.get("unknown_store") else ""))
+        return 0
+    if a.what in ("roundtrip", "fs-check", "fs-export"):
+        # FutureShop の書き出し（段階4・ADR-151）。**取り込みの形は未確認**（試しの1件で確かめるまで店に入れない）
+        from app import fs_export
+        if not a.args:
+            print("店の記号が要ります")
+            return 2
+        code = a.args[0]
+        if a.what == "roundtrip":
+            r = fs_export.roundtrip(code, a.args[1:])
+            print(f"往復の検査 {code}: {'同じ' if r['ok'] else '違いあり'}（専用ページとして除いた {r['excluded']}）")
+            for k, v in r["kinds"].items():
+                print(f"  {v['file']}: 元 {v['orig']}・台帳 {v['mine']}・元だけ {v['only_in_file']}・台帳だけ {v['only_in_ledger']}・CSV 読み直し {'同じ' if v['csv_reread_same'] else '違う'}")
+            return 0 if r["ok"] else 1
+        ids = None
+        if a.ext:
+            exts = [x.strip() for x in a.ext.split(",") if x.strip()]
+            ids = [r["id"] for r in store.q(f"SELECT id FROM listing WHERE shop=? AND ext_id IN ({','.join('?' * len(exts))})", [code] + exts)]
+            if len(ids) != len(exts):
+                print("台帳に無い商品URLコードがあります")
+                return 2
+        c = fs_export.check(code, ids)
+        print(f"検査 {code}: 出品 {c['listings']}・止めるもの {len(c['errors'])}")
+        for e in c["errors"][:30]:
+            print("  ✗ " + e)
+        for w in c["warnings"]:
+            print("  ・" + w)
+        if a.what == "fs-check" or c["errors"]:
+            return 1 if c["errors"] else 0
+        if not a.out or ids is None:
+            print("fs-export には --ext（商品URLコード）と --out（書き出す先）が要ります。全件は書き出さない")
+            return 2
+        out = Path(a.out)
+        out.mkdir(parents=True, exist_ok=True)
+        stamp = store.now_s().replace("-", "").replace(":", "").replace(" ", "")
+        for kind in fs_export.KINDS:
+            rs = fs_export.rows(code, kind, ids)
+            if not rs:
+                continue
+            f = out / f"{fs_export.FILE_PREFIX[kind]}_NP{stamp}.csv"
+            f.write_bytes(fs_export.to_csv(code, kind, rs))
+            print(f"  書いた {f}（{len(rs)} 行）")
+        store.audit(a.by or "cli", "fs_export.write", code, {"listings": len(ids), "out": str(out)})
         return 0
     if a.what == "purge-private":
         # 台帳に入っている「○○様専用」「専用ページ」の出品（PL-64）を消す。既定は数えるだけ

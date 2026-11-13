@@ -129,7 +129,8 @@ def _read(cart: str, path: Path, kind: str):
         d = {head[i]: r[i] for i in keep if i < len(r) and r[i] != ""}
         out.append(d)
     return out, {"name": path.name, "sha256": hashlib.sha256(b).hexdigest(), "encoding": enc,
-                 "rows": len(out), "columns": len(head), "dropped_columns": dropped}
+                 "rows": len(out), "columns": len(head), "dropped_columns": dropped,
+                 "header": [head[i] for i in keep]}
 
 
 def _rec(ext_id, **f):
