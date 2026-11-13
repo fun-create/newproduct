@@ -65,14 +65,14 @@ class ExportReq(unittest.TestCase):
         self.assertEqual([x["商品URLコード"] for x in d["preview"]], ["a001"])
         out = self.m.decide(rid, True, "中身を見た", "tsubasa")
         self.assertEqual(out["state"], "書き出し済み")
-        self.assertEqual(len(out["files"]), 4)                                  # 商品・項目選択肢・オプション価格2種
+        self.assertEqual(len(out["files"]), 3)                                  # 更新なので項目選択肢は出さない（n・d だけ）
         with self.assertRaises(ValueError):
             self.m.decide(rid, True, "", "masateru")                           # 2度は承認しない
         d = self.m.detail(rid, "dev")
         f = [x for x in d["files"] if x["kind"] == "goods"][0]
         name, data = self.m.file_bytes(rid, f["id"])
         rows = list(csv.DictReader(io.StringIO(data.decode("cp932"), newline="")))
-        self.assertEqual((name.startswith("ccGoods_NP"), len(rows), rows[0]["商品URLコード"]), (True, 1, "a001"))
+        self.assertEqual((name.startswith("ccGoods_NP"), len(rows), rows[0]["商品URLコード"], rows[0]["コントロールカラム"]), (True, 1, "a001", "u"))
         self.assertTrue(d["can_record"])
         with self.assertRaises(ValueError):
             self.m.record_result(rid, False, "", "dev")                         # 失敗は内容が要る

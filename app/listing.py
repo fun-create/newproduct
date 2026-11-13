@@ -108,7 +108,7 @@ def preview(code: str, paths) -> dict:
     states = {}
     for r in p["recs"].values():
         states[r["state"]] = states.get(r["state"], 0) + 1
-    files = [{k: v for k, v in f.items() if k not in ("dropped_columns", "header")} | {"dropped": len(f.get("dropped_columns") or [])}
+    files = [{k: v for k, v in f.items() if k not in ("dropped_columns", "header", "header_full")} | {"dropped": len(f.get("dropped_columns") or [])}
              for f in p["files"]]
     return {"shop": s, "files": files, "counts": counts, "states": states, "orphans": p["orphans"], "pii": pii,
             "errors": errors, "state_checked": p["state_checked"], "_parsed": p, "_diff": d}
@@ -197,11 +197,11 @@ def save_layouts(code: str, files: list[dict]):
             if not f.get("used") or not f.get("header") or f["kind"] in seen:
                 continue
             seen.add(f["kind"])
-            c.execute("INSERT INTO export_layout (shop,kind,columns_json,dropped_json,encoding,source_file,captured_at) VALUES (?,?,?,?,?,?,?) "
+            c.execute("INSERT INTO export_layout (shop,kind,columns_json,dropped_json,encoding,source_file,captured_at,full_json) VALUES (?,?,?,?,?,?,?,?) "
                       "ON CONFLICT(shop,kind) DO UPDATE SET columns_json=excluded.columns_json, dropped_json=excluded.dropped_json, "
-                      "encoding=excluded.encoding, source_file=excluded.source_file, captured_at=excluded.captured_at",
+                      "encoding=excluded.encoding, source_file=excluded.source_file, captured_at=excluded.captured_at, full_json=excluded.full_json",
                       (code, f["kind"], json.dumps(f["header"], ensure_ascii=False), json.dumps(f.get("dropped_columns") or [], ensure_ascii=False),
-                       f.get("encoding") or "cp932", f["name"], now))
+                       f.get("encoding") or "cp932", f["name"], now, json.dumps(f.get("header_full") or f["header"], ensure_ascii=False)))
 
 
 def undo(iid: int, by: str) -> dict:

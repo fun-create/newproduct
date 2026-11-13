@@ -83,11 +83,14 @@ def decide(rid: int, ok: bool, note: str, uid: str) -> dict:
         raise ValueError("承認の時点の検査で止まりました: " + " ／ ".join(chk["errors"][:5]))
     stamp = now.replace("-", "").replace(":", "").replace(" ", "")
     files = []
+    control = "u" if r["kind"] == "更新" else "n"
     for kind in fs_export.KINDS:
+        if control == "u" and kind == "selection":
+            continue                       # 項目選択肢は更新できない（n・d だけ・ADR-154）
         rs = fs_export.rows(r["shop"], kind, ids)
         if not rs:
             continue
-        data = fs_export.to_csv(r["shop"], kind, rs)
+        data = fs_export.to_csv(r["shop"], kind, rs, control)
         files.append((f"{fs_export.FILE_PREFIX[kind]}_NP{rid}_{stamp}.csv", kind, len(rs), hashlib.sha256(data).hexdigest(), data))
     with store.tx() as c:
         c.executemany("INSERT INTO export_file (request_id,name,kind,rows,sha256,data) VALUES (?,?,?,?,?,?)",

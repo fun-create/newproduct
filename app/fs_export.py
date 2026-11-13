@@ -23,7 +23,8 @@ from pathlib import Path
 from app import listing_parse as lp
 from app import store
 
-UNVERIFIED = "FutureShop の取り込みの形（必須の列・コントロールカラム）は、管理画面で試しの1件を入れて確かめるまで未確認です"
+UNVERIFIED = ("FutureShop の取り込みの形は、管理画面で試しの1件を入れて確かめるまで未確認です"
+              "（マニュアルの標準CSV は UTF-8 だが、うちの店の出力は Shift_JIS。見出しは店の出力と同じ並びで、取り込まない列は空にしている）")
 KIND_SRC = {"selection": "selection", "opt_basic": "opt_basic", "opt_select": "opt_select"}
 KINDS = ("goods", "selection", "opt_basic", "opt_select")
 FILE_PREFIX = {"goods": "ccGoods", "selection": "goodsSelection", "opt_basic": "goodsOptionPriceBasic",
@@ -40,10 +41,21 @@ def _shop_fs(shop: str) -> dict:
 
 
 def layout(shop: str, kind: str) -> list[str]:
-    r = store.one("SELECT columns_json FROM export_layout WHERE shop=? AND kind=?", (shop, kind))
+    """書き出しの見出し。**落とした列も含めた店の出力と同じ並び**（ADR-154: 見出しが管理画面の設定と違うと取り込めない。
+    更新で空の欄は「変えない」）。全体の並びを覚える前に取り込んだ店は、取り込んだ列だけ（取り込み直すと全体になる）。"""
+    r = store.one("SELECT columns_json, full_json FROM export_layout WHERE shop=? AND kind=?", (shop, kind))
     if r is None:
         raise LookupError(f"{shop} の {FILE_PREFIX[kind]} の列の並びがありません（店の出力ファイルを一度取り込むと覚えます）")
-    return json.loads(r["columns_json"])
+    return json.loads(r["full_json"] or r["columns_json"])
+
+
+def encoding(shop: str, kind: str) -> str:
+    r = store.one("SELECT encoding FROM export_layout WHERE shop=? AND kind=?", (shop, kind))
+    return "utf-8-sig" if r and r["encoding"].startswith("utf-8") else "cp932"
+
+
+def _rules() -> dict:
+    return {r["rule_key"]: r["value"] for r in store.q("SELECT rule_key, value FROM cart_rule WHERE cart='futureshop'")}
 
 
 def rows(shop: str, kind: str, listing_ids: list[int] | None = None) -> list[dict]:
@@ -63,22 +75,30 @@ def rows(shop: str, kind: str, listing_ids: list[int] | None = None) -> list[dic
         ps + [src])]
 
 
-def to_csv(shop: str, kind: str, rs: list[dict]) -> bytes:
-    """店の出力と同じ列の並び・Shift_JIS・CRLF で書く。書けない文字があれば止める（検査で先に見つける）。"""
+def to_csv(shop: str, kind: str, rs: list[dict], control: str | None = None) -> bytes:
+    """店の出力と同じ見出し・同じ文字コード（うちの店は Shift_JIS）・CRLF で書く。取り込まない列は空。
+    control を渡すとコントロールカラムに入れる（n 新規・u 更新）。書けない文字があれば止める（検査で先に見つける）。"""
     cols = layout(shop, kind)
+    if control is not None:
+        allowed = (_rules().get(f"control:{kind}") or "").split(",")
+        if control not in allowed:
+            raise ValueError(f"{FILE_PREFIX[kind]} のコントロールカラムに「{control}」は使えません（使えるのは {'・'.join(x for x in allowed if x) or 'なし'}）")
     b = io.StringIO()
     w = csv.writer(b, lineterminator="\r\n")
     w.writerow(cols)
     for r in rs:
-        w.writerow([r.get(c, "") for c in cols])
-    return b.getvalue().encode("cp932")
+        row = dict(r)
+        if control is not None:
+            row["コントロールカラム"] = control
+        w.writerow([row.get(c, "") for c in cols])
+    return b.getvalue().encode(encoding(shop, kind))
 
 
 def check(shop: str, listing_ids: list[int] | None = None) -> dict:
     """書き出す前の検査。errors は書き出しを止めるもの、warnings は知らせだけ。どちらも件数と識別子（値は出さない）。"""
     _shop_fs(shop)
     errors, warnings = [], []
-    rules = {r["rule_key"]: r["value"] for r in store.q("SELECT rule_key, value FROM cart_rule WHERE cart='futureshop'")}
+    rules = _rules()
     goods = rows(shop, "goods", listing_ids)
     ids = Counter(g.get("商品URLコード", "") for g in goods)
     for k, n in ids.items():
@@ -94,19 +114,44 @@ def check(shop: str, listing_ids: list[int] | None = None) -> dict:
         price = (g.get("本体価格") or "").replace(",", "")
         if price and not price.isdigit():
             errors.append(f"{key}: 本体価格が数ではありません")
-        for rk, rv in rules.items():
-            if rk.startswith("max_chars:"):
-                col = rk.split(":", 1)[1]
-                if len(g.get(col) or "") > int(rv):
-                    errors.append(f"{key}: {col} が {rv} 文字を超えています（{len(g.get(col) or '')} 文字）")
+    import re as _re
     for kind in KINDS:
-        for r in rows(shop, kind, listing_ids):
+        rs = rows(shop, kind, listing_ids)
+        mr = rules.get(f"max_rows:{kind}")
+        if mr and len(rs) > int(mr):
+            errors.append(f"{FILE_PREFIX[kind]} が {len(rs)} 行で、1ファイルの上限 {mr} 行を超えます（分けて出してください）")
+        if kind == "opt_basic" and rules.get("max_items:opt_basic"):
+            per = Counter(r.get("商品URLコード") for r in rs)
+            for k, n in per.items():
+                if n > int(rules["max_items:opt_basic"]):
+                    errors.append(f"{k}: オプション項目が {n} あり、上限 {rules['max_items:opt_basic']} を超えます")
+        enc = encoding(shop, kind) if store.one("SELECT 1 FROM export_layout WHERE shop=? AND kind=?", (shop, kind)) else "cp932"
+        for r in rs:
+            key = r.get("商品URLコード") or "?"
             for col, v in r.items():
+                v = str(v)
                 try:
-                    str(v).encode("cp932")
+                    v.encode(enc)
                 except UnicodeEncodeError:
-                    errors.append(f"{r.get('商品URLコード', '?')}: {col} に Shift_JIS で書けない文字があります（{FILE_PREFIX[kind]}）")
-                    break
+                    errors.append(f"{key}: {col} に {'Shift_JIS' if enc == 'cp932' else enc} で書けない文字があります（{FILE_PREFIX[kind]}）")
+            for rk, rv in rules.items():
+                parts = rk.split(":", 2)
+                if len(parts) == 2 and parts[0] == "max_chars" and kind == "goods":
+                    parts = ["max_chars", "goods", parts[1]]          # 古い形（列だけ）は商品ファイル
+                if len(parts) != 3 or parts[1] != kind:
+                    continue
+                typ, _, col = parts
+                v = str(r.get(col) or "")
+                if not v and typ != "pattern":
+                    continue
+                if typ == "max_chars" and len(v) > int(rv):
+                    errors.append(f"{key}: {col} が {rv} 文字を超えています（{len(v)} 文字）")
+                elif typ == "pattern" and v and not _re.fullmatch(rv, v):
+                    errors.append(f"{key}: {col} の形が決まりに合いません（{rv}）")
+                elif typ == "forbid" and any(ch in v for ch in rv):
+                    errors.append(f"{key}: {col} に使えない文字（{' '.join(rv)}）があります")
+                elif typ == "only_br" and _re.search(r"<(?!br\s*/?>)[a-zA-Z/!]", v, _re.I):
+                    errors.append(f"{key}: {col} に <br> 以外の HTML があります")
     where, ps = "l.shop=? AND l.gone_import_id IS NULL", [shop]
     if listing_ids is not None and listing_ids:
         where += f" AND l.id IN ({','.join('?' * len(listing_ids))})"
@@ -116,6 +161,8 @@ def check(shop: str, listing_ids: list[int] | None = None) -> dict:
         warnings.append(f"CIP の商品と結んでいない出品が {n_nolink} 件あります（注文が来ても作るものが決まりません）")
     if not rules:
         warnings.append("カートの決まり（文字数の上限など）がまだ表にありません。文字数は検査していません")
+    elif rules.get("no_update:selection"):
+        warnings.append("項目選択肢は更新できません（n 新規・d 削除だけ）。既存商品の更新では項目選択肢のファイルを出しません")
     warnings.append(UNVERIFIED)
     return {"listings": len(goods), "errors": errors, "warnings": warnings}
 
