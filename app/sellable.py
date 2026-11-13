@@ -36,29 +36,47 @@ _SINGLE = ("SELECT k.listing_id, MIN(k.product_code) AS product_code FROM listin
 
 
 def candidates(args: dict) -> dict:
-    """束ねる候補（共通商品コードごと）。並びは店の数が多い順。"""
+    """束ねる候補（共通商品コードごと）。並びは店の数が多い順。
+
+    **まとめて1回だけ数える**（11-13 本番で、候補ごとに数え直す形が1ページ 3 秒かかった）。"""
     min_shops = max(1, int(args.get("min_shops") or 1))
     q = (args.get("q") or "").strip()
     page = max(1, int(args.get("page") or 1))
-    base = (f"WITH s AS ({_SINGLE}) SELECT s.product_code, COUNT(*) AS n_listings, COUNT(DISTINCT l.shop) AS n_shops, "
-            "SUM(l.state='公開') AS n_public FROM s JOIN listing l ON l.id=s.listing_id "
-            + ("WHERE s.product_code LIKE ? " if q else "") + "GROUP BY s.product_code HAVING COUNT(DISTINCT l.shop) >= ?")
-    ps = ([f"%{q}%"] if q else []) + [min_shops]
-    total = store.val(f"SELECT COUNT(*) FROM ({base})", ps)
-    groups = store.rows(store.q(base + " ORDER BY n_shops DESC, n_listings DESC, s.product_code LIMIT ? OFFSET ?",
-                                ps + [PER_PAGE, (page - 1) * PER_PAGE]))
-    for g in groups:
-        k = store.one("SELECT cat1, cat2, cat3, shape, size, pack_qty FROM listing_cip_link WHERE product_code=? LIMIT 1",
-                      (g["product_code"],))
-        g.update(dict(k) if k else {})
-        g["listings"] = store.rows(store.q(
-            f"WITH s AS ({_SINGLE}) SELECT l.id, l.shop, sh.label AS shop_label, l.ext_id, l.title, l.price, l.state FROM s "
-            "JOIN listing l ON l.id=s.listing_id JOIN shop sh ON sh.code=l.shop WHERE s.product_code=? ORDER BY sh.sort, l.ext_id",
-            (g["product_code"],)))
+    single = {r["listing_id"]: r["product_code"] for r in store.q(_SINGLE)}
+    info = {}
+    if single:
+        for r in store.q("SELECT l.id, l.shop, sh.label AS shop_label, sh.sort, l.ext_id, l.title, l.price, l.state FROM listing l "
+                         "JOIN shop sh ON sh.code=l.shop WHERE l.sellable_id IS NULL AND l.gone_import_id IS NULL"):
+            if r["id"] in single:
+                info[r["id"]] = dict(r)
+    by = {}
+    for lid, code in single.items():
+        if q and q.lower() not in code.lower():
+            continue
+        by.setdefault(code, []).append(info[lid])
+    groups = []
+    for code, ls in by.items():
+        shops = {x["shop"] for x in ls}
+        if len(shops) < min_shops:
+            continue
+        groups.append({"product_code": code, "n_listings": len(ls), "n_shops": len(shops),
+                       "n_public": sum(1 for x in ls if x["state"] == "公開"), "listings": ls})
+    groups.sort(key=lambda g: (-g["n_shops"], -g["n_listings"], g["product_code"]))
+    total = len(groups)
+    rows = groups[(page - 1) * PER_PAGE: page * PER_PAGE]
+    if rows:
+        codes = [g["product_code"] for g in rows]
+        cats = {r["product_code"]: dict(r) for r in store.q(
+            f"SELECT product_code, MIN(cat1) cat1, MIN(cat2) cat2, MIN(cat3) cat3, MIN(shape) shape, MIN(size) size, "
+            f"MIN(pack_qty) pack_qty FROM listing_cip_link WHERE product_code IN ({','.join('?' * len(codes))}) GROUP BY product_code", codes)}
+        for g in rows:
+            g.update({k: v for k, v in cats.get(g["product_code"], {}).items() if k != "product_code"})
+            g["listings"] = [{k: x[k] for k in ("id", "shop", "shop_label", "ext_id", "title", "price", "state")}
+                             for x in sorted(g["listings"], key=lambda x: (x["sort"], x["ext_id"]))]
     held = store.val("SELECT COUNT(*) FROM (SELECT k.listing_id FROM listing_cip_link k JOIN listing l ON l.id=k.listing_id "
                      "WHERE l.gone_import_id IS NULL AND l.sellable_id IS NULL GROUP BY k.listing_id "
                      "HAVING COUNT(DISTINCT k.product_code) > 1)")
-    return {"rows": groups, "total": total, "page": page, "per_page": PER_PAGE, "pages": max(1, -(-total // PER_PAGE)),
+    return {"rows": rows, "total": total, "page": page, "per_page": PER_PAGE, "pages": max(1, -(-total // PER_PAGE)),
             "held_multi": held, "bundled": store.val("SELECT COUNT(*) FROM sellable")}
 
 
