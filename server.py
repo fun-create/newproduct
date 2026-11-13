@@ -1297,6 +1297,25 @@ class H(BaseHTTPRequestHandler):
                 except RuntimeError as e:                 # ChatWork が断った・つながらない。**送れていないと言う**
                     return self.sendj(502, {"error": f"送れませんでした: {e}"})
             return self.sendj(404, {"error": "not found"})
+        # 選択肢の整理（段階3・ADR-148）。見るのはログインした人、定義を作る・寄せる・外すのは社長と商品開発部管理者
+        if parts and parts[0] == "options":
+            from app import optdef
+            if method == "GET":
+                if parts == ["options", "clusters"]:
+                    return self.sendj(200, optdef.clusters(qs))
+                if parts == ["options", "defs"]:
+                    return self.sendj(200, {"rows": optdef.defs()})
+                if len(parts) == 3 and parts[1] == "defs" and parts[2].isdigit():
+                    return self.sendj(200, optdef.detail(int(parts[2])))
+                return self.sendj(404, {"error": "not found"})
+            d = self.body()
+            if parts == ["options", "assign"]:
+                return self.sendj(200, optdef.assign(d, [x for x in (d.get("members") or "").split("\n") if x], uid))
+            if len(parts) == 3 and parts[1] == "defs" and parts[2].isdigit():
+                return self.sendj(200, optdef.update(int(parts[2]), d, uid))
+            if len(parts) == 4 and parts[1] == "defs" and parts[2].isdigit() and parts[3] == "detach":
+                return self.sendj(200, optdef.detach(int(parts[2]), d.get("shop", ""), d.get("src", ""), d.get("item_name", ""), uid))
+            return self.sendj(404, {"error": "not found"})
         # 売るもの・束ねる候補（段階2・ADR-147）。見るのはログインした人、作る・直すのは社長と商品開発部管理者
         if parts and parts[0] == "sellables":
             from app import sellable
