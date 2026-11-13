@@ -5,7 +5,7 @@
 - 取り込み（FR-287〜289）: 先に `preview()` で増える・変わる・同じ・消えるの件数を見せ、`apply()` で入れる。
   **同じファイルを2度入れても何も変わらない**（`row_hash` が同じなら触らない）。`undo()` でその店の最後の取り込みを戻せる
 - 消えた出品は消さない（`gone_import_id` を立てる）。次にまた出てきたら戻す
-- **取り込めるのは管理者だけ**（FR-302）。画面からは見るだけ（段階1）
+- **取り込めるのは社長の業務ロールの人だけ**（FR-302・`IMPORT_ROLES`）。画面からは見るだけ（段階1）
 - お客さまの情報は入らない前提だが、入れる前にメールアドレス・電話番号の形を数え、1件でもあれば止める（値は出さない）
 """
 from __future__ import annotations
@@ -20,6 +20,9 @@ from app import store
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[A-Za-z]{2,}")
 PHONE = re.compile(r"(?<![\d/._-])0\d{1,4}-\d{1,4}-\d{3,4}(?![\d/._-])")
 PER_PAGE = 50
+# 取り込み・取り消しができる業務ロール（FR-302）。案の「管理者」は十文字さん（要件案 3章）。
+# NEW PRODUCT の `admin` は「商品開発部管理者」で別物なので入れない（2026-11-13 本番で確かめた）
+IMPORT_ROLES = {"president"}
 
 
 def _j(d) -> str:
@@ -124,8 +127,8 @@ def _write_options(c, lid: int, opts: list[dict]):
 
 def apply(code: str, paths, by: str) -> dict:
     from app import gate
-    if "admin" not in gate.roles_of(by):
-        raise PermissionError("取り込めるのは管理者だけです（FR-302）")
+    if not IMPORT_ROLES & set(gate.roles_of(by)):
+        raise PermissionError("取り込めるのは社長の業務ロールの人だけです（FR-302）")
     pv = preview(code, paths)
     if pv["errors"]:
         raise ValueError("取り込めません: " + " ／ ".join(pv["errors"][:5]))
@@ -182,8 +185,8 @@ def apply(code: str, paths, by: str) -> dict:
 def undo(iid: int, by: str) -> dict:
     """その店の**最後の**取り込みだけを戻す（間の取り込みを飛ばして戻すと、前の値がずれる）。"""
     from app import gate
-    if "admin" not in gate.roles_of(by):
-        raise PermissionError("取り消せるのは管理者だけです")
+    if not IMPORT_ROLES & set(gate.roles_of(by)):
+        raise PermissionError("取り消せるのは社長の業務ロールの人だけです（FR-302）")
     imp = store.one("SELECT * FROM listing_import WHERE id=?", (iid,))
     if imp is None:
         raise LookupError("取り込みの記録がありません")

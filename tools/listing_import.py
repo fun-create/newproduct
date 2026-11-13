@@ -8,7 +8,7 @@
     sudo -u newproduct env ... python3 tools/listing_import.py list     [goods]
 
 店の記号: goods うちわ=uchiwa frame rakuten yahoo_goods yahoo_frame giftmall amazon overseas
-**値は出さない**（件数・ファイル名・列の数だけ）。取り込めるのは管理者の業務ロールの人だけ。
+**値は出さない**（件数・ファイル名・列の数だけ）。取り込めるのは社長の業務ロールの人だけ（--by masateru）。
 """
 from __future__ import annotations
 

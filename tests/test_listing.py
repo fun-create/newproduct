@@ -65,7 +65,8 @@ class Listing(unittest.TestCase):
         store.close()
         from app import seed, listing
         seed.run()
-        store.ex("INSERT OR IGNORE INTO role_member (role_code, user_id) VALUES ('admin','boss')")
+        store.ex("INSERT OR IGNORE INTO role_member (role_code, user_id) VALUES ('president','boss')")
+        store.ex("INSERT OR IGNORE INTO role_member (role_code, user_id) VALUES ('admin','devlead')")
         store.conn().commit()
         self.store, self.m = store, listing
         self.tmp = tempfile.TemporaryDirectory()
@@ -155,6 +156,8 @@ class Listing(unittest.TestCase):
         fs_files(d)
         with self.assertRaises(PermissionError):
             self.m.apply("goods", [d], "someone")
+        with self.assertRaises(PermissionError):                 # 商品開発部管理者（admin）は取り込めない
+            self.m.apply("goods", [d], "devlead")
         # 検査を壊してから1度動かす: お客さまの情報らしい値（メールアドレス・電話番号）が1件でもあれば止める
         fs_files(d, sel=[{"商品URLコード": "a001", "選択肢タイプ": "t", "セレクト／ラジオボタン用項目名": "連絡先",
                           "セレクト／ラジオボタン用選択肢": "taro@example.com"}])
