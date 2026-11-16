@@ -120,6 +120,16 @@ def ingest(file_name: str, data: bytes, user_id: str) -> dict:
         raise ValueError(str(e)) from None
     except Exception as e:                          # noqa: BLE001 壊れたファイル
         raise ValueError(f"Excel を読めませんでした（{type(e).__name__}）") from None
+    return _save(file_name, pf, pt, rows, user_id)
+
+
+def ingest_rows(file_name: str, rows: list[list[str]], user_id: str) -> dict:
+    """Windows から CSV で届いた「新商品」シートの値（集計の部分だけ・2026-11-16 ADR-156）を保存する。"""
+    pf, pt = period_of(file_name)
+    return _save(file_name, pf, pt, rows, user_id)
+
+
+def _save(file_name: str, pf: str, pt: str, rows: list[list[str]], user_id: str) -> dict:
     d = parse(rows, int(pt[:4]))
     with store.tx() as c:
         c.execute("DELETE FROM newprod_weekly WHERE period_from=? AND period_to=?", (pf, pt))

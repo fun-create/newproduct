@@ -44,10 +44,34 @@ def sheet_names(data: bytes) -> list[str]:
     return [html.unescape(n) for n in re.findall(r'<sheet\b[^>]*\bname="([^"]*)"', x)]
 
 
-def receive(name: str, data: bytes, source: str, user_id: str, source_sha: str | None = None) -> dict:
+DETAIL_HEADS = ("店名", "メッセージ", "ﾒｯｾｰｼﾞ")
+
+
+def csv_rows(data: bytes) -> list[list[str]]:
+    """Windows が送る「新商品」シートの値（UTF-8 の CSV）→ 行。セルの整え方は xlsx_sheet.read_sheet と同じ。
+    **明細の見出し（店名・メッセージ）の行があれば断る**（送る側で、その行から下を落としてから送る）。"""
+    import csv
+    import io
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError("CSV が UTF-8 ではありません") from None
+    out = []
+    for r in csv.reader(io.StringIO(text, newline="")):
+        line = [(v or "").replace("\t", " ").replace("\r\n", "\n").replace("\n", "\\n").strip() for v in r]
+        while line and not line[-1]:
+            line.pop()
+        if any(v in DETAIL_HEADS for v in line):
+            raise ValueError("明細（店名・メッセージの見出しから下）が入っています。集計の部分だけを送ってください")
+        out.append(line)
+    return out
+
+
+def receive(name: str, data: bytes, source: str, user_id: str, source_sha: str | None = None, fmt: str | None = None) -> dict:
     """1ファイル受け取る。結果を必ず記録する。取り込めなければ ValueError（理由つき）
 
-    Windows は**集計だけの写し**（シート「新商品」だけ・明細の行を消したもの）を送る（2026-11-11 十文字さんの選択）。
+    Windows は**集計だけ**を送る（2026-11-11 十文字さんの選択）。11-16 から**「新商品」シートの値の CSV**（fmt="csv"）。
+    それまでの「集計だけの写し（.xlsx）」は、スクリプトから起動した Excel の保存が止まるため使わない（ADR-156）。
     写しは毎回中身の指紋が変わるので、二重防止は**元のファイルの指紋**（source_sha）で行う。"""
     from app import newprod
     name = (name or "").strip().replace("\\", "/").split("/")[-1]
@@ -63,14 +87,18 @@ def receive(name: str, data: bytes, source: str, user_id: str, source_sha: str |
         if len(data) > MAX_BYTES:
             raise ValueError(f"大きすぎます（{len(data) // 1024} KB）")
         pf, pt = newprod.period_of(name)
-        if source == "windows" and sheet_names(data) != ["新商品"]:
+        rows = None
+        if fmt == "csv":
+            rows = csv_rows(data)
+        elif source == "windows" and sheet_names(data) != ["新商品"]:
             raise ValueError("集計だけの写し（シート「新商品」だけ）ではありません。明細を含むファイルは受け取りません"
                              "（送る側の send_weekly_report.ps1 を新しい版に）")
         if store.one("SELECT 1 FROM weekly_feed_log WHERE sha256=? AND result IN (?,?,?)", (sha, *OK_RESULTS)):
             _log(name, sha, pf, pt, "取り込み済み（同じ内容）", None, source)
             return {"ok": True, "result": "取り込み済み（同じ内容）", "period_from": pf, "period_to": pt}
         had = store.one("SELECT 1 FROM newprod_weekly WHERE period_from=? AND period_to=?", (pf, pt))
-        r = newprod.ingest(name, data, user_id)          # 同じ期間は入れ替え（足さない）
+        r = (newprod.ingest_rows(name, rows, user_id) if rows is not None
+             else newprod.ingest(name, data, user_id))    # 同じ期間は入れ替え（足さない）
         result = "訂正版で入れ替え" if had else "取り込み"
         _log(name, sha, pf, pt, result, None, source)
         return {**r, "result": result}

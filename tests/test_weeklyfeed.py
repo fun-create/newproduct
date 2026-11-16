@@ -86,6 +86,40 @@ class Feed(unittest.TestCase):
         self.assertEqual(self.m.receive(N1, again, "windows", "feed", source_sha=src)["result"], "取り込み済み（同じ内容）")
         self.assertIn(self.m.receive(N1, full, "画面:u", "u")["result"], ("取り込み", "訂正版で入れ替え"))  # 画面から手で入れるのは今までどおり
 
+    def test_windows_csv_reads_the_same_as_the_excel(self):
+        """11-16 から Windows は「新商品」シートの値を CSV で送る（Excel の保存が止まるため・ADR-156）。中身は Excel と同じに読む"""
+        import csv
+        import io
+        from app import newprod
+        top = []
+        for r in SHEET:
+            if any(str(v) in ("店名", "メッセージ") for v in r):
+                break                                                          # 送る側で明細の見出しから下を落とす
+            top.append(r)
+        b = io.StringIO()
+        w = csv.writer(b, lineterminator="\r\n")
+        for r in top:
+            w.writerow(["" if v is None else (str(int(v)) if isinstance(v, float) and v.is_integer() else str(v)) for v in r])
+        data = b.getvalue().encode("utf-8")
+        src = "b" * 64
+        r = self.m.receive(N1, data, "windows", "feed", source_sha=src, fmt="csv")
+        self.assertEqual(r["result"], "取り込み")
+        by_csv = newprod.latest()
+        self.m.receive(N1, xlsx({"新商品": SHEET}), "画面:u", "u")              # 同じ期間を Excel で入れ直す
+        by_xlsx = newprod.latest()
+        self.assertEqual(by_csv["rows"], by_xlsx["rows"])
+        self.assertEqual(by_csv["monthly"], by_xlsx["monthly"])
+        self.assertIn(src, self.m.known())
+        self.assertEqual(self.m.receive(N1, data, "windows", "feed", source_sha=src, fmt="csv")["result"], "取り込み済み（同じ内容）")
+
+    def test_windows_csv_with_detail_is_refused(self):
+        bad = "商品ラベル,件数\r\nA,1\r\n店名,メッセージ\r\nx,お客さまの名前入り\r\n".encode("utf-8")
+        with self.assertRaises(ValueError):
+            self.m.receive(N1, bad, "windows", "feed", source_sha="c" * 64, fmt="csv")
+        with self.assertRaises(ValueError):
+            self.m.receive(N1, "商品ラベル".encode("cp932"), "windows", "feed", source_sha="c" * 64, fmt="csv")
+        self.assertEqual(self.m.known(), [])
+
     def test_token(self):
         tf = Path(tempfile.mkdtemp()) / "weekly_feed_token"
         with mock.patch.object(self.m, "token_path", return_value=tf):

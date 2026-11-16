@@ -7,8 +7,8 @@
   にある「週次売上分析_YYYYMMDD-YYYYMMDD.xlsx」を NEW PRODUCT へ送ります。
   NEW PRODUCT がまだ受け取っていないファイルだけを送ります。初回は保存済みの過去分も全部送ります。
   「週次売上明細_…」は送りません。今の weekly_report.ps1（レポート作成・保存・ChatWork 配信）には触りません。
-  「週次売上分析_…」もそのままは送らず、シート「新商品」の集計だけを残した写しを作って送ります（明細＝メッセージ・付加情報は送らない）。
-  写しを作るのに Excel が要ります（2026-11-11 から）。古い版の send_weekly_report.ps1 から送ったファイルは NEW PRODUCT が断ります。
+  「週次売上分析_…」もそのままは送らず、シート「新商品」の集計の値だけを CSV にして送ります（明細＝メッセージ・付加情報は送らない）。
+  値を読むのに Excel が要りますが、Excel は読むだけで保存しません（2026-11-16 から。それまでの版は写しを Excel で保存する所で止まった）。
 
 置くもの（同じフォルダーに）
   1. send_weekly_report.ps1   … このスクリプト
@@ -18,9 +18,18 @@
 試す（送らずに、送る予定のファイルだけ出す）
   powershell -NoProfile -ExecutionPolicy Bypass -File C:\NEWPRODUCT\send_weekly_report.ps1 -DryRun
 
+試す（送らずに、いちばん新しいファイルを Excel で読んで CSV にする所まで）
+  powershell -NoProfile -ExecutionPolicy Bypass -File C:\NEWPRODUCT\send_weekly_report.ps1 -TestRead
+  ログに「試し（送っていない）: 週次売上分析_… → N 行・N バイト・N 秒」と出れば読めています。
+  -DryRun は Excel を通らないので、Excel で止まるかどうかはこちらで確かめます。
+
 タスクスケジューラに登録する（毎週月曜 9:30。weekly_report.ps1 の 9:00 のあと）
   weekly_report.ps1 を動かしているのと同じ Windows ユーザーで（\\TERASTATION が見える人で）登録します。
   schtasks /Create /TN "NEWPRODUCT_週次レポート送信" /SC WEEKLY /D MON /ST 09:30 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\NEWPRODUCT\send_weekly_report.ps1"
+
+  毎日 13:00 にも動かす（2026-11-16 石原さんの依頼書 R02。9:30 にまだファイルが無かった週や、送れなかった週を拾う）
+  schtasks /Create /TN "NEWPRODUCT_週次レポート送信_毎日" /SC DAILY /ST 13:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\NEWPRODUCT\send_weekly_report.ps1"
+  受け取り済みのファイルは送らないので、毎日動いても二重にはなりません。
 
   失敗したファイルは、次に動いたときに送り直します。すぐ送り直すときは、タスクスケジューラで「実行する」を押すか、
   上の「試す」の行から -DryRun を外して実行します。
@@ -31,6 +40,7 @@
 
 止めるとき
   schtasks /Delete /TN "NEWPRODUCT_週次レポート送信"
+  schtasks /Delete /TN "NEWPRODUCT_週次レポート送信_毎日"
 
 ================================================================
 もう1つ: 新商品マスタに発売した商品の1行を足す（2026-11-11・ADR-139）

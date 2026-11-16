@@ -437,7 +437,8 @@ class H(BaseHTTPRequestHandler):
             data = self.rfile.read(n)
             try:
                 r = weeklyfeed.receive(unquote(self.headers.get("X-File-Name") or ""), data, "windows", "feed:windows",
-                                       source_sha=(self.headers.get("X-Source-Sha256") or "").strip().lower() or None)
+                                       source_sha=(self.headers.get("X-Source-Sha256") or "").strip().lower() or None,
+                                       fmt="csv" if (self.headers.get("X-Payload") or "").strip() == "newprod-summary-csv" else None)
             except ValueError as e:
                 return self.sendj(400, {"error": str(e)})
             return self.sendj(200, r)
