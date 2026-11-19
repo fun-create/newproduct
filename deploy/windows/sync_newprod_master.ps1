@@ -8,11 +8,16 @@
 # - 足した商品は毎週、当たった数だけを NEW PRODUCT へ返す。**商品名そのものは送らない**（数とラベルだけ）
 # - 発売から1年で「有効」を外すことはしない（人が外す・十文字さんの決定 11-11）
 # - weekly_report.ps1（9:00）より前の 8:30 に動かす。Excel が入っている PC で、TERASTATION が見えるユーザーで
+# - 2026-11-19 追加（ADR-161）: 毎回、有効な全ラベルについて「ラベル×日の売上（金額だけ）」を年度の始まり（5/1）から数え、
+#   NEW PRODUCT へ送る（/daily）。当て方は上と同じ。金額の列は -AmountCol（既定は下の候補の最初に見つかったもの）。
+#   NEW PRODUCT が週次レポートの月別の表と月ごとの合計を比べるので、列の取り違えは画面に差として出る。-NoDaily で止められる
 param(
     [string]$MasterPath = '\\TERASTATION\dashboard\sales_dashboard\weekly_report\新商品マスタ.xlsx',
     [string]$SalesCsv = '\\TERASTATION\dashboard\sales_dashboard\data\sales.csv',
     [string]$Url = 'https://newproduct.fun-create.co.jp/api/feed/newprod-master',
     [string]$TokenFile = (Join-Path $PSScriptRoot 'np_feed_token.txt'),
+    [string]$AmountCol = '',
+    [switch]$NoDaily,
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -46,8 +51,8 @@ try { $tok = (Get-Content -Path $TokenFile -Raw).Trim() } catch { Log ('鍵の�
 $h = @{ 'X-Feed-Token' = $tok }
 try { $job = Invoke-RestMethod -Uri $Url -Headers $h -Method Get -TimeoutSec 60 } catch { Log ('NEW PRODUCT に届きません: ' + $_.Exception.Message); exit 3 }
 $adds = @($job.add | Where-Object { $_ }); $checks = @($job.check | Where-Object { $_ })
-if ($adds.Count -eq 0 -and $checks.Count -eq 0) { Log 'やることはありません'; exit 0 }
-Log ('足す ' + $adds.Count + ' 件・数え直す ' + $checks.Count + ' 件')
+if ($adds.Count -eq 0 -and $checks.Count -eq 0 -and $NoDaily) { Log 'やることはありません'; exit 0 }
+Log ('足す ' + $adds.Count + ' 件・数え直す ' + $checks.Count + ' 件' + $(if ($NoDaily) { '' } else { '・ラベル×日の売上を送る' }))
 
 # --- sales.csv（Shift-JIS）。商品名と売上日だけ使う ---
 $enc = [System.Text.Encoding]::GetEncoding(932)
@@ -78,6 +83,55 @@ try {
 } catch {
     Log ('新商品マスタが読めません: ' + $_.Exception.Message)
     $excel.Quit(); [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel); exit 5
+}
+
+# --- ラベル×日の売上（金額だけ・ADR-161）。商品名は送らない ---
+$dailyExit = 0
+if (-not $NoDaily) {
+    $cands = @('売上(税込)', '売上金額(税込)', '税込金額', '売上金額', '金額', '小計')
+    $amt = ''
+    if ($AmountCol) { if ($props -contains $AmountCol) { $amt = $AmountCol } }
+    else { $amt = $cands | Where-Object { $props -contains $_ } | Select-Object -First 1 }
+    if (-not $amt) {
+        Log ('ラベル×日: 金額の列が見つかりません。-AmountCol で列の名前を指定してください（sales.csv の列: ' + ($props -join '、') + '）')
+        $dailyExit = 6
+    } else {
+        $now = Get-Date
+        $fy = $(if ($now.Month -ge 5) { $now.Year } else { $now.Year - 1 })
+        $dFrom = ('{0:D4}0501' -f $fy); $dTo = $now.ToString('yyyyMMdd')
+        $inv = [System.Globalization.CultureInfo]::InvariantCulture
+        $daily = @{}; $nRow = 0; $bad = 0
+        foreach ($x in $rows) {
+            $d = ([string]$x.$dateCol) -replace '[^0-9]', ''
+            if ($d.Length -ne 8 -or $d -lt $dFrom -or $d -gt $dTo) { continue }
+            $nm = [string]$x.$nameCol
+            $hit = New-Object System.Collections.ArrayList
+            foreach ($e in $existing) { if (Test-Match $nm $e.Inc $e.Exc) { [void]$hit.Add($e) } }
+            if ($hit.Count -eq 0) { continue }
+            $v = 0.0
+            if (-not [double]::TryParse((([string]$x.$amt) -replace '[,\s円¥]', ''), [System.Globalization.NumberStyles]::Float, $inv, [ref]$v)) { $bad++; continue }
+            $nRow++
+            $key = $d.Substring(0, 4) + '-' + $d.Substring(4, 2) + '-' + $d.Substring(6, 2)
+            foreach ($e in $hit) {
+                if (-not $daily.ContainsKey($e.Label)) { $daily[$e.Label] = @{} }
+                if ($daily[$e.Label].ContainsKey($key)) { $daily[$e.Label][$key] += $v } else { $daily[$e.Label][$key] = $v }
+            }
+        }
+        Log ('ラベル×日: ' + $dFrom + '〜' + $dTo + '・金額の列「' + $amt + '」・当たった明細 ' + $nRow + ' 行・' + $daily.Count + ' ラベル' + $(if ($bad) { '・金額が読めない ' + $bad + ' 行（数えていません）' } else { '' }))
+        if (-not $DryRun) {
+            $dbody = ConvertTo-Json @{ from = $dFrom; to = $dTo; amount_col = $amt; labels = $daily } -Depth 5 -Compress
+            try {
+                $dr = Invoke-RestMethod -Uri ($Url + '/daily') -Method Post -Headers $h -TimeoutSec 120 `
+                    -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($dbody))
+                Log ('ラベル×日を送った: ' + $dr.rows + ' 行・週次レポートと比べて合わないのは ' + $dr.mismatch + ' か所（' + $dr.compared + ' か所を比べた）')
+            } catch { Log ('ラベル×日を送れませんでした: ' + $_.Exception.Message); $dailyExit = 7 }
+        }
+    }
+}
+if ($adds.Count -eq 0 -and $checks.Count -eq 0) {
+    $excel.Quit(); [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
+    [System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers()
+    Log '新商品マスタに足す行・数え直す行はありません'; exit $dailyExit
 }
 
 function Count-Row($it) {
@@ -169,4 +223,4 @@ if ($results.Count -gt 0) {
         Log ('NEW PRODUCT に返した: ' + $r.applied + ' 件')
     } catch { Log ('NEW PRODUCT に返せませんでした（マスタは書いてあります）: ' + $_.Exception.Message); exit 1 }
 }
-exit 0
+exit $dailyExit

@@ -64,3 +64,11 @@
 結果の見方
   - Windows 側: 同じフォルダーの sync_newprod_master.log
   - NEW PRODUCT 側: 「売上・原価」→「新商品の売上（週次レポート）」の未紐付けの欄、案件ページの G 節
+
+ラベル×日の売上（2026-11-19 から・ADR-161）
+  - 毎回、有効な全ラベルについて、5/1 から今日までの日ごとの金額を NEW PRODUCT へ送ります（商品名は送りません）
+  - 金額の列は sales.csv の「売上(税込)」などの候補から自動で選び、log に列の名前が出ます。
+    週次レポート（weekly_report.ps1）が売上に使っている列と違うときは -AmountCol で指定します
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\NEWPRODUCT\sync_newprod_master.ps1 -DryRun -AmountCol "列の名前"
+  - NEW PRODUCT は届いた数字を週次レポートの月別の表と月ごとに比べ、「自動送信（Windows から）」の欄に結果を出します
+  - 止めるときは -NoDaily

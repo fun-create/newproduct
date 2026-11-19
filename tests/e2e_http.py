@@ -257,6 +257,11 @@ def main() -> int:
         st, d = cl.get("/api/users")
         note(st == 200 and isinstance(d.get("rows"), list) and all(set(r) <= {"user_id", "name"} for r in d["rows"]),
              "/api/users は ID と名前だけ", f"{st}")
+        # ラベル×日の売上（ADR-161）。鍵が無ければ 403・画面の口は「まだ届いていない」（daily が null）を返す
+        st, d = cl.req("POST", "/api/feed/newprod-master/daily", {"from": "2026-05-01"})
+        note(st == 403, "ラベル×日の受け口は、鍵が無ければ 403", f"{st}")
+        st, d = cl.get("/api/sales/weekly-newprod")
+        note(st == 200 and "daily" in (d.get("feed") or {}), "新商品の売上の口に、ラベル×日の受け取り状況がある", f"{st}")
         st, d = cl.req("POST", "/api/svc/task/done", {"ext_ref": "newproduct:task:1", "done": "1"})
         note(st == 403, "カレンダーからの完了の受け口は、鍵が無ければ 403", f"{st}")
         tok = (app / "config" / "calfc_callback_token").read_text().strip() if (app / "config" / "calfc_callback_token").exists() else ""

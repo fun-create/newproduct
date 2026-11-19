@@ -399,6 +399,17 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(400, {"error": str(e)})
             store.audit("svc:" + actor, "task.done_from_calfc", str(d.get("ext_ref") or ""), r, self.client_address[0])
             return self.sendj(200, r)
+        if path == "/api/feed/newprod-master/daily":
+            # ラベル×日の売上（金額だけ・ADR-161）。sync_newprod_master.ps1 が送る。鍵は週次と同じ
+            from app import newprod_daily, weeklyfeed
+            if not weeklyfeed.token_ok((self.headers.get("X-Feed-Token") or "").strip()):
+                return self.sendj(403, {"error": "forbidden"})
+            if method != "POST":
+                return self.sendj(405, {"error": "POST だけ"})
+            try:
+                return self.sendj(200, newprod_daily.receive(self.body(limit=4 * 1024 * 1024)))
+            except ValueError as e:
+                return self.sendj(400, {"error": str(e)})
         if path in ("/api/feed/newprod-master", "/api/feed/newprod-master/result"):
             # 週次レポートの新商品マスタへ足す行（4-4・ADR-139）。アシロボの PC の sync_newprod_master.ps1 が使う。鍵は週次と同じ
             from app import newprod_master, weeklyfeed
@@ -726,7 +737,8 @@ class H(BaseHTTPRequestHandler):
         # 新商品の売上（週次レポートから取り込む・H06 段階1・ADR-131）。見るのは全員、取り込み・登録は商品開発部・管理者・社長
         if parts == ["sales", "weekly-newprod"] and method == "GET":
             from app import newprod, weeklyfeed
-            return self.sendj(200, {**newprod.view(), "feed": weeklyfeed.status()})
+            from app import newprod_daily
+            return self.sendj(200, {**newprod.view(), "feed": {**weeklyfeed.status(), "daily": newprod_daily.status()}})
         # スキンシール展開判断レポート（Auto GROWTH から引き取り・ADR-140）。**見るだけ・利用者全員**
         if parts == ["skin-report"] and method == "GET":
             from app import skin_report

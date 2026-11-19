@@ -7569,6 +7569,20 @@
           + (fd.open_errors && fd.open_errors.length ? "・失敗 " + fd.open_errors.length + " 件" : "")
           + "・取り込んだ期間 " + (fd.periods || 0) + " 本" }));
         if (!fd.configured) fb.appendChild(el("p", { "class": "np-warn", text: "受け取る口の鍵がまだ置かれていません（サーバの config/weekly_feed_token）。" }));
+        // ラベル×日の売上（月曜 8:30 の sync_newprod_master.ps1 から・ADR-161）。週次レポートの月別の表と月ごとの合計を比べた結果
+        var dl = fd.daily;
+        if (dl) {
+          var ck = dl.check || {}, mm = ck.mismatch || [];
+          fb.appendChild(el("p", { "class": mm.length ? "np-warn" : "np-sub", text: "ラベル×日の売上: " + dl.received_at + " に " + dl.day_from + "〜" + dl.day_to
+            + "（" + (dl.labels || 0) + " ラベル・" + (dl.days || 0) + " 行・金額の列「" + (dl.amount_col || "?") + "」）。週次レポート（" + (ck.snapshot || "—") + "）の月別と "
+            + (ck.pairs || 0) + " か所を比べ、" + (mm.length ? "合わないのが " + mm.length + " か所" : "すべて合いました") }));
+          if (mm.length) fb.appendChild(table(["商品ラベル", "月", "週次レポート", "日ごとの合計"], mm.slice(0, 20).map(function (x) {
+            return el("tr", null, [el("td", { text: x.label }), el("td", { "class": "np-nowrap", text: x.month }),
+              el("td", { "class": "np-num", text: yen(x.weekly) }), el("td", { "class": "np-num", text: yen(x.daily) })]);
+          })));
+        } else {
+          fb.appendChild(el("p", { "class": "np-sub", text: "ラベル×日の売上: まだ届いていません（月曜 8:30 にアシロボの PC から届きます）" }));
+        }
         (fd.open_errors || []).forEach(function (e) {
           fb.appendChild(el("p", { "class": "np-warn", text: e.received_at + "　" + e.file_name + "：" + (e.error || "") + "（Windows の次の実行で送り直します。すぐなら Windows のタスクを「実行する」）" }));
         });
