@@ -253,9 +253,67 @@ def r03(apply: bool, by: str) -> int:
     return 0
 
 
+# ── 簡単オーダー（石原さん 11-19 11:55: 976a とは別の案件）──────────────
+KANTAN = "簡単オーダー 目印チャーム"
+KANTAN_LAUNCH = "2026-12-04"    # 石原さん 11-19 10:59「発売予定日を12/4に」
+KANTAN_TASKS = [(341, "簡単オーダー 目印チャーム　アプリ実装可否を確認", "2026-11-27"),
+                (20, "簡単オーダー 目印チャーム　販売開始・全体に周知", "2026-12-04")]
+SPORTS = ("剣道", "弓道", "空手", "柔道", "野球", "サッカー", "バスケ", "バレー")
+KANTAN_LABELS = [f"フルオーダー 目印チャーム【{k}】" for k in SPORTS]   # 杉浦さんが改名したら新しい名前も足す
+
+
+def kantan(apply: bool, by: str) -> int:
+    print(f"# 簡単オーダー 目印チャーム（{'書く' if apply else '見るだけ'}）\n")
+    ex = store.one("SELECT id FROM project WHERE internal_name=?", (KANTAN,))
+    ok = True
+    print(f"案件: {'作成済み ' + ex['id'] if ex else '作る'}（開発中・{KANTAN_LAUNCH}・枠とは結ばない）")
+    print("| タスク | いまの案件 | 名前 | 状態 | → 期限 | 確認 |\n|---|---|---|---|---|---|")
+    for tid, head, due in KANTAN_TASKS:
+        t = store.one("SELECT project_id, title, status FROM task WHERE id=?", (tid,))
+        good = t is not None and t["title"].startswith(head) and (t["project_id"] == F0BB or (ex and t["project_id"] == ex["id"]))
+        ok &= bool(good)
+        print(f"| {tid} | {t['project_id'] if t else '無し'} | {t['title'] if t else head} | {t['status'] if t else ''} | "
+              f"{due} | {'○' if good else '★合わない'} |")
+    used = {}
+    for r in store.q("SELECT project_id, labels FROM newprod_reg WHERE labels IS NOT NULL"):
+        for l in json.loads(r["labels"] or "[]"):
+            used[l] = r["project_id"]
+    clash = [l for l in KANTAN_LABELS if l in used and not (ex and used[l] == ex["id"])]
+    print("ラベル: " + "、".join(KANTAN_LABELS) + (f"\n★ほかの案件に結ばれている: {clash}" if clash else ""))
+    if not ok or clash:
+        print("\n★合わないものがあるので止めます")
+        return 1
+    if not apply:
+        return 0
+    why = f"石原さん 2026-11-19 11:55（976a とは別の案件）・{WHY.replace('R04', 'R03')}"
+    pid = ex["id"] if ex else project_m.create(
+        by, expand=False, internal_name=KANTAN, stage="開発中", launch_date=KANTAN_LAUNCH,
+        summary=f"競技別の簡単オーダー目印チャーム（8競技）。{why}。進捗管理シート 983・984 行をリニューアル分（f0bb）から移した")["id"]
+    now = store.now_s()
+    with store.tx() as c:
+        moved = []
+        for seq, (tid, _h, due) in enumerate(KANTAN_TASKS, 1):
+            r = c.execute("UPDATE task SET project_id=?, seq=?, status='未着手', done_at=NULL, due_on=? "
+                          "WHERE id=? AND project_id=?", (pid, seq, due, tid, F0BB)).rowcount
+            if r:
+                moved.append(tid)
+        if moved:
+            for p_, what in ((F0BB, f"タスク {len(moved)} 件を「{KANTAN}」（{pid}）へ移した"),
+                             (pid, f"タスク {len(moved)} 件を「目印チャームに移行（リニューアル分）」（{F0BB}）から移し、未着手に戻した")):
+                c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                          (p_, now, by, what, f"タスク {', '.join(map(str, moved))}（期限 11/27・12/4）。{why}"))
+    cur = store.one("SELECT state, labels FROM newprod_reg WHERE project_id=?", (pid,))
+    have = json.loads(cur["labels"] or "[]") if cur else []
+    if not (cur and cur["state"] == "登録済み" and set(KANTAN_LABELS) <= set(have)):
+        newprod.register(pid, have + [l for l in KANTAN_LABELS if l not in have], by)
+    store.audit(by, "migrate.kantan", pid, {"moved": moved})
+    print(f"\n書きました: {pid}・移したタスク {len(moved)} 件・ラベル {len(KANTAN_LABELS)}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["r04", "r03"])
+    ap.add_argument("what", choices=["r04", "r03", "kantan"])
     ap.add_argument("ledger", nargs="?")
     ap.add_argument("--sheet-date", default="")
     ap.add_argument("--apply", action="store_true")
@@ -270,6 +328,8 @@ def main() -> int:
             print("r04 にはシートの TSV と --sheet-date が要ります", file=sys.stderr)
             return 2
         return r04(a.ledger, a.sheet_date, a.apply, a.by)
+    if a.what == "kantan":
+        return kantan(a.apply, a.by)
     return r03(a.apply, a.by)
 
 

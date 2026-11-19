@@ -191,5 +191,40 @@ class R03(unittest.TestCase):
         self.assertIsNone(self.store.val("SELECT id FROM project WHERE internal_name=?", (self.m.NEW_NAME,)))
 
 
+    def test_kantan_separate_project(self):
+        import json
+        self.run_r03()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.store.ex("INSERT INTO task (id, project_id, seq, title, status, created_at) VALUES "
+                          "(341, 'f0bb', 18, '簡単オーダー 目印チャーム　アプリ実装可否を確認、発売リプラン', '対象外', 'x')")
+            self.store.ex("UPDATE task SET title='簡単オーダー 目印チャーム　販売開始・全体に周知', status='対象外' WHERE id=20")
+            self.store.conn().commit()
+            rc = self.m.kantan(True, "masateru")
+            rc2 = self.m.kantan(True, "masateru")
+        self.assertEqual((rc, rc2), (0, 0))
+        pid = self.store.val("SELECT id FROM project WHERE internal_name=?", (self.m.KANTAN,))
+        p = self.store.one("SELECT stage, launch_date FROM project WHERE id=?", (pid,))
+        self.assertEqual((p["stage"], p["launch_date"]), ("開発中", "2026-12-04"))
+        ts = self.store.rows(self.store.q("SELECT id, status, due_on FROM task WHERE project_id=? ORDER BY seq", (pid,)))
+        self.assertEqual(ts, [{"id": 341, "status": "未着手", "due_on": "2026-11-27"},
+                              {"id": 20, "status": "未着手", "due_on": "2026-12-04"}])
+        self.assertEqual(json.loads(self.store.val("SELECT labels FROM newprod_reg WHERE project_id=?", (pid,))), self.m.KANTAN_LABELS)
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM project WHERE internal_name=?", (self.m.KANTAN,)), 1)
+        self.assertIsNone(self.store.val("SELECT id FROM plan_slot WHERE project_id=?", (pid,)))
+
+    def test_kantan_label_clash_stops(self):
+        from app import newprod
+        newprod.register("f0bb", ["目印チャーム", "フルオーダー 目印チャーム【剣道】"], "x")
+        self.store.ex("UPDATE task SET title='簡単オーダー 目印チャーム　販売開始・全体に周知' WHERE id=20")
+        self.store.ex("INSERT INTO task (id, project_id, seq, title, status, created_at) VALUES "
+                      "(341, 'f0bb', 18, '簡単オーダー 目印チャーム　アプリ実装可否を確認', '対象外', 'x')")
+        self.store.conn().commit()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.m.kantan(True, "masateru")
+        self.assertEqual(rc, 1)
+        self.assertIsNone(self.store.val("SELECT id FROM project WHERE internal_name=?", (self.m.KANTAN,)))
+
 if __name__ == "__main__":
     unittest.main()
