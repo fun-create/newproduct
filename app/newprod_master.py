@@ -38,7 +38,8 @@ def _clean_kw(s: str, label: str, required: bool) -> str:
     if len(s) > 200 or re.search(r"[\t\r\n]", s):
         raise ValueError(f"{label}は1行・200字までで入れてください")
     for part in [p.strip() for p in s.split(";") if p.strip()]:
-        if ("(" in part or ")" in part) and not re.fullmatch(r"\([^()|]+(\|[^()|]+)+\)", part):
+        # カッコの無い「A|B」は週次レポートがその文字そのものを探す（2026-11-19 杉浦さんの指摘・0件のままだった2行）
+        if ("(" in part or ")" in part or "|" in part) and not re.fullmatch(r"\([^()|]+(\|[^()|]+)+\)", part):
             raise ValueError(f"{label}の「{part}」: どれかを含む、は (A|B) の形で書きます")
     return ";".join(p.strip() for p in s.split(";") if p.strip())
 

@@ -49,6 +49,15 @@ class Master(unittest.TestCase):
         f.update(kw)
         return self.m.request(self.pid, f, "chieko")
 
+    def test_bare_or_is_refused(self):
+        """カッコの無い「A|B」は週次レポートが文字そのものを探す（2026-11-19 杉浦さん）。(A|B) は通す"""
+        for bad in ("ピンズ;ユニフォーム型|長方形", "マックブック|iPad"):
+            with self.assertRaises(ValueError):
+                self.m.request(self.pid, {"label": "x", "include": bad}, "chieko")
+        with self.assertRaises(ValueError):
+            self.m.request(self.pid, {"label": "x", "include": "ピンズ", "exclude": "国旗|長方形"}, "chieko")
+        self.m.request(self.pid, {"label": "x", "include": "ピンズ;(ユニフォーム型|長方形)", "exclude": "国旗"}, "chieko")
+
     def test_proposal_is_not_applied_until_a_person_requests(self):
         pr = self.m.propose(dict(self.store.one("SELECT * FROM project WHERE id=?", (self.pid,))))
         self.assertEqual(pr["label"], "iPhone DUOスキンシール")              # ※以降は落とす

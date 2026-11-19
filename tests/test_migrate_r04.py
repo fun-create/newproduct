@@ -226,5 +226,29 @@ class R03(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIsNone(self.store.val("SELECT id FROM project WHERE internal_name=?", (self.m.KANTAN,)))
 
+    def test_labels_add_new_names_keep_old(self):
+        import json
+        self.store.ex("UPDATE task SET title='簡単オーダー 目印チャーム　販売開始・全体に周知' WHERE id=20")
+        self.store.ex("INSERT INTO task (id, project_id, seq, title, status, created_at) VALUES "
+                      "(341, 'f0bb', 18, '簡単オーダー 目印チャーム　アプリ実装可否を確認', '対象外', 'x')")
+        self.store.conn().commit()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.m.kantan(True, "masateru")
+            rc_missing = self.m.labels(True, "masateru")            # 2025年度の案件がまだ無い → 止める
+        self.assertEqual(rc_missing, 1)
+        from app import project as pm
+        for name, _ in self.m.LABELS_1119:
+            if not self.store.val("SELECT id FROM project WHERE internal_name=?", (name,)):
+                pm.create("x", expand=False, internal_name=name, stage="発売済", launch_date="2026-03-03")
+        with redirect_stdout(buf):
+            self.assertEqual(self.m.labels(True, "masateru"), 0)
+            self.assertEqual(self.m.labels(True, "masateru"), 0)    # 2回目は何も足さない
+        kid = self.store.val("SELECT id FROM project WHERE internal_name=?", (self.m.KANTAN,))
+        ls = json.loads(self.store.val("SELECT labels FROM newprod_reg WHERE project_id=?", (kid,)))
+        self.assertEqual(ls[:8], self.m.KANTAN_LABELS)                # 古い名前は残す
+        self.assertIn("簡単オーダー 目印チャーム【剣道】", ls)
+        self.assertEqual(len(ls), 16)
+
 if __name__ == "__main__":
     unittest.main()

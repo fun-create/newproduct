@@ -311,9 +311,62 @@ def kantan(apply: bool, by: str) -> int:
     return 0
 
 
+# ── 杉浦さんが新商品マスタに足した・名前を変えたラベル（2026-11-19 12:46）を結ぶ ──────────
+# 古い名前は外さない（今の週次の数字は古い名前で出ている。11/23 のレポートからは古い名前が出ないので二重にならない）
+LABELS_1119 = [
+    ("NFCカード", ["NFCカード"]),
+    ("等身大タオル", ["等身大タオル"]),
+    ("switch2 スキンシール", ["switch2 スキンシール"]),
+    ("Air Pods Pro3スキンシール", ["Air Pods Pro3スキンシール"]),
+    ("嵐うちわキット＆デコプリシール", ["嵐うちわキット＆デコプリシール"]),
+    ("嵐スケスケ衣装アクスタ/アクキー", ["嵐スケスケ衣装 アクスタ/アクキー"]),
+    ("嵐スケスケ衣装スタンプ浸透印", ["嵐スケスケ衣装 スタンプ浸透印"]),
+    ("Ploom CUBE スキンシール", ["Ploom CUBE スキンシール"]),
+    ("iPhone17e スキンシール", ["iPhone17e スキンシール"]),
+    ("嵐ピンクスーツ アクスタ/アクキー/スタンプ浸透印", ["嵐ピンクスーツ アクスタ/アクキー/スタンプ浸透印"]),
+    ("PS5 Slim デジタルエディション /PS5 Pro スキンシール", ["PS5 Slim デジタルエディション/PS5 Pro スキンシール"]),
+    ("スタンプ 浸透印（1×1cm追加）", ["スタンプ浸透印(嵐以外)"]),
+    ("アクスタ スタンプ", ["アクスタスタンプ"]),
+    (KANTAN, [f"簡単オーダー 目印チャーム【{k}】" for k in SPORTS]),
+]
+
+
+def labels(apply: bool, by: str) -> int:
+    print(f"# 新商品マスタのラベルを結ぶ（杉浦さん 11-19 12:46）（{'書く' if apply else '見るだけ'}）\n")
+    used = {}
+    for r in store.q("SELECT project_id, labels FROM newprod_reg WHERE labels IS NOT NULL"):
+        for l in json.loads(r["labels"] or "[]"):
+            used.setdefault(l, r["project_id"])
+    plan_, ok = [], True
+    print("| 案件 | ID | いまのラベル | 足すラベル | 確認 |\n|---|---|---|---|---|")
+    for name, add in LABELS_1119:
+        ps = store.rows(store.q("SELECT id FROM project WHERE internal_name=?", (name,)))
+        pid = ps[0]["id"] if len(ps) == 1 else None
+        cur = store.one("SELECT labels FROM newprod_reg WHERE project_id=?", (pid,)) if pid else None
+        have = json.loads(cur["labels"] or "[]") if cur and cur["labels"] else []
+        new = [l for l in add if l not in have]
+        clash = [l for l in new if l in used and used[l] != pid]
+        good = bool(pid) and not clash
+        ok &= good
+        print(f"| {name} | {pid or ('無し' if not ps else '★2件以上')} | {'、'.join(have) or '無し'} | {'、'.join(new) or '（済み）'} | "
+              f"{'○' if good else '★' + ('ほかの案件に結ばれている ' + str(clash) if clash else '案件が見つからない')} |")
+        if good and new:
+            plan_.append((pid, have + new))
+    if not ok:
+        print("\n★合わないものがあるので止めます")
+        return 1
+    if not apply:
+        return 0
+    for pid, ls in plan_:
+        newprod.register(pid, ls, by)
+    store.audit(by, "migrate.labels_1119", "", {"projects": [p for p, _ in plan_]})
+    print(f"\n書きました: {len(plan_)} 件")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["r04", "r03", "kantan"])
+    ap.add_argument("what", choices=["r04", "r03", "kantan", "labels"])
     ap.add_argument("ledger", nargs="?")
     ap.add_argument("--sheet-date", default="")
     ap.add_argument("--apply", action="store_true")
@@ -330,6 +383,8 @@ def main() -> int:
         return r04(a.ledger, a.sheet_date, a.apply, a.by)
     if a.what == "kantan":
         return kantan(a.apply, a.by)
+    if a.what == "labels":
+        return labels(a.apply, a.by)
     return r03(a.apply, a.by)
 
 
