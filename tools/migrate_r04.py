@@ -364,9 +364,57 @@ def labels(apply: bool, by: str) -> int:
     return 0
 
 
+# ── LOVOT の13件（石原さん 11-19 11:55「案件を作って」・16:24 発売日の回答）──────────
+SRC_LOVOT = "LOVOT_石原さん_2026-11-19"
+LOVOT = [(k, "2026-08-08") for k in ("うちわ", "バッグ", "缶バッジ", "キーホルダー", "タオル", "ステッカー", "Tシャツ",
+                                       "Web decoクッション", "ブランケット", "ブロックメモ", "等身大アクスタ")] + \
+        [(k, "2026-09-01") for k in ("マグカップ", "水筒")]
+
+
+def lovot(apply: bool, by: str) -> int:
+    print(f"# LOVOT の13件（{'書く' if apply else '見るだけ'}）\n")
+    used = {}
+    for r in store.q("SELECT project_id, labels FROM newprod_reg WHERE labels IS NOT NULL"):
+        for l in json.loads(r["labels"] or "[]"):
+            used.setdefault(l, r["project_id"])
+    have = {r["source_key"]: r["id"] for r in store.q("SELECT id, source_key FROM project WHERE source_sheet=?", (SRC_LOVOT,))}
+    todo, ok = [], True
+    print("| 案件 | 発売日 | ラベル | 状態 |\n|---|---|---|---|")
+    for k, ld in LOVOT:
+        name, label = f"[LOVOT]{k}", f"LOVOT {k}"
+        clash = used.get(label) if used.get(label) not in (None, have.get(name)) else None
+        dup = store.val("SELECT id FROM project WHERE internal_name=? AND (source_sheet IS NULL OR source_sheet!=?)", (name, SRC_LOVOT))
+        st = "作成済み " + have[name] if name in have else ("★同じ名前の案件 " + dup if dup else ("★ラベルが " + clash + " に結ばれている" if clash else "作る"))
+        ok &= not (clash or dup)
+        print(f"| {name} | {ld} | {label} | {st} |")
+        if name not in have:
+            todo.append((name, ld, label))
+    if not ok:
+        print("\n★合わないものがあるので止めます")
+        return 1
+    if not apply:
+        return 0
+    why = "石原さん 2026-11-19 11:55（LOVOT の13件の案件を作る）・16:24（発売日）"
+    made = []
+    for name, ld, label in todo:
+        pid = project_m.create(by, expand=False, internal_name=name, stage="発売済", launch_date=ld,
+                               summary=f"LOVOT のグッズ。{why}。進捗管理シートに案件が無かったので、タスクは無し")["id"]
+        now = store.now_s()
+        with store.tx() as c:
+            c.execute("UPDATE project SET source_sheet=?, source_key=? WHERE id=?", (SRC_LOVOT, name, pid))
+            ng = _migration_gates(c, pid, None, by, now, why)
+            c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
+                      (pid, now, by, "発売済みの案件として作った", f"ゲートの移行補正 {ng} 件・ラベル {label}。{why}"))
+        newprod.register(pid, [label], by)
+        made.append(pid)
+    store.audit(by, "migrate.lovot", "", {"projects": made})
+    print(f"\n書きました: 案件 {len(made)} 件（{', '.join(made)}）")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["r04", "r03", "kantan", "labels"])
+    ap.add_argument("what", choices=["r04", "r03", "kantan", "labels", "lovot"])
     ap.add_argument("ledger", nargs="?")
     ap.add_argument("--sheet-date", default="")
     ap.add_argument("--apply", action="store_true")
@@ -385,6 +433,8 @@ def main() -> int:
         return kantan(a.apply, a.by)
     if a.what == "labels":
         return labels(a.apply, a.by)
+    if a.what == "lovot":
+        return lovot(a.apply, a.by)
     return r03(a.apply, a.by)
 
 

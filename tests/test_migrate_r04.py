@@ -250,5 +250,27 @@ class R03(unittest.TestCase):
         self.assertIn("簡単オーダー 目印チャーム【剣道】", ls)
         self.assertEqual(len(ls), 16)
 
+    def test_lovot_thirteen(self):
+        import json
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(self.m.lovot(True, "masateru"), 0)
+            self.assertEqual(self.m.lovot(True, "masateru"), 0)            # 2回目は作らない
+        ps = self.store.rows(self.store.q("SELECT id, internal_name, stage, launch_date FROM project WHERE source_sheet=?", (self.m.SRC_LOVOT,)))
+        self.assertEqual(len(ps), 13)
+        mug = next(p for p in ps if p["internal_name"] == "[LOVOT]マグカップ")
+        self.assertEqual((mug["stage"], mug["launch_date"]), ("発売済", "2026-09-01"))
+        self.assertEqual(json.loads(self.store.val("SELECT labels FROM newprod_reg WHERE project_id=?", (mug["id"],))), ["LOVOT マグカップ"])
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM work_item"), 0)
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM task WHERE project_id=?", (mug["id"],)), 0)
+
+    def test_lovot_label_on_other_project_stops(self):
+        from app import newprod
+        newprod.register("f0bb", ["目印チャーム", "LOVOT ブロックメモ"], "x")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(self.m.lovot(True, "masateru"), 1)
+        self.assertEqual(self.store.val("SELECT COUNT(*) FROM project WHERE source_sheet=?", (self.m.SRC_LOVOT,)), 0)
+
 if __name__ == "__main__":
     unittest.main()
