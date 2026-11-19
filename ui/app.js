@@ -1349,12 +1349,34 @@
           }
           var picks = {};                // まとめてずらす行（追補依頼書 8-3）
           var shiftBox = h.editable ? shiftPanel(d, picks) : null;
-          tv.appendChild(el("div", { "class": "np-tablewrap" }, [table((h.editable ? ["選ぶ"] : []).concat(["#", "進捗", h.editable ? "開始・期限" : "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""]),
-            d.tasks.map(function (t) {
+          // 並び（FR-333・ADR-158）。既定は期限順、番号順にも切り替えられる。**番号は変えない**（まとめてずらす・○番の次に足す、は番号で決める）
+          var taskOrder = "due";
+          try { if (window.localStorage.getItem("np.taskOrder") === "seq") taskOrder = "seq"; } catch (e) { /* 保存できなくても期限順で出す */ }
+          var orderBar = el("div", { "class": "np-choice", role: "group", "aria-label": "タスクの並び" });
+          var tableWrap = el("div", { "class": "np-tablewrap" });
+          tv.appendChild(orderBar);
+          tv.appendChild(tableWrap);
+          function drawTasks() {
+            orderBar.textContent = "";
+            orderBar.appendChild(el("span", { "class": "np-sub", text: "並び: " }));
+            [["due", "期限順"], ["seq", "番号順"]].forEach(function (o) {
+              var bt = el("button", { type: "button", "aria-pressed": taskOrder === o[0] ? "true" : "false", text: o[1] });
+              bt.addEventListener("click", function () {
+                taskOrder = o[0];
+                try { window.localStorage.setItem("np.taskOrder", taskOrder); } catch (e) { /* この画面だけで切り替える */ }
+                drawTasks();
+              });
+              orderBar.appendChild(bt);
+            });
+            if (taskOrder === "due") orderBar.appendChild(el("span", { "class": "np-sub", text: "　期限の早い順。期限の無いタスクは目安の順、その後に予備時間" }));
+            tableWrap.textContent = "";
+            tableWrap.appendChild(table((h.editable ? ["選ぶ"] : []).concat(["#", "進捗", h.editable ? "開始・期限" : "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""]),
+            sortTasks(d.tasks, taskOrder).map(function (t) {
               var pick = null;
               if (h.editable) {
-                var cb = el("input", { type: "checkbox", "aria-label": "ずらす行に選ぶ: " + t.seq + " " + t.title });
+                var cb = el("input", { type: "checkbox", "data-task-id": String(t.id), "aria-label": "ずらす行に選ぶ: " + t.seq + " " + t.title });
                 if (t.status === "完了" || t.status === "対象外" || t.kind === "予備") cb.disabled = true;
+                else if (picks[t.id]) { cb.checked = true; picks[t.id] = cb; }      // 並びを切り替えても選んだ行は残す
                 cb.addEventListener("change", function () { if (cb.checked) picks[t.id] = cb; else delete picks[t.id]; shiftBox.refresh(); });
                 pick = el("td", null, [cb]);
               }
@@ -1371,7 +1393,9 @@
                 el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
                 h.editable ? taskEditCell("task", t, meta, d.id) : el("td")
               ]);
-            }))]));
+            })));
+          }
+          drawTasks();
           if (shiftBox) tv.appendChild(shiftBox);
           if (h.editable) tv.appendChild(taskAddForm(d.id, meta, d.tasks));
           tv.appendChild(el("p", { "class": "np-note", text: "担当を入れると、期限のあるタスクが担当者のカレンダー（Calendar アプリ）のタスクに出ます（FR-121）。担当が無いタスクは送られません。" }));
@@ -1800,7 +1824,7 @@
     var cnt = el("span", { "class": "np-sub" });
     var days = el("input", { type: "number", step: "1", min: "-250", max: "250", size: "4", value: "", "aria-label": "ずらす営業日（＋は後ろ・−は前）", placeholder: "+3" });
     var see = el("button", { type: "button", text: "変わる前後を見る" });
-    var below = el("button", { type: "button", "class": "np-linkbtn", text: "選んだ最初の行から下を全部選ぶ" });
+    var below = el("button", { type: "button", "class": "np-linkbtn", text: "選んだ最初の番号から後ろを全部選ぶ" });
     var out = el("div");
     box.appendChild(el("p", { "class": "np-inline" }, [cnt, txt(" を "), days, txt(" 営業日ずらす（＋は後ろ・−は前） "), see, txt(" "), below]));
     box.appendChild(el("p", { "class": "np-note", text: "土日とカレンダーアプリの会社休業日を飛ばして数え、休業日には着地しません。完了・対象外と、日付を固定したタスクは動かしません。表の左の「選ぶ」で行を選んでください。" }));
@@ -1814,9 +1838,9 @@
     below.addEventListener("click", function () {
       var first = null;
       d.tasks.forEach(function (t) { if (picks[t.id] && (first === null || t.seq < first)) first = t.seq; });
-      var rows = BOX.querySelectorAll('#np-sec-tasks input[type="checkbox"][aria-label^="ずらす行に選ぶ"]');
-      d.tasks.forEach(function (t, i) {
-        var cb = rows[i];
+      // **タスクの ID で行を探す**（期限順で並べると、表の行の順と d.tasks の順が違う・FR-333）。「後ろ」は番号で決める
+      d.tasks.forEach(function (t) {
+        var cb = BOX.querySelector('#np-sec-tasks input[type="checkbox"][data-task-id="' + t.id + '"]');
         if (cb && !cb.disabled && t.seq >= first && !cb.checked) { cb.checked = true; picks[t.id] = cb; }
       });
       box.refresh();
@@ -7546,6 +7570,27 @@
     w.appendChild(f);
     if (m.state === "書き込み待ち" || m.state === "要確認" || m.state === "失敗") w.setAttribute("open", "open");
     return w;
+  }
+
+  // タスクの並び（FR-333）。期限あり（期限の早い順）→ 期限なしで目安あり（目安の順）→ どちらも無い → 予備時間（998・999）。
+  // 同じ日付の中は番号の順。**配列は並べ替えた写しを返す**（元の順は番号順のまま使う所がある）
+  function sortTasks(tasks, order) {
+    var list = tasks.slice();
+    if (order === "seq") return list.sort(function (a, b) { return a.seq - b.seq; });
+    function tier(t) {
+      if (t.kind === "予備" || t.seq >= 998) return 3;
+      if (t.due_on) return 0;
+      if (t.plan_due) return 1;
+      return 2;
+    }
+    function key(t) { var k = tier(t); return k === 0 ? t.due_on : (k === 1 ? t.plan_due : ""); }
+    return list.sort(function (a, b) {
+      var ta = tier(a), tb = tier(b);
+      if (ta !== tb) return ta - tb;
+      var ka = key(a), kb = key(b);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      return a.seq - b.seq;
+    });
   }
 
   function weeklyNewprodCard() {
