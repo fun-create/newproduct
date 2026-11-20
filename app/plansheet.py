@@ -51,6 +51,8 @@ def ensure_task(pid: str, user_id: str, today: str | None = None) -> dict:
     from app import assign, followup
     base = today or store.today_s()
     due, note = followup.due_for(DUE_RULE, base)
+    if not note.startswith("暦の日"):            # due_for の注記は「発売日の…」と読める。ここの起点は G0 を通した日
+        note = f"{base} より後の3営業日目・会社の営業日"
     with store.tx() as c:
         seq = c.execute("SELECT COALESCE(MAX(seq),0)+1 FROM task WHERE project_id=? AND seq<900", (pid,)).fetchone()[0]
         tid = c.execute(

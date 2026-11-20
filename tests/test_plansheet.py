@@ -60,6 +60,9 @@ class PlanSheet(unittest.TestCase):
         t = self.tasks()
         self.assertEqual(len(t), 1)
         self.assertEqual((t[0]["status"], t[0]["due_on"], t[0]["role"]), ("未着手", "2026-11-25", "devdept"))
+        note = self.store.val("SELECT detail FROM project_revision WHERE project_id=? AND what LIKE 'タスクを足した:%'", (self.pid,))
+        self.assertIn("2026-11-20 より後の3営業日目", note)
+        self.assertNotIn("発売日", note)
         self.gate.review(self.pid, "G0", "通過", "boss")                       # 通し直しても2行にしない
         self.assertEqual(len(self.tasks()), 1)
 
