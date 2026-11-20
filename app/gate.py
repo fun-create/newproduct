@@ -295,6 +295,9 @@ def review(project_id: str, gate: str, result: str, user_id: str,
                   (project_id, store.now_s(), user_id, f"{gate} {result}",
                    comment or None))
     out = {"gate": gate, "result": result, "missing_at_review": [m["key"] for m in miss]}
+    if gate == "G0" and result == "通過":
+        from app import plansheet                   # 企画スプシの URL を入れるタスク（FR-332 段階1・ADR-163）
+        out["plan_sheet"] = plansheet.ensure_task(project_id, user_id)
     if gate == "G5" and result == "通過":
         out["launched"] = _launched(proj, user_id)
     return out

@@ -997,7 +997,7 @@
   /** カルテの頭の欄を直す（点検 H-3）。空の欄を埋めるだけなら理由は要らない。発売予定日は下の別の欄 */
   function headerEdit(pid, h, meta) {
     var w = el("div");
-    var open = el("button", { type: "button", "class": "np-btn", text: "頭の欄を直す（社内呼称・開発タイプ・分類・担当など）" });
+    var open = el("button", { type: "button", "class": "np-btn", text: "頭の欄を直す（社内呼称・開発タイプ・分類・担当・企画スプシなど）" });
     var f = el("form", { "class": "np-field", hidden: "hidden" });
     function inp(name, label, size, val, extra) {
       var i = el("input", Object.assign({ name: name, size: size, value: val === null || val === undefined ? "" : String(val) }, extra || {}));
@@ -1011,6 +1011,8 @@
     f.appendChild(el("p", null, [inp("area", "作成エリア", 12, h.area), txt(" "), el("label", null, [txt("担当 "), userSelect("owner", h.owner || "")]), txt(" "),
       inp("effort_point", "工数ポイント", 5, h.effort_point, { inputmode: "decimal", placeholder: "空なら開発タイプから" })]));
     f.appendChild(el("p", null, [inp("occasion", "機会（なぜその日か）", 40, h.occasion)]));
+    f.appendChild(el("p", null, [inp("plan_sheet_url", "企画スプシの URL", 48, h.plan_sheet_url,
+      { type: "url", inputmode: "url", placeholder: "https://docs.google.com/spreadsheets/d/…" })]));
     f.appendChild(el("p", null, [inp("reason", "入っている値を変える理由", 40, "", { placeholder: "空の欄を埋めるだけなら不要" })]));
     f.appendChild(el("p", { "class": "np-sub", text: "開発タイプを変えても、いまのタスクは足しも消しもしません。発売予定日は下の「発売予定日」の欄で変えます（タスクの目安を計算し直すため）。" }));
     var st = el("span", { "class": "np-status", role: "status" });
@@ -1051,6 +1053,9 @@
           row("機会（なぜその日か）", dash(h.occasion)),
           row("作成エリア", dash(h.area)),
           row("担当", dash(h.owner)),
+          // 企画スプシ（FR-332 段階1）。URL は Google スプレッドシートの形だけをサーバーが受ける
+          el("tr", null, [el("th", { text: "企画スプシ" }), el("td", null, [h.plan_sheet_url && /^https:\/\/docs\.google\.com\/spreadsheets\/d\//.test(h.plan_sheet_url)
+            ? el("a", { href: h.plan_sheet_url, target: "_blank", rel: "noopener noreferrer", text: "開く" }) : txt("—")])]),
           row("ステージ", h.stage),
           row("売上計上", h.revenue),
           h.effort_point === null ? el("tr", null, [el("th", { text: "工数ポイント" }), el("td", null, [tag("未確定", "neutral")])])

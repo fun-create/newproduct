@@ -339,6 +339,7 @@ def detail(project_id: str, user_id: str = "") -> dict | None:
             "owner": p["owner"], "stage": p["stage"], "area": p["area"],
             "summary": p["summary"], "from_sheet": bool(p["source_sheet"]),
             "cat1": p["cat1"], "cat2": p["cat2"], "cat3": p["cat3"], "size": p["size"],
+            "plan_sheet_url": p["plan_sheet_url"],        # 企画スプシ（FR-332）
             "revenue": ("含めない" if not p["revenue_counted"]
                         else f"含める（{p['revenue_basis'] or '方式未選択'}）"),
             "source_of_truth": p["source_of_truth"],
@@ -618,7 +619,8 @@ def add_memo(pid: str, body: str, user_id: str) -> dict:
 
 
 HEADER_FIELDS = {"internal_name": "社内呼称", "flow_type": "開発タイプ", "cat1": "分類1", "cat2": "分類2", "cat3": "分類3",
-                 "size": "サイズ", "area": "作成エリア", "owner": "担当", "occasion": "機会", "effort_point": "工数ポイント"}
+                 "size": "サイズ", "area": "作成エリア", "owner": "担当", "occasion": "機会", "effort_point": "工数ポイント",
+                 "plan_sheet_url": "企画スプシ"}
 
 
 def update_header(pid: str, fields: dict, reason: str, user_id: str) -> dict:
@@ -643,6 +645,9 @@ def update_header(pid: str, fields: dict, reason: str, user_id: str) -> dict:
         v = (str(fields.get(k) or "")).strip() or None
         if k == "internal_name" and v:
             v = v[:120]
+        if k == "plan_sheet_url":
+            from app import plansheet
+            v = plansheet.normalize(v)
         if k == "flow_type" and v and flow(v) is None:
             raise ValueError(f"知らない開発タイプ {v!r}")
         if k == "owner" and v:
@@ -678,6 +683,9 @@ def update_header(pid: str, fields: dict, reason: str, user_id: str) -> dict:
                   (*changed.values(), now, user_id, pid))
         c.execute("INSERT INTO project_revision (project_id,changed_at,changed_by,what,detail) VALUES (?,?,?,?,?)",
                   (pid, now, user_id, "頭の欄", detail))
+        if "plan_sheet_url" in changed:
+            from app import plansheet
+            plansheet.on_url_set(c, pid, changed["plan_sheet_url"], user_id)
     return {"ok": True, "changed": True, "fields": sorted(changed)}
 
 
