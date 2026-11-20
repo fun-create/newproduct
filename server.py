@@ -737,8 +737,9 @@ class H(BaseHTTPRequestHandler):
         # 新商品の売上（週次レポートから取り込む・H06 段階1・ADR-131）。見るのは全員、取り込み・登録は商品開発部・管理者・社長
         if parts == ["sales", "weekly-newprod"] and method == "GET":
             from app import newprod, weeklyfeed
-            from app import newprod_daily
-            return self.sendj(200, {**newprod.view(), "feed": {**weeklyfeed.status(), "daily": newprod_daily.status()}})
+            from app import newprod_daily, newprod_ytd
+            return self.sendj(200, {**newprod.view(), "ytd": newprod_ytd.ytd(),       # 年度累計（R01・FR-329・ADR-164）
+                                    "feed": {**weeklyfeed.status(), "daily": newprod_daily.status()}})
         # スキンシール展開判断レポート（Auto GROWTH から引き取り・ADR-140）。**見るだけ・利用者全員**
         if parts == ["skin-report"] and method == "GET":
             from app import skin_report

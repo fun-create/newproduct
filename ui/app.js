@@ -7598,6 +7598,33 @@
     });
   }
 
+  /** 年度累計の中身（R01）。実績の最後の日と取り込みの日時を分けて出し、暫定の理由とラベルごとの内訳をたたんで出す */
+  function ytdDetail(y) {
+    var w = el("div");
+    w.appendChild(el("p", { "class": y.provisional ? "np-warn" : "np-sub", text: y.fy + "年度累計: "
+      + (y.to ? "実績反映 " + y.to + " 分まで" : "まだ実績がありません") + (y.received_at ? "／最終取込 " + y.received_at : "")
+      + "／出どころ " + (y.source === "daily" ? "ラベル×日の売上（日で区切って数えています）" : y.source === "monthly" ? "週次レポートの月別の表" : "—")
+      + (y.provisional ? "。暫定です" : "") }));
+    (y.notes || []).forEach(function (n) { w.appendChild(el("p", { "class": "np-sub", text: "・" + n })); });
+    var d = el("details", { "class": "np-fold-plain" });
+    d.appendChild(el("summary", { text: "年度累計の内訳（ラベルごと・" + (y.labels || []).length + " 件）" }));
+    d.appendChild(el("p", { "class": "np-sub", text: "発売日から1年後の同じ日の前日までを、" + y.from + " からの年度と重なる分だけ数えます（2/29 発売は翌年 2/28 まで）。年度の途中で1年を過ぎても、それまでの分は残ります。" }));
+    d.appendChild(table(["商品ラベル", "案件", "発売日", "数えた期間", "金額", "メモ"], (y.labels || []).map(function (r) {
+      var memo = [];
+      if (r.why) memo.push(r.why);
+      (r.skipped || []).forEach(function (k) { memo.push(k.month + " は日で区切れないので入れていません" + (k.amount ? "（月の数字 " + yen(k.amount) + "）" : "")); });
+      if ((r.basis || []).indexOf("増分") >= 0) memo.push("増分の案件（全額で入れています）");
+      return el("tr", null, [el("td", { text: r.label }),
+        el("td", null, (r.projects || []).map(function (p, i) { return el("span", null, [txt(i ? "、" : ""), el("a", { href: "#/projects/" + encodeURIComponent(p.id), text: p.name || p.id })]); })),
+        el("td", { "class": "np-nowrap", text: dash(r.launch) }), el("td", { "class": "np-nowrap", text: r.from ? r.from + "〜" + r.to : "—" }),
+        el("td", { "class": "np-num", text: r.amount === null ? "—" : yen(r.amount) }), el("td", { text: memo.join("。") })]);
+    })));
+    if ((y.unlinked || []).length) d.appendChild(table(["案件と結んでいないラベル（合計に入れていない）", "年度の金額"], y.unlinked.map(function (u) {
+      return el("tr", null, [el("td", { text: u.label }), el("td", { "class": "np-num", text: yen(u.amount) })]);
+    })));
+    w.appendChild(d);
+    return w;
+  }
   function weeklyNewprodCard() {
     var c = el("div", { "class": "np-card" });
     c.appendChild(el("h2", { text: "新商品の売上（週次レポート）" }));
@@ -7643,12 +7670,19 @@
         })));
         fb.appendChild(el("p", { "class": "np-sub", text: "同じファイルは2度取り込みません。同じ期間で中身が違うファイルは訂正版として入れ替えます（足し合わせません）。画面は最新の期間の1本だけを出します。" }));
         body.appendChild(fb);
+        // 年度累計（R01・FR-329・ADR-164）。期間の売上の横に、操作なしで大きく出す。集計対象・実績の最後の日・取り込みを分けて出す
+        var y = v.ytd || null;
+        var ytdKpi = y ? kpi(y.fy + "年度累計売上（新商品の合計）", y.total === null ? "—" : yen(y.total),
+          (y.to ? "集計対象 " + y.from + "〜" + y.to : "集計対象 " + y.from + "〜（実績なし）") + (y.provisional ? "・暫定" : ""), null, null,
+          y.provisional ? { tone: "info", tag: "暫定" } : null) : null;
         if (s && s.total) body.appendChild(kpiRow([
           kpi("期間の売上（新商品の合計）", yen(s.total.sales), "週次レポートの合計行", null, null),
+          ytdKpi,
           kpi("期間の目標", yen(s.total.target_sales), null, null, null),
           kpi("達成率", s.total.target_sales ? Math.round(s.total.sales / s.total.target_sales * 100) + "%" : "—", null, null, null),
           kpi("未紐付け", String(v.pending.length), "商品ラベルと結んでいない案件。売上は 0 ではなく未集計", null, null, { unit: "件", tone: v.pending.length ? "info" : null })]));
-        if (v.rows.length) body.appendChild(table(["商品（案件）", "発売日", "経過", "期間の売上", "期間の目標", "達成率", "今年の累計", "商品ラベル"], v.rows.map(function (r) {
+        if (y) body.appendChild(ytdDetail(y));
+        if (v.rows.length) body.appendChild(table(["商品（案件）", "発売日", "経過", "期間の売上", "期間の目標", "達成率", "暦年の累計（1月〜）", "商品ラベル"], v.rows.map(function (r) {
           var p = r.period || {};
           return el("tr", null, [el("td", null, [el("a", { href: "#/projects/" + encodeURIComponent(r.id), text: r.internal_name || r.id })]),
             el("td", { "class": "np-nowrap", text: dash(r.launch_date) }), el("td", { "class": "np-num", text: r.elapsed_days === null ? "—" : r.elapsed_days + "日" }),
