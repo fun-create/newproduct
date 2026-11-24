@@ -7651,6 +7651,7 @@
         if (dl) {
           var ck = dl.check || {}, mm = ck.mismatch || [];
           fb.appendChild(el("p", { "class": mm.length ? "np-warn" : "np-sub", text: "ラベル×日の売上: " + dl.received_at + " に " + dl.day_from + "〜" + dl.day_to
+            + (dl.data_to && dl.data_to !== dl.day_to ? "（売上の明細は " + dl.data_to + " まで。その後の日は数えていません）" : (dl.data_to ? "" : "（売上の明細が1行もありません）"))
             + "（" + (dl.labels || 0) + " ラベル・" + (dl.days || 0) + " 行・金額の列「" + (dl.amount_col || "?") + "」）。週次レポート（" + (ck.snapshot || "—") + "）の月別と "
             + (ck.pairs || 0) + " か所を比べ、" + (mm.length ? "合わないのが " + mm.length + " か所" : "すべて合いました") }));
           if (mm.length) fb.appendChild(table(["商品ラベル", "月", "週次レポート", "日ごとの合計"], mm.slice(0, 20).map(function (x) {

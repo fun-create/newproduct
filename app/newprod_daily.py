@@ -5,6 +5,10 @@
 5月からの年度累計で、発売から1年になる月を日で区切るのに使う（石原さんの依頼書 R01・十文字さんの選択 11/19）。
 
 - **商品名は受け取らない**（ラベル・日付・金額だけ）
+- **数えた範囲の終わりは data_to**（明細が実際にあった最新日・ADR-165）。送る側は to を「今日」にするが、
+  sales.csv は毎日は更新されないので、to まで数えたことにすると抜けた日が 0 円で「確定」になる。
+  送る側が data_to（sales.csv の最新の売上日）を名乗ればそれを、名乗らなければ届いた行の最新日を使う
+  （全ラベルが売上 0 の日が最後にあると1日短く出る＝控えめな側に倒す）
 - 送られた期間（from〜to）は**まるごと入れ替える**（足し合わせない。送られなかったラベルのその期間の行も消える）
 - 届いたら、週次レポートの最新の月別の表と月ごとの合計を比べる。金額の列の取り違え・当て方のずれは、ここで差として出る
   （比べるのは、最新の週次の期間の終わりの月より前の、期間にまるごと入っている月だけ）
@@ -64,6 +68,15 @@ def receive(d: dict, source: str = "feed:windows") -> dict:
     if len(rows) > MAX_ROWS:
         raise ValueError(f"行が多すぎます（{len(rows)}）")
     col = str(d.get("amount_col") or "")[:40] or None
+    if d.get("data_to"):
+        dto = _day(d.get("data_to"))
+        if not f <= dto <= t:
+            raise ValueError(f"data_to {dto} は期間（{f}〜{t}）の外です")
+        late = max((r[1] for r in rows), default=None)
+        if late and late > dto:
+            raise ValueError(f"data_to {dto} より後の日（{late}）の行があります")
+    else:
+        dto = max((r[1] for r in rows), default=None)
     with store.tx() as c:
         c.execute("DELETE FROM newprod_daily WHERE day BETWEEN ? AND ?", (f, t))
         c.executemany("INSERT INTO newprod_daily (label, day, amount) VALUES (?,?,?) "
@@ -71,13 +84,13 @@ def receive(d: dict, source: str = "feed:windows") -> dict:
     chk = check(f, t)
     total = sum(a for _l, _d, a in rows)
     with store.tx() as c:
-        rid = c.execute("INSERT INTO newprod_daily_run (received_at, source, day_from, day_to, amount_col, labels, days, total, "
-                        "check_json) VALUES (?,?,?,?,?,?,?,?,?)",
-                        (store.now_s(), source, f, t, col, len({r[0] for r in rows}), len(rows), total,
+        rid = c.execute("INSERT INTO newprod_daily_run (received_at, source, day_from, day_to, data_to, amount_col, labels, days, "
+                        "total, check_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (store.now_s(), source, f, t, dto, col, len({r[0] for r in rows}), len(rows), total,
                          json.dumps(chk, ensure_ascii=False))).lastrowid
     store.audit(source, "newprod.daily", f"{f}..{t}", {"run": rid, "labels": len(labels), "rows": len(rows),
                                                         "amount_col": col, "mismatch": len(chk["mismatch"])})
-    return {"ok": True, "run": rid, "from": f, "to": t, "labels": len({r[0] for r in rows}), "rows": len(rows),
+    return {"ok": True, "run": rid, "from": f, "to": t, "data_to": dto, "labels": len({r[0] for r in rows}), "rows": len(rows),
             "mismatch": len(chk["mismatch"]), "compared": chk["pairs"]}
 
 
@@ -130,9 +143,19 @@ def status() -> dict | None:
     return d
 
 
+def coverage() -> dict | None:
+    """日ごとの記録が覆っている範囲 {f, t}。t は**明細が実際にあった最新日**（data_to・ADR-165）。無ければ None。"""
+    # t は**最後の回**の data_to。回ごとに期間をまるごと入れ替えるので、前の回の最新日は残っていない
+    r = store.one("SELECT (SELECT MIN(day_from) FROM newprod_daily_run) AS f, "
+                  "(SELECT data_to FROM newprod_daily_run ORDER BY id DESC LIMIT 1) AS t")
+    if r is None or r["f"] is None or r["t"] is None:
+        return None
+    return {"f": r["f"], "t": r["t"]}
+
+
 def sum_between(labels: list[str], start: str, end: str) -> float | None:
     """ラベルの start〜end（両端を含む）の金額の合計。日ごとの記録がその期間を覆っていなければ None（推測しない）。"""
-    cov = store.one("SELECT MIN(day_from) AS f, MAX(day_to) AS t FROM newprod_daily_run")
+    cov = coverage()
     if not labels or cov is None or cov["f"] is None or not (cov["f"] <= start and end <= cov["t"]):
         return None
     q = ",".join("?" * len(labels))

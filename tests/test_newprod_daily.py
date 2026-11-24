@@ -57,8 +57,9 @@ class Daily(unittest.TestCase):
     def test_resend_replaces_not_adds(self):
         self.send({"等身大パネル": {"2026-05-03": 1000}, "古いラベル": {"2026-05-04": 50}})
         self.send({"等身大パネル": {"2026-05-03": 1000}})
-        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-05-31"), 1000)
-        self.assertEqual(self.m.sum_between(["古いラベル"], "2026-05-01", "2026-05-31"), 0)
+        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-05-03"), 1000)
+        self.assertEqual(self.m.sum_between(["古いラベル"], "2026-05-01", "2026-05-03"), 0)
+        self.assertEqual(self.m.coverage()["t"], "2026-05-03")      # 前の回の 5/04 は残っていない
 
     def test_sum_between_needs_coverage(self):
         self.send({"等身大パネル": {"2026-05-03": 1000, "2026-06-10": 2000}})
@@ -77,6 +78,38 @@ class Daily(unittest.TestCase):
                 self.m.receive(bad)
         self.assertIsNone(self.m.status())
         self.assertEqual(self.store.val("SELECT COUNT(*) FROM newprod_daily"), 0)
+
+    def test_coverage_ends_at_last_sales_day_not_period_end(self):
+        """ADR-165: 送る側の to が今日でも、明細が 7/10 までなら 7/10 までしか数えたことにしない（11/23 の初回の事故）"""
+        r = self.send({"等身大パネル": {"2026-05-03": 1000, "2026-07-10": 500}}, t="20260720")
+        self.assertEqual(r["data_to"], "2026-07-10")
+        self.assertEqual(self.m.coverage(), {"f": "2026-05-01", "t": "2026-07-10"})
+        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-07-10"), 1500)
+        self.assertIsNone(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-07-15"))   # 明細の無い日まで数えない
+
+    def test_sender_can_name_data_to(self):
+        r = self.m.receive({"from": "20260501", "to": "20260720", "data_to": "20260718",
+                            "labels": {"等身大パネル": {"2026-07-10": 500}}})
+        self.assertEqual(r["data_to"], "2026-07-18")
+        self.assertEqual(self.m.coverage()["t"], "2026-07-18")
+        for bad in ("20260721", "20260430", "20260709"):          # 期間の外・行より前
+            with self.assertRaises(ValueError):
+                self.m.receive({"from": "20260501", "to": "20260720", "data_to": bad,
+                                "labels": {"等身大パネル": {"2026-07-10": 500}}})
+
+    def test_no_rows_means_no_coverage(self):
+        self.send({})
+        self.assertIsNone(self.m.coverage())
+        self.assertIsNone(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-05-31"))
+
+    def test_migration_backfills_data_to(self):
+        """076 の UPDATE: 既にある回は、その期間の行の最新日で埋まる"""
+        self.send({"等身大パネル": {"2026-06-30": 1}})
+        self.store.ex("UPDATE newprod_daily_run SET data_to=NULL")
+        sql = (BASE / "migrations" / "076_daily_data_to.sql").read_text(encoding="utf-8")
+        upd = sql[sql.index("UPDATE"):]
+        self.store.conn().executescript(upd)
+        self.assertEqual(self.store.val("SELECT data_to FROM newprod_daily_run"), "2026-06-30")
 
 
 if __name__ == "__main__":
