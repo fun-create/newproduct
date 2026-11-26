@@ -118,6 +118,11 @@ def ytd(today: dt.date | None = None) -> dict:
         notes.append(f"「増分」の案件のラベル {len(inc)} 件も、週次レポートと同じ全額で入っています")
     if any(r["skipped"] for r in rows):
         notes.append("発売の月・発売から1年の境の月は、月の数字を日で区切れないので合計に入れていません（ラベル×日の売上が届くと入ります）")
+    if src == "daily":
+        dbl = newprod_daily.health()["double"]
+        if dbl:
+            notes.append(f"同じ案件の古い名前と新しい名前で、同じ日の売上を二重に数えているおそれが {len(dbl)} 組あります"
+                         "（設定の「自動送信」で確かめてください）")
     if unlinked:
         notes.append(f"案件と結んでいないラベル {len(unlinked)} 件（{sum(u['amount'] for u in unlinked):,.0f}円）は、発売日が分からないので合計に入れていません")
     return {"fy": fy, "from": fs.isoformat(), "to": end.isoformat() if end >= fs else None, "source": src,

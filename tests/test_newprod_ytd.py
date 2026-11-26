@@ -116,6 +116,24 @@ class Ytd(unittest.TestCase):
         self.assertEqual(r["increment"], ["R"])
         self.assertEqual(r["total"], 100)
 
+    def test_deactivated_label_stays_in_ytd(self):
+        """ADR-166: 発売から1年で「有効」を外しても、年度内のそれまでの分は年度累計に残る"""
+        self.link("外した商品", "2025-09-01", ["X"])
+        self.link("続く商品", "2026-06-01", ["Y"])
+        self.send({"X": {"2026-05-10": 300, "2026-08-31": 20}, "Y": {"2026-06-01": 5, "2026-11-19": 1}})
+        self.send({"Y": {"2026-06-01": 5, "2026-11-19": 1}})           # X はもう送られない
+        r = self.y.ytd(dt.date(2026, 11, 20))
+        self.assertEqual(self.row(r, "X")["amount"], 320)
+        self.assertEqual(r["total"], 326)
+        self.assertFalse(any("二重" in n for n in r["notes"]))
+
+    def test_double_count_is_noted(self):
+        self.link("名前を変えた商品", "2026-06-01", ["旧", "新"])
+        self.send({"旧": {"2026-06-10": 10}})
+        self.send({"新": {"2026-06-10": 10}})
+        r = self.y.ytd(dt.date(2026, 11, 20))
+        self.assertTrue(any("二重" in n for n in r["notes"]))
+
 
 if __name__ == "__main__":
     unittest.main()

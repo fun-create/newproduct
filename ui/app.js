@@ -7658,6 +7658,25 @@
             return el("tr", null, [el("td", { text: x.label }), el("td", { "class": "np-nowrap", text: x.month }),
               el("td", { "class": "np-num", text: yen(x.weekly) }), el("td", { "class": "np-num", text: yen(x.daily) })]);
           })));
+          // 見張り（ADR-166）: 送られなくなったのに残しているラベル・二重のおそれ・当たりが0件のラベル
+          var hl = dl.health || {};
+          if ((hl.double || []).length) {
+            fb.appendChild(el("p", { "class": "np-warn", text: "二重に数えているおそれ: " + hl.double.length + " 組。同じ案件に結んだ2つの商品ラベルが同じ日に売上を持っていて、片方はもう送られていません。名前を変えた古いほうなら、案件の「新商品の売上」から古い名前を外してください（別の商品なら問題ありません）。" }));
+            fb.appendChild(table(["送られなくなったラベル", "いま送られているラベル", "案件", "同じ日の数"], hl.double.map(function (x) {
+              return el("tr", null, [el("td", { text: x.old }), el("td", { text: x.new }),
+                el("td", null, [el("a", { href: "#/projects/" + x.project_id, text: x.project_id })]), el("td", { "class": "np-num", text: String(x.days) })]);
+            })));
+          }
+          if ((hl.no_hits || []).length) {
+            fb.appendChild(el("p", { "class": "np-warn", text: "当たりが0件の商品ラベル: " + hl.no_hits.length + " 件。案件に結んでいて発売日も過ぎているのに、5/1 から1行も売上がありません。新商品マスタのキーワードが当たっていないか、古い名前のおそれがあります。" }));
+            fb.appendChild(table(["商品ラベル", "発売日"], hl.no_hits.slice(0, 40).map(function (x) {
+              return el("tr", null, [el("td", { text: x.label }), el("td", { "class": "np-nowrap", text: x.launch })]);
+            })));
+          }
+          var wo = (ck.only_weekly || []);
+          if (wo.length) fb.appendChild(el("p", { "class": "np-sub", text: "週次レポートの月別の表にあるのに、日ごとの売上が1行も無い商品ラベル（" + wo.length + " 件）: " + wo.join("、") }));
+          if ((hl.kept || []).length) fb.appendChild(el("p", { "class": "np-sub", text: "前回は送られなかったが、年度累計のために記録を残している商品ラベル（" + hl.kept.length + " 件。マスタで「有効」を外した・名前を変えた）: "
+            + hl.kept.map(function (x) { return x.label + "（" + x.to + " まで・" + yen(x.amount) + "）"; }).join("、") }));
         } else {
           fb.appendChild(el("p", { "class": "np-sub", text: "ラベル×日の売上: まだ届いていません（月曜 8:30 にアシロボの PC から届きます）" }));
         }

@@ -57,9 +57,10 @@ class Daily(unittest.TestCase):
     def test_resend_replaces_not_adds(self):
         self.send({"等身大パネル": {"2026-05-03": 1000}, "古いラベル": {"2026-05-04": 50}})
         self.send({"等身大パネル": {"2026-05-03": 1000}})
-        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-05-03"), 1000)
-        self.assertEqual(self.m.sum_between(["古いラベル"], "2026-05-01", "2026-05-03"), 0)
-        self.assertEqual(self.m.coverage()["t"], "2026-05-03")      # 前の回の 5/04 は残っていない
+        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-05-03"), 1000)   # 足し合わせない
+        self.assertEqual(self.m.coverage()["t"], "2026-05-03")      # 範囲の終わりは最後の回の最新日
+        # 送られなかった「古いラベル」の行は残る（ADR-166）
+        self.assertEqual(self.store.val("SELECT SUM(amount) FROM newprod_daily WHERE label='古いラベル'"), 50)
 
     def test_sum_between_needs_coverage(self):
         self.send({"等身大パネル": {"2026-05-03": 1000, "2026-06-10": 2000}})
@@ -110,6 +111,49 @@ class Daily(unittest.TestCase):
         upd = sql[sql.index("UPDATE"):]
         self.store.conn().executescript(upd)
         self.assertEqual(self.store.val("SELECT data_to FROM newprod_daily_run"), "2026-06-30")
+
+    def test_unsent_label_keeps_history(self):
+        """ADR-166: マスタで「有効」を外したラベルは送られなくなるが、それまでの日ごとの記録は消さない"""
+        self.send({"等身大パネル": {"2026-05-03": 1000, "2026-07-10": 1}, "外したラベル": {"2026-05-04": 70}})
+        self.send({"等身大パネル": {"2026-05-03": 900, "2026-07-10": 1}})
+        self.assertEqual(self.m.sum_between(["外したラベル"], "2026-05-01", "2026-07-10"), 70)
+        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-07-10"), 901)   # 送られたほうは入れ替え
+        h = self.m.health()
+        self.assertEqual([k["label"] for k in h["kept"]], ["外したラベル"])
+        # 送られたラベルの中で日が消えたものは、その日の行も消える（入れ替え）
+        self.send({"等身大パネル": {"2026-07-10": 1}})
+        self.assertEqual(self.m.sum_between(["等身大パネル"], "2026-05-01", "2026-07-10"), 1)
+
+    def test_health_double_and_no_hits(self):
+        from app import project
+        def link(name, launch, labels):
+            pid = project.create("u", expand=False, internal_name=name, launch_date=launch, stage="発売済")["id"]
+            self.store.ex("INSERT INTO newprod_reg (project_id,state,labels,created_at) VALUES (?, '登録済み', ?, '2026-01-01')",
+                          (pid, json.dumps(labels, ensure_ascii=False)))
+            self.store.conn().commit()
+            return pid
+        pid = link("名前を変えた商品", "2026-05-01", ["旧名", "新名"])
+        link("当たらない商品", "2026-06-01", ["当たらない"])
+        link("まだ先の商品", "2026-12-01", ["発売前"])
+        self.send({"旧名": {"2026-05-10": 100}, "新名": {"2026-07-10": 5}})
+        self.send({"新名": {"2026-05-10": 100, "2026-07-10": 5}})       # 名前を変えた＝旧名は送られない
+        h = self.m.health()
+        self.assertEqual([k["label"] for k in h["kept"]], ["旧名"])
+        self.assertEqual(h["double"], [{"old": "旧名", "new": "新名", "project_id": pid, "days": 1}])
+        self.assertEqual([x["label"] for x in h["no_hits"]], ["当たらない"])    # 発売前は出さない
+        self.assertIn("health", self.m.status())
+        # どちらも送られなくなった2つ（両方とも「有効」を外した）は、二重とは言わない
+        link("両方外した商品", "2026-05-01", ["外1", "外2"])
+        self.send({"新名": {"2026-05-10": 100, "2026-07-10": 5}, "外1": {"2026-06-01": 1}, "外2": {"2026-06-01": 2}})
+        self.send({"新名": {"2026-05-10": 100, "2026-07-10": 5}})
+        self.assertEqual([(d["old"], d["new"]) for d in self.m.health()["double"]], [("旧名", "新名")])
+
+    def test_migration_077_backfills_sent_labels(self):
+        self.send({"等身大パネル": {"2026-06-30": 1}, "ブロックメモ": {"2026-06-01": 2}})
+        self.store.ex("UPDATE newprod_daily_run SET sent_labels=NULL")
+        sql = (BASE / "migrations" / "077_daily_sent_labels.sql").read_text(encoding="utf-8")
+        self.store.conn().executescript(sql[sql.index("UPDATE"):])
+        self.assertEqual(json.loads(self.store.val("SELECT sent_labels FROM newprod_daily_run")), ["ブロックメモ", "等身大パネル"])
 
 
 if __name__ == "__main__":
