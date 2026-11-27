@@ -1340,7 +1340,8 @@
             tv.appendChild(rsd);
           }
           // 期間の帯。期限が入っていれば塗り、目安だけなら白抜きの点線。**完了日が今日より後の行は描かない**（移行時の年の推定の疑い）
-          var tl = d.tasks.map(function (t) {
+          // 並びはタスク表の「期限順」と同じ（2026-11-27 石原さんの修正依頼 ②・FR-337）。番号順では帯が前後に飛んで読めなかった
+          var tl = sortTasks(d.tasks, "due").map(function (t) {
             var sus = t.status === "完了" && t.done_at && t.done_at.slice(0, 10) > d.today;
             var st = t.start_on || t.due_on, en = t.due_on;
             var plan = false;
@@ -1375,7 +1376,9 @@
             });
             if (taskOrder === "due") orderBar.appendChild(el("span", { "class": "np-sub", text: "　期限の早い順。期限の無いタスクは目安の順、その後に予備時間" }));
             tableWrap.textContent = "";
-            tableWrap.appendChild(table((h.editable ? ["選ぶ"] : []).concat(["#", "進捗", h.editable ? "開始・期限" : "期限", "目安（開始〜期限）", "タスク", "ロール", "担当", "標準h", ""]),
+            // 列の並び（2026-11-27 石原さんの修正依頼 ②・FR-337）: 「目安（開始〜期限）」は外し、あまり見ない
+            // ロール・担当・標準h を右端へ。「直す」は タスク名のすぐ右に置き、開く欄は下の行に広げる（右端が切れていた）
+            tableWrap.appendChild(table((h.editable ? ["選ぶ"] : []).concat(["#", "進捗", h.editable ? "開始・期限" : "期限", "タスク", "", "ロール", "担当", "標準h"]),
             sortTasks(d.tasks, taskOrder).map(function (t) {
               var pick = null;
               if (h.editable) {
@@ -1391,12 +1394,11 @@
                 el("td", null, [h.editable ? statusForm(Object.assign({ kind: "task" }, t)) : txt(t.status)]),
                 h.editable ? dateEditCell("task", t, { lock: true })
                   : el("td", { "class": "np-nowrap" }, [txt(t.due_on ? t.due_on : "期限なし"), t.date_locked ? el("div", null, [tag("固定", "neutral")]) : null]),
-                el("td", { "class": "np-nowrap", text: t.plan_due ? (t.plan_start === t.plan_due ? t.plan_due : t.plan_start + "〜" + t.plan_due) : "—" }),
                 el("td", { text: t.title }),
+                h.editable ? taskEditCell("task", t, meta, d.id) : el("td"),
                 el("td", { text: dash(t.role_label) }),
                 h.editable ? assigneeCell("task", t) : el("td", { text: dash(t.assignee) }),
-                el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) }),
-                h.editable ? taskEditCell("task", t, meta, d.id) : el("td")
+                el("td", { "class": "np-num", text: t.hours === null ? "—" : String(t.hours) })
               ]);
             })));
           }
@@ -2315,8 +2317,9 @@
   function taskEditCell(kind, t, meta, pid) {
     var c = el("td", { "class": "np-nowrap" });
     var bt = el("button", { type: "button", text: "直す" });
+    var slot = null;                              // 開いた欄の行。もう一度押すと閉じる
     bt.addEventListener("click", function () {
-      if (c.querySelector("form")) return;
+      if (slot) { slot.parentNode && slot.parentNode.removeChild(slot); slot = null; bt.textContent = "直す"; return; }
       if (!meta) { api("/api/meta").then(function (m) { meta = m; bt.click(); }).catch(function (e) { c.appendChild(el("span", { "class": "np-err", text: e.message })); }); return; }
       var tf = taskFields(meta, t);
       var form = el("form", { "class": "np-field" }, [tf.row]);
@@ -2349,7 +2352,16 @@
           })
           .catch(function (e) { st.textContent = "できませんでした: " + e.message; });
       });
-      c.appendChild(form);
+      // 欄はセルの中に入れず、押した行のすぐ下に表の幅いっぱいの行として開く（2026-11-27 石原さんの修正依頼 ②）。
+      // セルの中だと表が横に伸び、右端が切れて、遠い横のスライダーで戻すしかなかった
+      var tr = c.closest("tr");
+      if (!tr || !tr.parentNode) { c.appendChild(form); return; }
+      var ncol = tr.children.length;
+      slot = el("tr", { "class": "np-edit-row" }, [el("td", { colspan: String(ncol), "class": "np-edit-cell" }, [form])]);
+      tr.parentNode.insertBefore(slot, tr.nextSibling);
+      bt.textContent = "閉じる";
+      var first = form.querySelector("input,select");
+      if (first) first.focus();
     });
     c.appendChild(bt);
     if (t.status !== "完了" && t.status !== "対象外") {          // 担当者へ ChatWork で頼む・催促する（ADR-135）
@@ -3482,6 +3494,8 @@
         b.appendChild(el("p", { "class": "np-note",
           text: "きょうは " + d.today + " です。期限切れ " + d.overdue_total
             + " 件／期限なし " + d.no_due_total + " 件。ロールはその場で選び直せます。個人の担当は「担当をまとめて割り振る」で入れます（カレンダーに送るのは担当と期限のあるタスク）。" }));
+        // 出すのは未着手・着手だけ。保留中の案件のタスクは外した数だけ知らせる（FR-336）
+        if (d.held) b.appendChild(el("p", { "class": "np-sub", text: "保留中の案件のタスク " + d.held + " 件は出していません（案件の画面で見られます）。" }));
 
         if (!d.rows.length) {
           b.appendChild(el("p", { "class": "np-note",
@@ -6312,8 +6326,10 @@
     f.appendChild(inp("occasion", "機会（なぜその月か）", x.occasion));
     var save = el("button", { type: "submit", text: "保存する" });
     var cancel = el("button", { type: "button", text: "やめる" });
-    var del = el("button", { type: "button", text: "この枠を消す" });
-    f.appendChild(el("p", null, [save, txt(" "), cancel, txt(" "), del, txt(" "), msg]));
+    // 案件と結んだ枠は消せない（サーバも止める）。消すボタンは出さず、先に結びを外すよう書く
+    var del = x.project_id ? null : el("button", { type: "button", text: "この枠を消す" });
+    f.appendChild(el("p", null, del ? [save, txt(" "), cancel, txt(" "), del, txt(" "), msg]
+      : [save, txt(" "), cancel, txt(" "), el("span", { "class": "np-sub", text: "（案件と結んだまま直します。消すときは先に「結びを外す」）" }), txt(" "), msg]));
     var tr = el("tr", { "class": "np-edit-row" }, [el("td", { colspan: String(ncol) }, [f])]);
     cancel.addEventListener("click", function () { tr.remove(); });
     f.addEventListener("submit", function (ev) {
@@ -6324,7 +6340,7 @@
         .catch(function (e) { msg.textContent = "できませんでした: " + e.message; });
     });
     var armed = false;
-    del.addEventListener("click", function () {
+    if (del) del.addEventListener("click", function () {
       // 確かめてから消す（window.confirm が出ない環境があるので、2回押しにする）
       if (!armed) { armed = true; del.textContent = "もう一度押すと消えます"; return; }
       post("/api/plan/slots/" + encodeURIComponent(x.id) + "/delete", {}).then(function () { go(); })
@@ -6390,6 +6406,17 @@
             .catch(function (e) { last.appendChild(el("span", { "class": "np-err", text: " " + e.message })); });
         });
         last.appendChild(txt(" ")); last.appendChild(ul);
+      }
+      // あとから結んだ枠は、結んだまま直せる（2026-11-27・FR-338）。ボタンが無く、直すために結びを外して
+      // そのまま承認された枠が3本あった。「案件にする」で起こした枠は従来どおり案件の側で直す
+      if (x.link_kind === "link" && cur.editable) {
+        var ed2 = el("button", { type: "button", text: "直す" });
+        ed2.addEventListener("click", function () {
+          var tr1 = ed2.closest("tr");
+          if (tr1.nextSibling && tr1.nextSibling.classList && tr1.nextSibling.classList.contains("np-edit-row")) return;
+          tr1.parentNode.insertBefore(slotEditRow(x, meta || {}, 10), tr1.nextSibling);
+        });
+        last.appendChild(txt(" ")); last.appendChild(ed2);
       }
     } else if (!cur._can_link) {
       last.appendChild(el("span", { "class": "np-sub", text: "（案件にするのは商品開発部・管理者・社長）" }));

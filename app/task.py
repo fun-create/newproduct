@@ -70,20 +70,37 @@ def _bounds(when: str, t: _dt.date, pfx: str = ""):
     raise ValueError(f"知らない期間フィルタ {when!r}")
 
 
+# タスク画面に出すのは「未着手」と「着手」だけ（2026-11-27 石原さんの修正依頼 ①・FR-336）。
+# 完了・対象外・保留（進捗）は出さない。**保留中の案件のタスクも出さない**（十文字さん 11/27。止めた案件の
+# 未着手が期限切れとして並び続けていた）。中身は案件の画面で見る。期間の境界（_bounds）はダッシュボードも使うので変えない
+SHOWN = ("未着手", "着手")
+
+
+def _shown(pfx: str = "", project: bool = True) -> str:
+    st = pfx + "status"
+    sql = f" AND {st} IN ('未着手','着手')"
+    if project:
+        sql += (f" AND ({pfx}project_id IS NULL OR {pfx}project_id NOT IN "
+                "(SELECT id FROM project WHERE stage='保留'))")
+    return sql
+
+
+def held_count() -> int:
+    """保留中の案件にある未着手・着手のタスクの数（画面から外した分。一行で知らせる）。"""
+    return store.val("SELECT COUNT(*) FROM task WHERE status IN ('未着手','着手') AND "
+                     "project_id IN (SELECT id FROM project WHERE stage='保留')", (), 0)
+
+
 def counts() -> dict:
-    """ボタンに出す件数。**数字を押せない画面にしない。**"""
+    """ボタンに出す件数。**数字を押せない画面にしない。**一覧と同じ絞り（_shown）で数える"""
     t = store.today()
     out = {}
     for w in ["overdue", "today", "+1", "+2", "+3", "+4", "+5", "+6",
-              "week", "next7", "none", "all"]:
+              "week", "next7", "none", "all", DEFAULT_WHEN]:
         sql, pr = _bounds(w, t)
-        n = store.val(f"SELECT COUNT(*) FROM task WHERE {sql}", pr, 0)
-        n += store.val(f"SELECT COUNT(*) FROM work_item WHERE {sql}", pr, 0)
+        n = store.val(f"SELECT COUNT(*) FROM task WHERE {sql}{_shown()}", pr, 0)
+        n += store.val(f"SELECT COUNT(*) FROM work_item WHERE {sql}{_shown(project=False)}", pr, 0)
         out[w] = n
-    sql, pr = _bounds(DEFAULT_WHEN, t)
-    out[DEFAULT_WHEN] = (store.val(f"SELECT COUNT(*) FROM task WHERE {sql}", pr, 0)
-                         + store.val(f"SELECT COUNT(*) FROM work_item WHERE {sql}",
-                                     pr, 0))
     return out
 
 
@@ -128,7 +145,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "p.cat1,p.cat2,p.cat3,p.size,p.launch_date,p.internal_name "
             "FROM task t LEFT JOIN role r ON r.code=t.role "
             "LEFT JOIN project p ON p.id=t.project_id "
-            f"WHERE {sql}{extra} "
+            f"WHERE {sql}{_shown('t.')}{extra} "
             # **期限なしは最後にまとめる。**混ぜない（画面設計 3-10）
             "ORDER BY (t.due_on IS NULL), t.due_on, r.sort, p.launch_date",
             pr + ep)
@@ -158,7 +175,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
         rs = store.q(
             "SELECT w.*, r.label AS role_label, r.external AS role_external "
             "FROM work_item w LEFT JOIN role r ON r.code=w.role "
-            f"WHERE {sql} AND w.kind=?{extra} "
+            f"WHERE {sql}{_shown('w.', project=False)} AND w.kind=?{extra} "
             "ORDER BY (w.due_on IS NULL), w.due_on, r.sort",
             pr + [kind] + ep)
         rows = [{
@@ -186,7 +203,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
     c = counts()
     return {
         "when": when or DEFAULT_WHEN, "tab": tab, "today": t.isoformat(), "mine": bool(mine),
-        "rows": rows, "counts": c,
+        "rows": rows, "counts": c, "held": held_count(),
         "no_due_total": c["none"],
         "overdue_total": c["overdue"],
         "load": load_by_month_role(),
@@ -195,6 +212,7 @@ def listing(when: str = DEFAULT_WHEN, tab: str = "project",
             "既定は「期限切れ＋今日」です。今日だけにすると期限切れが見えません。",
             "期限なしは最後にまとめています。期限のある行と混ぜません。",
             "工数は発売月ではなくタスク実施月に積みます（期限の月、無ければ開始の月）。",
+            "出しているのは進捗が「未着手」「着手」のタスクだけです。完了・対象外・保留は案件の画面で見られます。",
         ],
     }
 

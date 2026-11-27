@@ -499,12 +499,12 @@ class TestPeriodFilter(Base):
         self.assertEqual(self._titles("overdue"), ["昨日"])
 
     def test_today_is_exactly_today(self):
-        self.assertEqual(sorted(self._titles("today")), ["今日", "今日だが完了"])
+        self.assertEqual(sorted(self._titles("today")), ["今日"])   # 完了はタスク画面に出さない（FR-336・2026-11-27）
 
     def test_default_is_overdue_plus_today(self):
         from app import task
         got = sorted(self._titles(task.DEFAULT_WHEN))
-        self.assertEqual(got, ["今日", "今日だが完了", "昨日"])
+        self.assertEqual(got, ["今日", "昨日"])   # 完了は出さない（FR-336）
 
     def test_plus_n_is_a_single_day(self):
         self.assertEqual(self._titles("+1"), ["明日"])
@@ -517,7 +517,7 @@ class TestPeriodFilter(Base):
 
     def test_week_is_today_through_plus6_inclusive(self):
         got = sorted(self._titles("week"))
-        self.assertEqual(got, sorted(["今日", "今日だが完了", "明日", "6日後"]))
+        self.assertEqual(got, sorted(["今日", "明日", "6日後"]))   # 完了は出さない（FR-336）
 
     def test_week_excludes_day7(self):
         self.assertNotIn("7日後", self._titles("week"))
@@ -530,7 +530,8 @@ class TestPeriodFilter(Base):
         self.assertEqual(task.counts()["none"], 1)
 
     def test_all_includes_everything(self):
-        self.assertEqual(len(self._titles("all")), 9)
+        # 「すべて」は期間を問わない。進捗は未着手・着手だけ（完了・対象外の3行は出さない・FR-336）
+        self.assertEqual(len(self._titles("all")), 6)
 
     def test_no_due_rows_sort_last(self):
         """**期限なしは最後にまとめる。**期限のある行と混ぜない。"""

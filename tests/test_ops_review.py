@@ -79,7 +79,7 @@ class OpsReview(unittest.TestCase):
             c.execute("INSERT INTO sheet_sync (kind,local_id,sheet_key,digest,synced_at) VALUES ('task',?,?,?,?)",
                       (str(tid), "x#撮影#1", sheetsync.digest(*sheetsync.vals(r)), self.store.now_s()))
         self.assertEqual(sheetsync.diff_ids("task"), set(), "同期した値のままなら違わない")
-        self.task.set_status("task", tid, "完了", "u")
+        self.task.set_status("task", tid, "着手", "u")       # 完了にするとタスク画面から消える（FR-336）ので着手で確かめる
         self.assertEqual(sheetsync.diff_ids("task"), {tid}, "アプリで変えた行はシートと違う")
         os.environ["NEWPRODUCT_TODAY"] = "2026-10-26"
         row = [x for x in self.task.listing(when="all")["rows"] if x["id"] == tid][0]

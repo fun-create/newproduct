@@ -557,6 +557,22 @@ class TestSlotLink(Base):
         with self.assertRaises(PermissionError):
             self.m.link_slot(sid, a, "nobody")
 
+    def test_linked_slot_can_be_edited_but_not_deleted(self):
+        # 結んだまま枠を直せる（FR-338）。画面に「直す」が無く、直すために結びを外した枠が3本そのまま承認された（2026-11-27）
+        from app import store
+        a = self.project("五月の案件", "2026-05-20")
+        sid = self.slot("2026-05")
+        self.m.link_slot(sid, a, "tester")
+        self.m.update_slot(sid, "tester", launch_date="2026-05-29", area="本店")
+        self.assertEqual(store.val("SELECT project_id FROM plan_slot WHERE id=?", (sid,)), a)
+        self.assertEqual(store.val("SELECT launch_date FROM plan_slot WHERE id=?", (sid,)), "2026-05-29")
+        with self.assertRaises(ValueError):
+            self.m.delete_slot(sid)                              # 結んだ枠は消せない（先に結びを外す）
+        conv = self.slot("2026-05")
+        self.m.convert(conv, "tester")
+        with self.assertRaises(ValueError):
+            self.m.update_slot(conv, "tester", area="本店")       # 「案件にする」で起こした枠は案件の側で直す
+
     def test_project_on_two_slots_and_converted_cannot_unlink(self):
         a = self.project("五月の案件", "2026-05-20")
         s1, s2 = self.slot("2026-05"), self.slot("2026-05")
