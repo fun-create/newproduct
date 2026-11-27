@@ -2721,3 +2721,11 @@ regist/productbasic-ccGoods・-goodsSelection・-goodsOptionPriceBasic・-goodsO
   - 枠の行: link の枠に「直す」を出す。欄の中に「消す」は出さない（サーバの delete_slot も止める）
 - **どう確かめたか**: tests/test_task_shown.py 4件・test_plan.py 1件を足した。絞りを外すと test_task_shown が落ちる。完了を出す前提だった test_second_stage 4件・test_ops_review 1件を新しい仕様に合わせた。全646件通過
 
+## ADR-168 — 概要・仕様を頭の欄で直せるようにし、G0 待ち18件を一括で入れて通す（FR-339・2026-11-27）
+
+- **きっかけ**: 石原さんの依頼（ChatWork 商品開発 11/27 14:10・g0_bulk_input_request_v2.md）。年間プラン e8ae から起こした18案件（LOVOT 11・その他 7）の G0 の3項目（概要・仕様／想定ターゲットと使用シーン／起票経路）を一括で入れてほしい
+- **分かったこと**: G0 は project.summary を見るが、案件を作ったあとに summary を直す口が無かった（HEADER_FIELDS に無い）。枠から「案件にする」と summary は空で始まるので、画面では G0 を通せない作りだった
+- **十文字さんの選択（11/27）**: 頭の欄で直せるようにしてから入れる。文面は石原さんのまま（「(※要確認)」も残す）。G0 は十文字さんの名前で通過にする
+- **何を→何に**: HEADER_FIELDS に summary を足し、頭の欄の画面に「概要・仕様」の欄を置いた。一括入力は同じ口（update_header）・カルテの C.target（save_section）・起票経路は人の確認（save_check、メモに石原さんの書いた経路）で入れ、gate.review で G0 通過。起票経路の語（「ユーザー様アンケート分析より」「社内アイデア採点」）はアイデアの起票経路の語彙に無いので、コードにせずメモに残した
+- **どう確かめたか**: tests/test_ops_review.py に1件（頭の欄で summary を入れると G0 の欠けから消える・上書きには理由）。HEADER_FIELDS から外すと落ちる。一括入力は本番の写しで先に流してから本番へ
+

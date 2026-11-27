@@ -620,7 +620,10 @@ def add_memo(pid: str, body: str, user_id: str) -> dict:
 
 HEADER_FIELDS = {"internal_name": "社内呼称", "flow_type": "開発タイプ", "cat1": "分類1", "cat2": "分類2", "cat3": "分類3",
                  "size": "サイズ", "area": "作成エリア", "owner": "担当", "occasion": "機会", "effort_point": "工数ポイント",
-                 "plan_sheet_url": "企画スプシ"}
+                 "plan_sheet_url": "企画スプシ",
+                 # 概要・仕様（G0 の条件）。作ったあとに直す口が無く、年間プランから起こした案件は画面で G0 を通せなかった
+                 # （2026-11-27 石原さんの一括入力の依頼で分かった・FR-339）
+                 "summary": "概要・仕様"}
 
 
 def update_header(pid: str, fields: dict, reason: str, user_id: str) -> dict:

@@ -126,6 +126,15 @@ class OpsReview(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.project.update_header(pid, {"owner": "no_such_user"}, "x", "u")
 
+    def test_summary_editable_in_header_satisfies_g0(self):
+        # 概要・仕様を頭の欄で入れられる（FR-339）。年間プランから起こした案件は空で始まり、G0 を画面で通せなかった
+        from app import gate
+        pid = self.project.create("u", expand=False, internal_name="枠から起こした案件")["id"]
+        self.assertIn("summary", [m["key"] for m in gate.missing(pid, "G0")])
+        self.project.update_header(pid, {"summary": "1個から受注するアクリル時計"}, "", "u")
+        self.assertNotIn("summary", [m["key"] for m in gate.missing(pid, "G0")])
+        with self.assertRaises(ValueError):
+            self.project.update_header(pid, {"summary": "別の概要"}, "", "u")     # 入っている概要を変えるには理由
 
     def test_convert_from_approved_version_uses_product_name(self):
         from app import plan
